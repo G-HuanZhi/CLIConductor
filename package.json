@@ -1,0 +1,14 @@
+{
+  "name": "my-agents-plan",
+  "private": true,
+  "description": "Agent集群系统 - 主Agent操控多个子CLI，支持多轮长对话，session可追踪",
+  "workspaces": [
+    "packages/*",
+    "packages/adapters/*"
+  ],
+  "scripts": {
+    "dev": "echo '待实现'",
+    "build": "echo '待实现'",
+    "test": "echo '待实现'"
+  }
+}
