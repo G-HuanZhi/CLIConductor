@@ -14,13 +14,24 @@ Phase 1 — 持久化 Session 操控实验：验证多轮长对话的技术可�
 
 ## 文件导航
 
+### 文档
+
 | 文件 | 内容 |
 |------|------|
-| [todolist.md](./todolist.md) | 开发任务清单 |
-| [agent-cluster-architecture.md](./agent-cluster-architecture.md) | 架构设计方案 |
-| [terminal-cli-concepts.md](./terminal-cli-concepts.md) | 终端/CLI底层概念学习笔记 |
-| [beforeInit.md](./beforeInit.md) | 原始需求描述 |
+| [docs/planning/beforeInit.md](./docs/planning/beforeInit.md) | 原始需求描述 |
+| [docs/planning/todolist.md](./docs/planning/todolist.md) | 开发任务清单 |
+| [docs/architecture/agent-cluster-architecture.md](./docs/architecture/agent-cluster-architecture.md) | 架构设计方案 |
+| [docs/architecture/terminal-cli-concepts.md](./docs/architecture/terminal-cli-concepts.md) | 终端/CLI底层概念学习笔记 |
+| [docs/analysis/openclaw-architecture.md](./docs/analysis/openclaw-architecture.md) | OpenClaw 架构分析 |
+| [docs/analysis/cao-analysis.md](./docs/analysis/cao-analysis.md) | CAO 项目分析 |
+| [docs/resource-index.md](./docs/resource-index.md) | 外部资源索引 |
+
+### 其他目录
+
+| 目录 | 内容 |
+|------|------|
 | [experiments/](./experiments/) | 实验记录 |
+| [packages/](./packages/) | monorepo 源码 |
 
 ## 技术栈（待定）
 

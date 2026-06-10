@@ -2,6 +2,21 @@
 
 > 目标：构建 Agent 集群，主 Agent 操控多个子 CLI，支持长对话，session 可追踪。
 > `--print` 单次问答方案已废弃，所有子 CLI 方案必须支持多轮上下文。
+> 外部资源索引：[resource-index.md](../resource-index.md)
+
+---
+
+## Phase 0：项目初始化
+
+- [x] **0.1 终端/CLI底层概念学习** → [terminal-cli-concepts.md](../architecture/terminal-cli-concepts.md)
+- [x] **0.2 Agent集群架构设计** → [agent-cluster-architecture.md](../architecture/agent-cluster-architecture.md)
+- [x] **0.3 外部资源收集** → [resource-index.md](../resource-index.md)
+- [x] **0.4 项目文件结构初始化**
+  - packages/、experiments/、sessions/、logs/ 目录创建
+  - package.json、.gitignore、README.md 就位
+- [x] **0.5 研究 CAO (CLI Agent Orchestrator) 源码** → [cao-analysis.md](../analysis/cao-analysis.md)
+  - 结论：**不直接使用 CAO。** 借鉴其 Supervisor-Worker 架构和 Provider 适配器模式，用 Node.js/TypeScript 自己实现
+  - 主要原因：Windows 无原生支持（依赖 tmux）、缺少 CBC Provider、Python 技术栈不一致、架构理念不同
 
 ---
 
