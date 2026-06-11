@@ -19,6 +19,7 @@ Phase 1 — 持久化 Session 操控实验：验证多轮长对话的技术可�
 | 文件 | 内容 |
 |------|------|
 | [docs/planning/beforeInit.md](./docs/planning/beforeInit.md) | 原始需求描述 |
+| [docs/planning/preview.md](./docs/planning/preview.md) | 项目速览（一页总结） |
 | [docs/planning/project-overview.md](./docs/planning/project-overview.md) | 项目总览（进度 + 实验结论） |
 | [docs/architecture/agent-cluster-architecture.md](./docs/architecture/agent-cluster-architecture.md) | 架构设计方案 |
 | [docs/architecture/shell-process-control.md](./docs/architecture/shell-process-control.md) | 通用 CLI 进程控制方案 |

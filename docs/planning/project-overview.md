@@ -121,7 +121,9 @@ experiments/
 ├── 01-cbc-persistent/              ← Phase 1.1
 │   ├── s1-stream-json-multiturn.md   --bg + stream-json 多轮测试
 │   ├── s2-bg-attach-behavior.md      --bg + attach 行为测试
-│   └── s3-resume-capability.md       --resume 能力探索
+│   ├── s3-resume-capability.md       --resume 能力探索
+│   ├── s4-copilot-bg.md              Copilot CLI 无 --bg 验证
+│   └── s5-shell-control-cbc.md       Shell 级进程控制验证
 ├── 02-pty-control/                 ← Phase 1.2
 │   ├── pty-control-guide.md          PTY 操控 CLI 完整指南
 │   ├── t1-tmux-sendkeys.js           tmux 操控 (Windows 不可用)
