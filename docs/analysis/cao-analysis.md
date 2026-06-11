@@ -349,13 +349,13 @@ psmux 的存在 **部分缓解了 Windows 无 tmux 的问题**，但并未从根
 - **如果最终选择 CAO**：psmux 是关键前提，必须验证 psmux 能否完全替代 tmux 运行 CAO
 - **如果自己实现**：psmux 是一个**备选终端层**，与 node-pty 并列。node-pty 优先（JS 原生 API、跨平台），psmux 适合需要完整会话管理（多窗格、布局、session attach）的场景
 
-**建议**：Phase 1 实验中保留 node-pty 作为首选方案（已在 todolist.md 中），psmux 作为备选方案。完成 node-pty 实验后，如果需要更丰富的终端管理能力，再评估 psmux。
+**建议**：Phase 1 实验中保留 node-pty 作为首选方案（Phase 1 已完成，结论见 [project-overview.md](../planning/project-overview.md)），psmux 作为备选方案。
 
 ---
 
 ## 十一、下一步行动
 
-1. **Phase 1 实验继续**（按 todolist.md 中的计划）
+1. **Phase 1 实验已完成** → 见 [project-overview.md](../planning/project-overview.md)
    - PTY 操控方案验证（node-pty、tmux）
    - 多实例并发测试
    - CBC stream-json / --bg 行为测试

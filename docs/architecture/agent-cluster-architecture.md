@@ -467,7 +467,7 @@ MyAgentsPlan/
 
 ## 四、开发路线图
 
-> **详细 todo 清单见 [todolist.md](../planning/todolist.md)**，这里仅做概要。
+> **详细进度和实验结论见 [project-overview.md](../planning/project-overview.md)**，这里仅做架构概要。
 
 ### 第一阶段：持久化 Session 操控（当前）
 

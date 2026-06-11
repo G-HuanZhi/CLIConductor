@@ -19,7 +19,7 @@ Phase 1 — 持久化 Session 操控实验：验证多轮长对话的技术可�
 | 文件 | 内容 |
 |------|------|
 | [docs/planning/beforeInit.md](./docs/planning/beforeInit.md) | 原始需求描述 |
-| [docs/planning/todolist.md](./docs/planning/todolist.md) | 开发任务清单 |
+| [docs/planning/project-overview.md](./docs/planning/project-overview.md) | 项目总览（进度 + 实验结论） |
 | [docs/architecture/agent-cluster-architecture.md](./docs/architecture/agent-cluster-architecture.md) | 架构设计方案 |
 | [docs/architecture/terminal-cli-concepts.md](./docs/architecture/terminal-cli-concepts.md) | 终端/CLI底层概念学习笔记 |
 | [docs/analysis/openclaw-architecture.md](./docs/analysis/openclaw-architecture.md) | OpenClaw 架构分析 |
@@ -31,6 +31,8 @@ Phase 1 — 持久化 Session 操控实验：验证多轮长对话的技术可�
 | 目录 | 内容 |
 |------|------|
 | [experiments/](./experiments/) | 实验记录 |
+| [experiments/cbc-multi-cli-experiment.md](./experiments/cbc-multi-cli-experiment.md) | CBC 多 CLI 操控实验 |
+| [experiments/02-pty-control/pty-control-guide.md](./experiments/02-pty-control/pty-control-guide.md) | PTY 操控 CLI 完整指南 |
 | [packages/](./packages/) | monorepo 源码 |
 
 ## 技术栈（待定）

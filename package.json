@@ -1,5 +1,5 @@
 {
-  "name": "my-agents-plan",
+  "name": "@myagentsplan/my-agents-plan",
   "private": true,
   "description": "Agent集群系统 - 主Agent操控多个子CLI，支持多轮长对话，session可追踪",
   "workspaces": [
@@ -10,5 +10,17 @@
     "dev": "echo '待实现'",
     "build": "echo '待实现'",
     "test": "echo '待实现'"
+  },
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "node-pty": "^1.1.0"
   }
 }
