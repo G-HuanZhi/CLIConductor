@@ -21,6 +21,7 @@ Phase 1 — 持久化 Session 操控实验：验证多轮长对话的技术可�
 | [docs/planning/beforeInit.md](./docs/planning/beforeInit.md) | 原始需求描述 |
 | [docs/planning/project-overview.md](./docs/planning/project-overview.md) | 项目总览（进度 + 实验结论） |
 | [docs/architecture/agent-cluster-architecture.md](./docs/architecture/agent-cluster-architecture.md) | 架构设计方案 |
+| [docs/architecture/shell-process-control.md](./docs/architecture/shell-process-control.md) | 通用 CLI 进程控制方案 |
 | [docs/architecture/terminal-cli-concepts.md](./docs/architecture/terminal-cli-concepts.md) | 终端/CLI底层概念学习笔记 |
 | [docs/analysis/openclaw-architecture.md](./docs/analysis/openclaw-architecture.md) | OpenClaw 架构分析 |
 | [docs/analysis/cao-analysis.md](./docs/analysis/cao-analysis.md) | CAO 项目分析 |

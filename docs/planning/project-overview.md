@@ -42,6 +42,8 @@ Phase 4  完整集群        ░░░░░░░░░░░░ 📋 待开始
 | `--bg` + stream-json 多轮 | `--bg` 不持久；管道多轮失败 | [s1-stream-json-multiturn.md](../../experiments/01-cbc-persistent/s1-stream-json-multiturn.md) |
 | `--bg` + `attach` 行为 | attach 依赖 TTY；直接读 log 文件更可靠 | [s2-bg-attach-behavior.md](../../experiments/01-cbc-persistent/s2-bg-attach-behavior.md) |
 | `codebuddy resume` 能力 | **`--resume <session_id>` 完美保持多轮上下文** ✅ | [s3-resume-capability.md](../../experiments/01-cbc-persistent/s3-resume-capability.md) |
+| Copilot CLI --bg 实验 | 无 --bg；`&` 是云端委托；`--continue` 可用 | [s4-copilot-bg.md](../../experiments/01-cbc-persistent/s4-copilot-bg.md) |
+| **Shell 级进程控制方案** | **通用方案：OS 原语替代所有 --bg/ps/logs** ✅ | [s5-shell-control-cbc.md](../../experiments/01-cbc-persistent/s5-shell-control-cbc.md) |
 
 ### 1.2 PTY 操控方案验证
 
@@ -64,10 +66,12 @@ Phase 4  完整集群        ░░░░░░░░░░░░ 📋 待开始
 | 技术选型 | 方案 |
 |---------|------|
 | **多轮对话** | `spawn 独立进程 + stream-json + --resume <session_id>` |
-| **Windows 操控** | node-pty (bash 包装 codebuddy) + ConPTY |
+| **进程管理** | **Shell 级 OS 原语 (PID/kill -0/wait)** — 不依赖 CLI 自身 --bg |
+| **跨 CLI 兼容** | 所有 CLI 统一用 child_process.spawn，差异仅命令行参数 |
 | **输出解析** | stripAnsi + 帧缓冲空闲检测 |
 | **记忆隔离** | 每个子 Agent 独立 `sessions/<agent-id>/` 工作目录 |
 | **Session 管理** | 自定义 sessions.json + PID 追踪 |
+| **架构文档** | [shell-process-control.md](../architecture/shell-process-control.md) |
 
 ---
 
