@@ -67,7 +67,12 @@ interface AgentAdapter {
 | 非交互调用 | `-p --stream-json` | `-p --silent --yolo` |
 | 上下文恢复 | `--resume <id>` | `--continue` / `--resume` |
 | 输出格式 | SSE 流 | JSONL |
-| 后台进程管理 | 有 --bg（不需要） | 无（OS 层补齐） |
+| 后台进程管理 | 有 --bg（不需要，OS 层补齐） | 无（OS 层补齐） |
+| 跨目录 Session | ❌ 绑定 --cwd | 待验证 |
+| Session 过期机制 | ❌ 不可永久保留 | 待验证 |
+| 原生 Session 删除 | ❌ 无 | 待验证 |
+
+> **结论**：调度器和适配器不能依赖 CLI 自身能力管理 session 生命周期，需在 OS 层（进程管理 + sessions.json）统一补齐。详见 [项目总览 - CLI 差异章节](./planning/project-overview.md#cli-差异与调度注意事项)。
 
 ---
 

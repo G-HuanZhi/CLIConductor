@@ -95,6 +95,59 @@ Phase 4  完整集群        ░░░░░░░░░░░░ 📋 待开始
 
 ---
 
+## CLI 差异与调度注意事项
+
+> 不同 CLI 在 session 管理、工作目录隔离、生命周期等方面存在显著差异。
+> 调度器和适配器必须考虑这些差异，不能假设所有 CLI 行为一致。
+
+### 已确认的 CLI 差异
+
+| 维度 | CodeBuddy Code (cbc) | 备注 |
+|------|---------------------|------|
+| **跨目录 Session 切换** | ❌ 不支持原生切换 — `--resume` 需与 `--cwd` 保持一致，session 绑定创建时的工作目录 | 调度器必须追踪 session 的 workdir |
+| **长闲置 Session 保留** | ❌ 不能永久保留 — 长期不活跃的 session 可能被自动清理/过期 | 调度器需实现心跳保活或定期续期 |
+| **Session 删除** | ❌ 无原生删除命令 — 无法通过 CLI 接口清理已结束的 session | 调度器需在 OS 层清理进程和 sessions.json |
+| **Session 列表查询** | 有限 | 调度器不能依赖 CLI 自带的 session list 做管理 |
+| **后台进程管理** | 有 `--bg`（已弃用，不可靠） | 统一用 OS 原生进程管理替代 |
+
+### 对调度器的影响
+
+1. **Session 与工作目录绑定** — 调度器在 `spawn` 阶段确定 workdir 后，该 session 的后续 `continue` 调用必须用同一 workdir。调度器需要为每个 session 持久化记录 `{ sessionId, workdir }` 映射。
+
+2. **Session 过期机制** — 调度器不能假设 session 永久有效。需实现：
+   - 心跳保活：定期向闲置 session 发送空请求
+   - 过期标记：检测到 `--resume` 返回 session-not-found 时，自动标记为 dead 并清理
+   - 重试策略：过期后可自动重建 session（新 spawn + 恢复上下文）
+
+3. **Session 清理** — CLI 无原生删除接口，调度器需在 OS 层完成：
+   - `kill(pid)` 终止进程
+   - 从 `sessions.json` 移除记录
+   - 清理 workdir 中的临时文件
+
+4. **适配器设计** — 每个 CLI 适配器必须明确声明自身能力矩阵，调度器据此决定策略：
+
+   ```typescript
+   interface CLIIdentity {
+     name: string
+     capabilities: {
+       crossDirResume: boolean    // --resume 是否跨目录有效
+       sessionTTL: number | null  // session 过期时间（毫秒），null 表示永久
+       nativeSessionDelete: boolean // 是否有原生 session 删除
+       nativeSessionList: boolean // 是否有原生 session 列表
+     }
+   }
+   ```
+
+5. **本地提示词** — 向子 CLI 发送 prompt 时，应附带 CLI 特性约束提示（如告知子 Agent 它的 session 有有效期，需及时返回结果，避免长时间思考导致 session 断开）。
+
+### 后续验证项
+
+- [ ] **CBC session 实际过期时间？** — 实测闲置多久后 `--resume` 失效
+- [ ] **其他 CLI 的 session 行为？** — Claude Code / Aider 等接入时补充
+- [ ] **跨目录 resume 的精确边界？** — 同一物理路径不同写法（`.` vs 绝对路径）是否视为同一目录
+
+---
+
 ## 待解决问题
 
 ### 阻塞性（Phase 2 前必须明确）
