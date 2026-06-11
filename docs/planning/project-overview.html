@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent 集群操控系统 — 项目总览</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --orange: #d2991d; --red: #f85149; --purple: #bc8cff;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; padding:24px; max-width:1000px; margin:0 auto; }
+  h1 { font-size:22px; margin-bottom:4px; }
+  h2 { font-size:17px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:6px; margin:32px 0 12px; }
+  h3 { font-size:15px; margin:20px 0 8px; color:#e6edf3; }
+  h4 { font-size:14px; margin:12px 0 6px; color:var(--muted); }
+  .subtitle { color:var(--muted); margin-bottom:20px; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:600; }
+  .badge-done { background:#1a3a1a; color:var(--green); }
+  .badge-ongoing { background:#3a2e0a; color:var(--orange); }
+  .badge-pending { background:#1a1a2e; color:var(--purple); }
+  .badge-fail { background:#3a1a1a; color:var(--red); }
+  .badge-win { background:#0d3320; color:#7ee787; }
+  .phase-header { display:flex; align-items:center; gap:10px; margin:40px 0 16px; padding-bottom:8px; border-bottom:2px solid var(--border); }
+  .phase-header h2 { border:none; margin:0; padding:0; }
+  .goal-box { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:16px; margin:16px 0; }
+  .goal-box h3 { margin-top:0; }
+  .goal-desc { color:var(--muted); margin-bottom:12px; }
+  /* collapsible approach cards */
+  details { margin:10px 0; }
+  details > summary { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:12px 16px; cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px; font-weight:600; transition:background .15s; }
+  details > summary:hover { background:#1c2129; }
+  details > summary::-webkit-details-marker { display:none; }
+  details > summary::before { content:'▸'; display:inline-block; width:16px; font-size:12px; color:var(--muted); transition:transform .15s; }
+  details[open] > summary::before { transform:rotate(90deg); }
+  details[open] > summary { border-radius:6px 6px 0 0; border-bottom:none; }
+  .approach-body { background:var(--card); border:1px solid var(--border); border-top:none; border-radius:0 0 6px 6px; padding:16px; }
+  .approach-body h4 { color:var(--text); }
+  .approach-body details { margin:8px 0; }
+  .approach-body details > summary { font-size:13px; font-weight:400; color:var(--accent); border:none; background:#0d1117; padding:8px 12px; }
+  .approach-body details[open] > summary { border-radius:6px 6px 0 0; }
+  .approach-body details .body { padding:12px; }
+  /* tables */
+  table { width:100%; border-collapse:collapse; margin:12px 0; font-size:13px; }
+  th, td { padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:600; }
+  tr:hover td { background:rgba(88,166,255,.04); }
+  .tag { display:inline-block; padding:1px 6px; border-radius:4px; font-size:11px; }
+  .tag-ok { background:#0d3320; color:#7ee787; }
+  .tag-no { background:#3a1a1a; color:var(--red); }
+  .tag-warn { background:#3a2e0a; color:var(--orange); }
+  /* progress */
+  .progress-bar { display:flex; gap:4px; margin:12px 0; }
+  .progress-bar span { flex:1; height:6px; border-radius:3px; }
+  .pb-done { background:var(--green); }
+  .pb-current { background:var(--orange); }
+  .pb-pending { background:var(--border); }
+  /* code */
+  code { background:#1c2129; padding:1px 5px; border-radius:3px; font-size:12px; }
+  pre { background:#0d1117; border:1px solid var(--border); border-radius:4px; padding:12px; overflow-x:auto; font-size:12px; margin:8px 0; }
+  /* checklist */
+  .checklist { list-style:none; }
+  .checklist li { padding:3px 0; }
+  .checklist li::before { content:'☐ '; color:var(--muted); }
+  .checklist .done::before { content:'☑ '; color:var(--green); }
+  /* issue severity */
+  .sev-block { color:var(--red); font-weight:600; }
+  .sev-important { color:var(--orange); }
+  .sev-optimize { color:var(--muted); }
+  .decision { background:#0d3320; border:1px solid #1a5c2a; border-radius:6px; padding:12px 16px; margin:12px 0; font-size:13px; }
+  .decision::before { content:'📌 决策: '; font-weight:600; }
+  a { color:var(--accent); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  @media (max-width:640px) { body { padding:12px; } }
+</style>
+</head>
+<body>
+
+<h1>Agent 集群操控系统</h1>
+<p class="subtitle">
+  主 Agent 操控多个 CLI 子 Agent 并行协作 · 
+  <span class="badge badge-ongoing">方案探索中</span>
+  <span class="badge badge-done">Phase 0-1 完成</span>
+  · 最后更新 2026-06-11
+</p>
+
+<!-- ================================================================ -->
+<!-- Phase 0 -->
+<!-- ================================================================ -->
+<div class="phase-header"><h2>Phase 0</h2><span class="badge badge-done">已完成</span></div>
+
+<div class="goal-box">
+  <h3>目标：项目初始化</h3>
+  <p class="goal-desc">建立项目基础设施，收集外部资料，形成初步架构设计。</p>
+  <table>
+    <tr><th>任务</th><th>产出</th></tr>
+    <tr><td>终端/CLI 概念学习</td><td><a href="../architecture/terminal-cli-concepts.md">terminal-cli-concepts.md</a></td></tr>
+    <tr><td>Agent 集群架构设计</td><td><a href="../architecture/agent-cluster-architecture.md">agent-cluster-architecture.md</a></td></tr>
+    <tr><td>外部资源收集</td><td><a href="../resource-index.md">resource-index.md</a></td></tr>
+    <tr><td>项目结构初始化</td><td>monorepo 目录 + package.json</td></tr>
+    <tr><td>CAO 源码研究</td><td><a href="../analysis/cao-analysis.md">cao-analysis.md</a> — 不直接使用，借鉴架构</td></tr>
+    <tr><td>OpenClaw 架构分析</td><td><a href="../analysis/openclaw-architecture.md">openclaw-architecture.md</a></td></tr>
+  </table>
+</div>
+
+<!-- ================================================================ -->
+<!-- Phase 1 -->
+<!-- ================================================================ -->
+<div class="phase-header"><h2>Phase 1</h2><span class="badge badge-done">已完成</span></div>
+
+<div class="goal-box">
+  <h3>目标：持久化 Session 操控</h3>
+  <p class="goal-desc">
+    找到一种可靠方式，让主 Agent 能对子 CLI（CodeBuddy Code / Copilot CLI 等）进行<strong>多轮对话操控</strong>。
+    核心约束：子 CLI 会话必须支持长对话上下文保持，不能每次重新开始。
+  </p>
+</div>
+
+<!-- Phase 1: Approach A -->
+<details>
+<summary>方案A：--bg 后台 Worker 模式</summary>
+<div class="approach-body">
+
+  <h4>思路</h4>
+  <p>利用 CLI 自身的后台运行能力（codebuddy --bg），启动常驻后台进程，通过管道持续通信。</p>
+
+  <details>
+  <summary>Todo 清单</summary>
+  <div class="body">
+    <ul class="checklist">
+      <li class="done">1.1.1 --bg + stream-json 多轮测试</li>
+      <li class="done">1.1.2 --bg + attach 行为测试</li>
+      <li class="done">1.1.3 Copilot CLI 等价能力探索</li>
+    </ul>
+  </div>
+  </details>
+
+  <details>
+  <summary>实验 &amp; 分析</summary>
+  <div class="body">
+    <table>
+      <tr><th>CLI</th><th>测试项</th><th>结果</th><th>报告</th></tr>
+      <tr>
+        <td>CodeBuddy Code</td>
+        <td><code>--bg</code> 后台持久</td>
+        <td><span class="tag tag-no">不支持</span> — 任务即完成即退出</td>
+        <td><a href="../../experiments/01-cbc-persistent/s1-stream-json-multiturn.md">s1</a></td>
+      </tr>
+      <tr>
+        <td>CodeBuddy Code</td>
+        <td>管道多轮 stream-json</td>
+        <td><span class="tag tag-no">失败</span> — 进程 hang</td>
+        <td><a href="../../experiments/01-cbc-persistent/s1-stream-json-multiturn.md">s1</a></td>
+      </tr>
+      <tr>
+        <td>CodeBuddy Code</td>
+        <td><code>attach</code> 接入会话</td>
+        <td><span class="tag tag-warn">有条件</span> — 需要 TTY</td>
+        <td><a href="../../experiments/01-cbc-persistent/s2-bg-attach-behavior.md">s2</a></td>
+      </tr>
+      <tr>
+        <td>Copilot CLI</td>
+        <td><code>--bg</code> 及等价功能</td>
+        <td><span class="tag tag-no">不存在</span> — <code>&amp;</code> 是云端委托，非本地</td>
+        <td><a href="../../experiments/01-cbc-persistent/s4-copilot-bg.md">s4</a></td>
+      </tr>
+    </table>
+
+    <div class="decision" style="background:#3a1a1a;border-color:#5c1a1a;">
+      结论：--bg 方案不可行。CBG 的 --bg 是 fire-and-forget 而非持久进程；Copilot 根本没有本地 --bg。
+    </div>
+  </div>
+  </details>
+</div>
+</details>
+
+<!-- Phase 1: Approach B -->
+<details>
+<summary>方案B：PTY 终端操控</summary>
+<div class="approach-body">
+
+  <h4>思路</h4>
+  <p>用 node-pty 或 tmux 模拟一个终端，在 slave 端启动 CLI 交互模式，通过 master 端发送按键、读取输出。这是最"硬核"的方案，理论上能操控任何 CLI。</p>
+
+  <details>
+  <summary>Todo 清单</summary>
+  <div class="body">
+    <ul class="checklist">
+      <li class="done">1.2.0 PTY 操控知识文档（ANSI 序列全集）</li>
+      <li class="done">1.2.1 tmux 操控终端</li>
+      <li class="done">1.2.2 node-pty 启动子进程</li>
+      <li class="done">1.2.3 终端输出清洗工具</li>
+    </ul>
+  </div>
+  </details>
+
+  <details>
+  <summary>实验 &amp; 分析</summary>
+  <div class="body">
+    <table>
+      <tr><th>实验</th><th>结果</th><th>报告</th></tr>
+      <tr>
+        <td>tmux 操控</td>
+        <td><span class="tag tag-no">Windows 不可用</span></td>
+        <td><a href="../../experiments/02-pty-control/t1-tmux-sendkeys.md">t1</a></td>
+      </tr>
+      <tr>
+        <td>node-pty + powershell</td>
+        <td><span class="tag tag-ok">可用</span> — 能发送命令、捕获输出</td>
+        <td><a href="../../experiments/02-pty-control/t2-node-pty.js">t2</a></td>
+      </tr>
+      <tr>
+        <td>node-pty + codebuddy</td>
+        <td><span class="tag tag-warn">需 bash 包装</span> — 直接 spawn 失败（shell script）</td>
+        <td><a href="../../experiments/02-pty-control/t2-node-pty-v2.js">t2-v2</a></td>
+      </tr>
+      <tr>
+        <td>ANSI 输出清洗</td>
+        <td><span class="tag tag-ok">有效</span> — 能剥离控制序列、提取纯文本</td>
+        <td><a href="../../experiments/02-pty-control/t3-output-cleaner.js">t3</a></td>
+      </tr>
+    </table>
+
+    <h4>优缺点</h4>
+    <table>
+      <tr><th>优点</th><th>缺点</th></tr>
+      <tr>
+        <td>理论上支持任何 CLI（不需要 --resume）</td>
+        <td>Windows 兼容差（需要 bash 包装 + ConPTY）</td>
+      </tr>
+      <tr>
+        <td>可以操控交互式 TUI 菜单</td>
+        <td>输出是 ANSI 混杂流，解析复杂</td>
+      </tr>
+      <tr>
+        <td>可以模拟所有按键（方向键、Tab、Ctrl）</td>
+        <td>代码量大（~200 行），调试困难</td>
+      </tr>
+    </table>
+
+    <div class="decision">
+      PTY 作为<strong>备选方案</strong>保留。仅在遇到不支持 --resume 的 CLI 时启用。
+    </div>
+  </div>
+  </details>
+</div>
+</details>
+
+<!-- Phase 1: Approach C -->
+<details>
+<summary>方案C：stream-json + --resume（独立进程）</summary>
+<div class="approach-body">
+
+  <h4>思路</h4>
+  <p>每次对话启动一个独立进程（codebuddy -p），用 stream-json 收发消息。通过 <code>--resume &lt;session_id&gt;</code> 在多次调用间保持上下文连续性。</p>
+
+  <details>
+  <summary>Todo 清单</summary>
+  <div class="body">
+    <ul class="checklist">
+      <li class="done">stream-json 单轮验证</li>
+      <li class="done">--resume 上下文恢复测试</li>
+      <li class="done">--fork-session 分支测试</li>
+      <li class="done">并行多 Worker 实际测试</li>
+    </ul>
+  </div>
+  </details>
+
+  <details>
+  <summary>实验 &amp; 分析</summary>
+  <div class="body">
+    <table>
+      <tr><th>测试</th><th>代码</th><th>结果</th></tr>
+      <tr>
+        <td>单轮 stream-json</td>
+        <td><code>echo '{"type":"user",...}' | cbc -p --stream-json</code></td>
+        <td><span class="tag tag-ok">完美</span></td>
+      </tr>
+      <tr>
+        <td>--resume 上下文</td>
+        <td><code>cbc -p --stream-json --resume &lt;id&gt;</code></td>
+        <td><span class="tag tag-ok">上下文完全保持</span></td>
+      </tr>
+      <tr>
+        <td>--fork-session 分支</td>
+        <td><code>--resume &lt;id&gt; --fork-session</code></td>
+        <td><span class="tag tag-ok">分支正常</span> <span class="tag tag-warn">但 auto memory 泄露</span></td>
+      </tr>
+      <tr>
+        <td>并行 2 Worker</td>
+        <td>shell <code>&amp;</code> + PID 追踪</td>
+        <td><span class="tag tag-ok">W1=111, W2=222 各自正确</span></td>
+      </tr>
+    </table>
+
+    <div class="decision" style="background:#0d3320;border-color:#1a5c2a;">
+      结论：<strong>方案C 可行且推荐。</strong> CBC 实测完美支持；Copilot 的 <code>--continue</code> 等价。
+    </div>
+  </div>
+  </details>
+</div>
+</details>
+
+<!-- Phase 1: Approach D -->
+<details>
+<summary>方案D：Shell / child_process 通用进程控制</summary>
+<div class="approach-body">
+
+  <h4>思路</h4>
+  <p><strong>上移一层</strong>到 OS 级别：不依赖 CLI 自己的 --bg/ps/logs，用操作系统原语（PID、信号、重定向）统一管理所有 CLI 进程。这是方案C 的工程化封装。</p>
+
+  <details>
+  <summary>Todo 清单</summary>
+  <div class="body">
+    <ul class="checklist">
+      <li class="done">Shell 原语验证（&、$!、kill -0、wait）</li>
+      <li class="done">Node.js child_process.spawn 方案设计</li>
+      <li class="done">CBC 并行 Worker 实测</li>
+      <li class="done">跨 CLI 适配器接口设计</li>
+    </ul>
+  </div>
+  </details>
+
+  <details>
+  <summary>实验 &amp; 分析</summary>
+  <div class="body">
+    <p><strong>核心代码</strong>（完整版见 <a href="../architecture/shell-process-control.md">shell-process-control.md</a>）：</p>
+
+<pre>import { spawn } from 'child_process';
+
+class ProcessManager {
+  spawn(name, cmd, args): string {
+    const child = spawn(cmd, args);
+    const id = `${name}-${Date.now()}`;
+    this.workers.set(id, { pid: child.pid, process: child });
+    child.on('exit', code => this.onExit(id, code));
+    return id;
+  }
+  isAlive(id): boolean {
+    try { process.kill(this.workers.get(id).pid, 0); return true; }
+    catch { return false; }
+  }
+  kill(id): void { this.workers.get(id)?.process.kill(); }
+}</pre>
+
+    <p><strong>实测结果</strong>（<a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a>）：</p>
+    <table>
+      <tr><th>操作</th><th>CBC 结果</th><th>Copilot 结果</th></tr>
+      <tr><td>后台启动</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td></tr>
+      <tr><td>PID 追踪</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td></tr>
+      <tr><td>多 Worker 并行</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td></tr>
+      <tr><td>--resume 上下文</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td></tr>
+    </table>
+
+    <div class="decision" style="background:#0d3320;border-color:#1a5c2a;">
+      结论：<strong>方案D 是 Phase 2 的首选架构。</strong> 不依赖任何 CLI 特有功能，所有 CLI 统一适配。
+    </div>
+  </div>
+  </details>
+</div>
+</details>
+
+<!-- Phase 1: Full comparison table -->
+<details>
+<summary>方案对比总表</summary>
+<div class="approach-body">
+  <table>
+    <tr>
+      <th>维度</th>
+      <th>A: --bg</th>
+      <th>B: PTY</th>
+      <th>C: --resume 独立进程</th>
+      <th>D: child_process 封装</th>
+    </tr>
+    <tr>
+      <td>可行性</td>
+      <td><span class="tag tag-no">不可行</span></td>
+      <td><span class="tag tag-warn">有条件</span></td>
+      <td><span class="tag tag-ok">可行</span></td>
+      <td><span class="tag tag-ok">可行✅</span></td>
+    </tr>
+    <tr>
+      <td>跨 CLI 兼容</td>
+      <td>差（每个不同）</td>
+      <td>好（通杀）</td>
+      <td>中（需 --resume）</td>
+      <td><span class="tag tag-ok">好</span></td>
+    </tr>
+    <tr>
+      <td>代码复杂度</td>
+      <td>中</td>
+      <td>高（~200行）</td>
+      <td>低（~30行）</td>
+      <td>中（~50行）</td>
+    </tr>
+    <tr>
+      <td>Windows 兼容</td>
+      <td>—</td>
+      <td>差</td>
+      <td><span class="tag tag-ok">好</span></td>
+      <td><span class="tag tag-ok">好</span></td>
+    </tr>
+    <tr>
+      <td>输出解析难度</td>
+      <td>—</td>
+      <td>高（ANSI）</td>
+      <td><span class="tag tag-ok">低（JSON）</span></td>
+      <td><span class="tag tag-ok">低（JSON）</span></td>
+    </tr>
+    <tr>
+      <td>推荐度</td>
+      <td><span class="tag tag-no">淘汰</span></td>
+      <td>备选</td>
+      <td>可用</td>
+      <td><span class="badge badge-win">首选</span></td>
+    </tr>
+  </table>
+
+  <div class="decision">
+    <strong>Phase 2 以方案D（child_process.spawn）为主，方案C（--resume）为辅，方案B（PTY）备选。</strong>
+  </div>
+</div>
+</details>
+
+<!-- Phase 1: Issues -->
+<details>
+<summary>待探究问题</summary>
+<div class="approach-body">
+
+  <h4><span class="sev-block">阻塞性</span>（Phase 2 前必须明确）</h4>
+  <ul class="checklist">
+    <li><strong>session 过期时间？</strong> — CodeBuddy --resume 的 session 多久不活动后不可恢复？</li>
+    <li><strong>session 跨 workdir 有效吗？</strong> — --resume 是否需要 --cwd 保持一致？</li>
+    <li><strong>独立 workdir 能否隔离 MEMORY.md？</strong> — 实测验证不同目录下 auto memory 不互串</li>
+    <li><strong>子 Agent 输出何时结束？</strong> — 可靠判定：result 消息？连续静默？新提示符？</li>
+  </ul>
+
+  <h4><span class="sev-important">重要</span>（Phase 2 中解决）</h4>
+  <ul class="checklist">
+    <li>并发数上限 — 同一机器最多稳定几个 cbc？API rate limit？</li>
+    <li>错误恢复 — 子 Agent 崩溃后如何感知和标记？</li>
+    <li>超时处理 — 子任务卡住不返回的超时策略</li>
+    <li>stdout 缓冲 — spawn 大输出会撑爆 buffer 吗？</li>
+    <li>Copilot session_id 提取 — JSON 输出无明确 session_id 字段</li>
+    <li>跨平台一致性 — Linux/macOS vs Windows 差异</li>
+  </ul>
+
+  <h4><span class="sev-optimize">优化项</span>（Phase 3+）</h4>
+  <ul class="checklist">
+    <li>PTY fallback — 遇到无 --resume 的 CLI 时自动降级</li>
+    <li>Sub-agent 间直通 — Agent A 结果直接传 Agent B</li>
+    <li>分布式部署 — 子 Agent 跨机器运行</li>
+    <li>持久化记忆共享 — 多 Agent 共享上下文</li>
+  </ul>
+</div>
+</details>
+
+<!-- ================================================================ -->
+<!-- Phase 2 -->
+<!-- ================================================================ -->
+<div class="phase-header"><h2>Phase 2</h2><span class="badge badge-ongoing">即将开始</span></div>
+
+<div class="goal-box">
+  <h3>目标：最小可行系统</h3>
+  <p class="goal-desc">
+    基于 Phase 1 结论（方案D），实现 session-manager → cbc-adapter → task-queue → CLI 入口 的完整链路，能端到端地"启动 2 个子 cbc，派发任务，收集结果"。
+  </p>
+
+  <details>
+  <summary>Todo 清单</summary>
+  <div class="body">
+    <table>
+      <tr><th>模块</th><th>文件</th><th>内容</th></tr>
+      <tr>
+        <td>2.1 Session Manager</td>
+        <td><code>packages/core/src/session-manager.ts</code></td>
+        <td>实例注册/注销、心跳、sessions.json、状态机</td>
+      </tr>
+      <tr>
+        <td>2.2 CbcAdapter</td>
+        <td><code>packages/adapters/cbc-adapter/src/adapter.ts</code></td>
+        <td>spawn/execute/continue/destroy/list/status</td>
+      </tr>
+      <tr>
+        <td>2.3 任务队列</td>
+        <td><code>packages/core/src/task-queue.ts</code></td>
+        <td>文件系统队列，pending→running→done/failed</td>
+      </tr>
+      <tr>
+        <td>2.4 CLI 入口</td>
+        <td><code>packages/main/src/index.ts</code></td>
+        <td>spawn/ps/run 命令</td>
+      </tr>
+      <tr>
+        <td>2.5 端到端测试</td>
+        <td><code>tests/e2e/</code></td>
+        <td>2 子 cbc 并行派发任务</td>
+      </tr>
+    </table>
+  </div>
+  </details>
+</div>
+
+<!-- ================================================================ -->
+<!-- Phase 3 & 4 -->
+<!-- ================================================================ -->
+<div class="phase-header"><h2>Phase 3</h2><span class="badge badge-pending">规划中</span></div>
+<div class="goal-box">
+  <h3>目标：扩展和可视化</h3>
+  <p class="goal-desc">Web Dashboard (xterm.js)、其他 CLI 适配器（Claude Code / Aider / Shell）、多渠道入口（Web / QQ Bot）。</p>
+</div>
+
+<div class="phase-header"><h2>Phase 4</h2><span class="badge badge-pending">规划中</span></div>
+<div class="goal-box">
+  <h3>目标：完整集群</h3>
+  <p class="goal-desc">消息队列替代文件队列、负载均衡、子 Agent 间协作、持久化记忆共享。</p>
+</div>
+
+<!-- ================================================================ -->
+<!-- Footer -->
+<!-- ================================================================ -->
+<hr style="border:1px solid var(--border);margin:32px 0 16px;">
+<p style="color:var(--muted);font-size:12px;">
+  完整实验报告见 <a href="../../experiments/">experiments/</a> ·
+  架构文档见 <a href="../architecture/">docs/architecture/</a> ·
+  Markdown 版见 <a href="./project-overview.md">project-overview.md</a>
+</p>
+
+</body>
+</html>
