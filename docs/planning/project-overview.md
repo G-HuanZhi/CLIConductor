@@ -72,6 +72,7 @@ Phase 4  完整集群        ░░░░░░░░░░░░ 📋 待开始
 | **记忆隔离** | 每个子 Agent 独立 `sessions/<agent-id>/` 工作目录 |
 | **Session 管理** | 自定义 sessions.json + PID 追踪 |
 | **架构文档** | [shell-process-control.md](../architecture/shell-process-control.md) |
+| **技术栈说明** | [Shell · child_process · Node.js 关系](../architecture/tech-stack-control-layer.md) |
 
 ### Phase 1 方案对比：PTY vs child_process
 
