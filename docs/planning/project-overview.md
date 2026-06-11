@@ -68,10 +68,56 @@ Phase 4  完整集群        ░░░░░░░░░░░░ 📋 待开始
 | **多轮对话** | `spawn 独立进程 + stream-json + --resume <session_id>` |
 | **进程管理** | **Shell 级 OS 原语 (PID/kill -0/wait)** — 不依赖 CLI 自身 --bg |
 | **跨 CLI 兼容** | 所有 CLI 统一用 child_process.spawn，差异仅命令行参数 |
-| **输出解析** | stripAnsi + 帧缓冲空闲检测 |
+| **输出解析** | stream-json 结构化输出（无需 stripAnsi） |
 | **记忆隔离** | 每个子 Agent 独立 `sessions/<agent-id>/` 工作目录 |
 | **Session 管理** | 自定义 sessions.json + PID 追踪 |
 | **架构文档** | [shell-process-control.md](../architecture/shell-process-control.md) |
+
+### Phase 1 方案对比：PTY vs child_process
+
+两种方案都通过了 Phase 1 验证。以下是对比：
+
+| 维度 | PTY 方案 (node-pty) | child_process 方案 (spawn) | 结论 |
+|------|-------------------|--------------------------|------|
+| **操控粒度** | 模拟键盘输入，可处理交互式 TUI | 传参数传输入，无法交互 | spawn 够用 |
+| **输出格式** | 原始终端输出（含 ANSI） | stdout/stderr 纯字节流 | spawn 更干净 |
+| **输出解析** | 需要 stripAnsi + 帧检测 | 直接读 stream-json | **spawn 更简单** |
+| **多轮对话** | 持续写 stdin、读 stdout | 每次独立进程 + --resume | **spawn 更可控** |
+| **进程管理** | 依赖 PTY 生命周期 | OS 原生 PID + signal | 两者等价 |
+| **Windows 兼容** | 需 bash 包装，ConPTY 可能不稳定 | 原生支持 | **spawn 更可靠** |
+| **代码量** | ~200 行 (ANSI 解析 + 帧管理) | ~50 行 (spawn + onData) | **spawn 更少** |
+| **适用场景** | 必须交互的 TUI 程序 | 有 --resume 的 CLI | 本项目**
+
+**决策**：Phase 2 以 **child_process.spawn** 为主方案。PTY 方案保留为备选，仅在遇到不支持 --resume 的 CLI 时启用。
+
+> 详见 [shell-process-control.md](../architecture/shell-process-control.md) — 包含完整 Node.js 代码和 ProcessManager 实现。
+
+---
+
+## 待解决问题
+
+### 阻塞性（Phase 2 前必须明确）
+
+- [ ] **CodeBuddy --resume 的 session 过期时间？** — 多久不活动后 session 不可恢复？
+- [ ] **session_id 跨工作目录有效吗？** — --resume 需要 --cwd 保持一致还是可迁移？
+- [ ] **独立 workdir 能否真正隔离 MEMORY.md？** — 实测验证不同 workdir 下 auto memory 不互串
+- [ ] **子 Agent 的输出何时结束？** — 需要可靠的"回复完成"判定：result 消息？连续静默？提示符？
+
+### 重要（Phase 2 中需要解决）
+
+- [ ] **并发数上限** — 同一台机器最多稳定运行几个 cbc？受 API rate limit 限制？
+- [ ] **错误恢复** — 子 Agent 中途崩溃，父进程如何感知？sessions.json 如何标记 dead？
+- [ ] **超时处理** — 某个子任务卡住不返回，超时策略？
+- [ ] **stdout 缓冲问题** — spawn 的大输出会不会撑爆 buffer？需要流式还是累积？
+- [ ] **Copilot CLI 的 session_id 提取** — --output-format json 输出中没有明确的 session_id 字段，如何追踪？
+- [ ] **跨平台一致性** — Linux/macOS 上 spawn 行为与 Windows 是否有差异？
+
+### 优化项（Phase 3+ 再做）
+
+- [ ] PTY fallback —— 遇到无 --resume 的 CLI 时自动降级
+- [ ] Sub-agent 间直接通信（Agent A 结果传给 Agent B，跳过主 Agent）
+- [ ] 分布式部署 —— 子 Agent 跑在其他机器上
+- [ ] 持久化记忆共享 —— 多个子 Agent 共享同一份上下文
 
 ---
 
