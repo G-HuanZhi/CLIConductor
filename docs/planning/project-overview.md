@@ -15,7 +15,7 @@
 
 ```
 Phase 0  初始化           ████████████ ✅ 100%
-Phase 1  实验验证          ████████████ ✅ 100%
+Phase 1  实验验证          ████████████ ✅ 100%（含 PTY 补完）
 Phase 2  最小可行系统      ░░░░░░░░░░░░ ⏳ 0%
 Phase 3  扩展和可视化      ░░░░░░░░░░░░ 📋 待开始
 Phase 4  完整集群          ░░░░░░░░░░░░ 📋 待开始
@@ -49,7 +49,7 @@ Phase 4  完整集群          ░░░░░░░░░░░░ 📋 待开�
 
 ---
 
-## Phase 1：持久化 Session 操控实验 ✅
+## Phase 1：持久化 Session 操控实验 ✅（含 PTY 补完）
 
 ### 1.1 CBC 内部机制验证
 
@@ -63,11 +63,16 @@ Phase 4  完整集群          ░░░░░░░░░░░░ 📋 待开�
 
 ### 1.2 PTY 操控方案
 
-| 实验 | 结论 |
-|------|------|
-| tmux 操控 | Windows 不可用 |
-| node-pty 启动子进程 | 可用；需 bash 包装 codebuddy |
-| ANSI 输出清洗 | stripAnsi 有效 |
+| 实验 | 结论 | 报告 |
+|------|------|------|
+| tmux 操控 | Windows 不可用 | [t1](../experiments/02-pty-control/t1-tmux-sendkeys.md) |
+| node-pty + powershell | 可用 | [t2](../experiments/02-pty-control/t2-node-pty.js) |
+| node-pty + codebuddy --print | 需 bash 包装 | [t2-v2](../experiments/02-pty-control/t2-node-pty-v2.js) |
+| ANSI 输出清洗 | stripAnsi 有效 | [t3](../experiments/02-pty-control/t3-output-cleaner.js) |
+| **E01 — PTY 启动交互式 cbc** | ✅ TUI 完整捕获 + 文本发送 | [e01](../experiments/02-pty-control/e01-interactive-cbc.js) |
+| **E02 — / 指令通过 PTY** | ✅ /help /model /clear 可用 | [e02](../experiments/02-pty-control/e02-slash-commands.js) |
+| **E03 — 特殊按键** | ✅ Tab thinking 切换；Ctrl+C 可发送 | [e03](../experiments/02-pty-control/e03-special-keys.js) |
+| **E04 — 多轮 PTY 对话** | ✅ 发送通过（AI 回复超时） | [e04](../experiments/02-pty-control/e04-multiturn-pty.js) |
 
 ### 1.3 多实例并发测试
 
@@ -78,16 +83,20 @@ Phase 4  完整集群          ░░░░░░░░░░░░ 📋 待开�
 
 ### Phase 1 核心结论
 
-- **多轮对话**：`spawn + stream-json + --resume`（方案 C/D）
-- **进程管理**：Shell 级 OS 原语 (PID/kill/wait)，不依赖 CLI 自身功能
-- **输出解析**：stream-json 结构化输出
-- **记忆隔离**：每个子 Agent 独立 `sessions/<agent-id>/` workdir
-- **Session 管理**：自定义 sessions.json + PID 追踪
+- **多轮对话**：`spawn + stream-json + --resume`（方案 C/D）✅
+- **进程管理**：Shell 级 OS 原语 (PID/kill/wait) ✅
+- **输出解析**：stream-json 结构化输出 ✅（--print 模式）
+- **PTY 交互式控制** ✅ TUI 捕获 / 文本发送 / /指令 / Tab 键均验证通过
+- **Windows PTY 路径**：bash wrapper 方式 ✅（直接 spawn 失败）
+- **记忆隔离**：每个子 Agent 独立 `sessions/<agent-id>/` workdir ✅
+- **Session 管理**：自定义 sessions.json + PID 追踪 ✅
 - 详见 [shell-process-control.md](../architecture/shell-process-control.md)
 
 ---
 
 ## Phase 2：最小可行系统 ⏳
+
+> PTY 路径已完成核心验证（E01~E03），无 --resume 的 CLI 适配器可基于 PTY 方案开发。
 
 - [ ] **2.1 Session Manager** — `packages/core/src/session-manager.ts`
 - [ ] **2.2 CbcAdapter** — `packages/adapters/cbc-adapter/src/adapter.ts`
@@ -166,13 +175,31 @@ interface CLIIdentity {
 
 ---
 
-## 实验报告索引
+## 实验报告索引（16 项，全部完成）
 
 ```
 experiments/
-├── 01-cbc-persistent/    Phase 1.1 — CBC 持久化 session
-├── 02-pty-control/       Phase 1.2 — PTY 操控
-└── 03-concurrent/        Phase 1.3 — 多实例并发
+├── cbc-multi-cli-experiment.md       # 初始探索：--print vs --bg
+├── 01-cbc-persistent/                # Phase 1.1 — CBC 持久化 session
+│   ├── s1-stream-json-multiturn.md   # --bg + stream-json 多轮
+│   ├── s2-bg-attach-behavior.md      # --bg + attach 行为
+│   ├── s3-resume-capability.md       # --resume 能力探索（核心发现）
+│   ├── s4-copilot-bg.md              # Copilot CLI --bg 等价能力
+│   └── s5-shell-control-cbc.md       # Shell 级进程控制验证
+├── 02-pty-control/                   # Phase 1.2 — PTY 操控
+│   ├── pty-control-guide.md          # PTY 操控知识文档
+│   ├── pty-experiment-summary.md     # PTY 全 I/O 操控总结
+│   ├── t1-tmux-sendkeys.md           # tmux 操控（Windows 不可用）
+│   ├── t2-node-pty.js                # node-pty + powershell/cmd/cbc
+│   ├── t2-node-pty-v2.js             # node-pty bash 包装修复
+│   ├── t3-output-cleaner.js          # ANSI 输出清洗工具
+│   ├── e01-interactive-cbc.js        # PTY 启动交互式 cbc
+│   ├── e02-slash-commands.js         # / 指令通过 PTY 发送
+│   ├── e03-special-keys.js           # Tab/Ctrl+C 特殊按键
+│   └── e04-multiturn-pty.js          # 多轮 PTY 对话确认
+└── 03-concurrent/                    # Phase 1.3 — 多实例并发
+    ├── c1-multi-instance.md          # 多实例并发 + 记忆隔离
+    └── c2-resource-conflicts.js      # MEMORY.md 并发写入冲突
 ```
 
 ---

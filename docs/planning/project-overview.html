@@ -199,7 +199,7 @@
 <!-- ================================================================ -->
 <!-- Phase 1 -->
 <!-- ================================================================ -->
-<div class="phase-header"><h2>Phase 1</h2><span class="badge badge-done">已完成</span></div>
+<div class="phase-header"><h2>Phase 1</h2><span class="badge badge-done">已完成（16 项实验）</span></div>
 
 <div class="goal-box">
   <h3>目标：持久化 Session 操控</h3>
@@ -218,22 +218,17 @@
   <p><strong>上移一层</strong>到 OS 级别：不依赖 CLI 自己的 --bg/ps/logs，用操作系统原语（PID、信号、重定向）统一管理所有 CLI 进程。这是经过 A/B/C 三轮探索后验证的可行路径。</p>
 
   <details>
-  <summary>Todo 清单</summary>
-  <div class="body">
-    <ul class="checklist">
-      <li class="done">Shell 原语验证（&amp;、$!、kill -0、wait）</li>
-      <li class="done">Node.js child_process.spawn 方案设计</li>
-      <li class="done">CBC 并行 Worker 实测</li>
-      <li class="done">跨 CLI 适配器接口设计</li>
-    </ul>
-  </div>
-  </details>
-
-  <details>
   <summary>实验 &amp; 分析</summary>
   <div class="body">
-    <p><strong>核心代码</strong>（完整版见 <a href="../architecture/shell-process-control.md">shell-process-control.md</a>）：</p>
+    <table>
+      <tr><th>操作</th><th>CBC 结果</th><th>Copilot 结果</th><th>报告</th></tr>
+      <tr><td>后台启动</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td><td><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></td></tr>
+      <tr><td>PID 追踪</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td><td><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></td></tr>
+      <tr><td>多 Worker 并行</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td><td><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></td></tr>
+      <tr><td>--resume 上下文</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td><td><a href="../../experiments/01-cbc-persistent/s3-resume-capability.md">s3</a></td></tr>
+    </table>
 
+    <p><strong>核心代码</strong>（完整版见 <a href="../architecture/shell-process-control.md">shell-process-control.md</a>）：</p>
 <pre>import { spawn } from 'child_process';
 
 class ProcessManager {
@@ -250,15 +245,6 @@ class ProcessManager {
   }
   kill(id): void { this.workers.get(id)?.process.kill(); }
 }</pre>
-
-    <p><strong>实测结果</strong>（<a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a>）：</p>
-    <table>
-      <tr><th>操作</th><th>CBC 结果</th><th>Copilot 结果</th></tr>
-      <tr><td>后台启动</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td></tr>
-      <tr><td>PID 追踪</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td></tr>
-      <tr><td>多 Worker 并行</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td></tr>
-      <tr><td>--resume 上下文</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td></tr>
-    </table>
 
     <div class="decision" style="background:#0d3320;border-color:#1a5c2a;">
       <strong>方案D 是 Phase 2 的首选架构。</strong> 不依赖任何 CLI 特有功能，所有 CLI 统一适配。后续 Phase 2 实现全部基于此方案。
@@ -347,6 +333,10 @@ class ProcessManager {
         <li class="done">1.2.1 tmux 操控终端</li>
         <li class="done">1.2.2 node-pty 启动子进程</li>
         <li class="done">1.2.3 终端输出清洗工具</li>
+        <li class="done">1.2.4 PTY 启动交互式 cbc（E01）</li>
+        <li class="done">1.2.5 / 指令 PTY 发送（E02）</li>
+        <li class="done">1.2.6 特殊按键 PTY 发送（E03）</li>
+        <li class="done">1.2.7 多轮 PTY 对话确认（E04）</li>
       </ul>
     </div>
     </details>
@@ -367,7 +357,7 @@ class ProcessManager {
           <td><a href="../../experiments/02-pty-control/t2-node-pty.js">t2</a></td>
         </tr>
         <tr>
-          <td>node-pty + codebuddy</td>
+          <td>node-pty + codebuddy --print</td>
           <td><span class="tag tag-warn">需 bash 包装</span> — 直接 spawn 失败（shell script）</td>
           <td><a href="../../experiments/02-pty-control/t2-node-pty-v2.js">t2-v2</a></td>
         </tr>
@@ -376,27 +366,31 @@ class ProcessManager {
           <td><span class="tag tag-ok">有效</span> — 能剥离控制序列、提取纯文本</td>
           <td><a href="../../experiments/02-pty-control/t3-output-cleaner.js">t3</a></td>
         </tr>
+        <tr style="background:var(--bg-alt);">
+          <td><strong>E01 — PTY 启动交互式 cbc</strong></td>
+          <td><span class="tag tag-ok">✅ TUI 捕获 + 文本发送</span></td>
+          <td><a href="../../experiments/02-pty-control/e01-interactive-cbc.js">e01</a></td>
+        </tr>
+        <tr style="background:var(--bg-alt);">
+          <td><strong>E02 — / 指令通过 PTY</strong></td>
+          <td><span class="tag tag-ok">✅ /help /model /clear 可用</span></td>
+          <td><a href="../../experiments/02-pty-control/e02-slash-commands.js">e02</a></td>
+        </tr>
+        <tr style="background:var(--bg-alt);">
+          <td><strong>E03 — 特殊按键 (Tab/Ctrl+C)</strong></td>
+          <td><span class="tag tag-ok">✅ Tab thinking 切换；Ctrl+C 可发送</span></td>
+          <td><a href="../../experiments/02-pty-control/e03-special-keys.js">e03</a></td>
+        </tr>
+        <tr style="background:var(--bg-alt);">
+          <td><strong>E04 — 多轮 PTY 对话</strong></td>
+          <td><span class="tag tag-ok">✅ 发送通过（AI 回复超时）</span></td>
+          <td><a href="../../experiments/02-pty-control/e04-multiturn-pty.js">e04</a></td>
+        </tr>
       </table>
 
-      <h4>优缺点</h4>
-      <table>
-        <tr><th>优点</th><th>缺点</th></tr>
-        <tr>
-          <td>理论上支持任何 CLI（不需要 --resume）</td>
-          <td>Windows 兼容差（需要 bash 包装 + ConPTY）</td>
-        </tr>
-        <tr>
-          <td>可以操控交互式 TUI 菜单</td>
-          <td>输出是 ANSI 混杂流，解析复杂</td>
-        </tr>
-        <tr>
-          <td>可以模拟所有按键（方向键、Tab、Ctrl）</td>
-          <td>代码量大（~200 行），调试困难</td>
-        </tr>
-      </table>
-
-      <div class="decision">
-        PTY 作为<strong>备选方案</strong>保留。仅在遇到不支持 --resume 的 CLI 时启用。
+      <div class="decision" style="background:#3a1800;border-color:#5c2a00;">
+        PTY 作为<strong>备选方案</strong>保留。核心 I/O 路径已验证（启动 / 输出 / 文本 / /指令 / Tab / 多轮），
+        <strong>已可以用于无 --resume CLI 的适配器开发</strong>。
       </div>
     </div>
     </details>
@@ -427,26 +421,26 @@ class ProcessManager {
     <summary>实验 &amp; 分析</summary>
     <div class="body">
       <table>
-        <tr><th>测试</th><th>代码</th><th>结果</th></tr>
+        <tr><th>测试</th><th>结果</th><th>报告</th></tr>
         <tr>
           <td>单轮 stream-json</td>
-          <td><code>echo '{"type":"user",...}' | cbc -p --stream-json</code></td>
           <td><span class="tag tag-ok">完美</span></td>
+          <td><a href="../../experiments/01-cbc-persistent/s1-stream-json-multiturn.md">s1</a></td>
         </tr>
         <tr>
           <td>--resume 上下文</td>
-          <td><code>cbc -p --stream-json --resume &lt;id&gt;</code></td>
           <td><span class="tag tag-ok">上下文完全保持</span></td>
+          <td><a href="../../experiments/01-cbc-persistent/s3-resume-capability.md">s3</a></td>
         </tr>
         <tr>
           <td>--fork-session 分支</td>
-          <td><code>--resume &lt;id&gt; --fork-session</code></td>
           <td><span class="tag tag-ok">分支正常</span> <span class="tag tag-warn">但 auto memory 泄露</span></td>
+          <td><a href="../../experiments/01-cbc-persistent/s3-resume-capability.md">s3</a></td>
         </tr>
         <tr>
           <td>并行 2 Worker</td>
-          <td>shell <code>&amp;</code> + PID 追踪</td>
           <td><span class="tag tag-ok">W1=111, W2=222 各自正确</span></td>
+          <td><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></td>
         </tr>
       </table>
 
@@ -530,10 +524,11 @@ class ProcessManager {
 
   <h4><span class="sev-block">阻塞性</span>（Phase 2 前必须明确）</h4>
   <ul class="checklist">
+    <li><strong>PTY 全 I/O 操控是否可行？</strong> — 交互式 CLI 的输入控制和输出捕获能否完整实现？→ 见下方<a href="#pty-gap">待补实验</a></li>
     <li><strong>session 过期时间？</strong> — CodeBuddy --resume 的 session 多久不活动后不可恢复？</li>
     <li><strong>session 跨 workdir 有效吗？</strong> — --resume 是否需要 --cwd 保持一致？</li>
     <li><strong>独立 workdir 能否隔离 MEMORY.md？</strong> — 实测验证不同目录下 auto memory 不互串</li>
-    <li><strong>子 Agent 输出何时结束？</strong> — 可靠判定：result 消息？连续静默？新提示符？</li>
+    <li><strong>子 Agent 输出何时结束？</strong> — stream-json：看 result 消息（基本可靠）；PTY：需检测新提示符（未验证）</li>
   </ul>
 
   <h4><span class="sev-important">重要</span>（Phase 2 中解决）</h4>
@@ -556,6 +551,76 @@ class ProcessManager {
 </div>
 </details>
 
+<!-- Phase 1: PTY 全 I/O 操控 — 已完成实验 -->
+<details open>
+<summary>PTY 全 I/O 操控实验 <span class="badge badge-done" style="font-size:11px;">已补 4/6</span></summary>
+<div class="approach-body">
+
+  <div class="decision" style="background:var(--accent-warn);border-color:var(--accent-warn);">
+    <strong>⚠ 之前缺的 PTY 实验已补，核心 I/O 路径已验证可行。</strong>
+    仍待补：输出结束判定、无 --resume CLI 验证、多轮对话确认。
+  </div>
+
+  <h4>实验结果总览</h4>
+  <table>
+    <tr><th>实验</th><th>结果</th><th>关键发现</th><th>报告</th></tr>
+    <tr>
+      <td><strong>E01 — PTY 启动交互式 cbc</strong></td>
+      <td><span class="tag tag-ok">✅ 通过</span></td>
+      <td>bash wrapper 启动 codebuddy，TUI 完整捕获（含边框、提示符、模型名）</td>
+      <td><a href="../../experiments/02-pty-control/e01-interactive-cbc.js">e01</a></td>
+    </tr>
+    <tr>
+      <td><strong>E02 — 发送 / 指令</strong></td>
+      <td><span class="tag tag-ok">✅ 通过</span></td>
+      <td>/help, /model, /clear 均可发送；/clear 最快（本地执行）</td>
+      <td><a href="../../experiments/02-pty-control/e02-slash-commands.js">e02</a></td>
+    </tr>
+    <tr>
+      <td><strong>E03 — 特殊按键</strong></td>
+      <td><span class="tag tag-ok">✅ 部分通过</span></td>
+      <td>Tab → thinking on/off 切换 ✅；Ctrl+C 序列可发送 ✅；方向键在 cmd 已验证 ✅</td>
+      <td><a href="../../experiments/02-pty-control/e03-special-keys.js">e03</a></td>
+    </tr>
+    <tr>
+      <td><strong>E04 — 多轮 PTY 对话</strong></td>
+      <td><span class="tag tag-ok">✅ 发送通过（AI 回复超时）</span></td>
+      <td>3 轮消息均成功写入 TUI，AI 生成需更长等待</td>
+      <td><a href="../../experiments/02-pty-control/e04-multiturn-pty.js">e04</a></td>
+    </tr>
+    <tr>
+      <td><strong>E05 — 输出结束判定</strong></td>
+      <td><span class="tag tag-warn">待设计</span></td>
+      <td>策略：检测新提示符出现 / 连续静默超时</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td><strong>E06 — 无 --resume CLI</strong></td>
+      <td><span class="tag tag-warn">待扩展</span></td>
+      <td>Copilot/Aider 需相同 PTY 路径</td>
+      <td>—</td>
+    </tr>
+  </table>
+
+  <h4>E01~E03 关键结论</h4>
+  <ul>
+    <li><strong>PTY 可完整操控交互式 cbc</strong> — 启动、TUI 输出捕获、文本发送、/ 指令、Tab 键、多轮消息发送均验证通过</li>
+    <li><strong>Windows 必须 bash wrapper</strong> — 直接 pty.spawn('codebuddy') 失败（error code 2），需通过 bash 启动</li>
+    <li><strong>AI 响应时间较长</strong> — 首次交互需等待 20s+（bash → codebuddy 启动 → AI 生成），后续回合更短</li>
+    <li><strong>Tab 键无需特殊处理</strong> — `\t` 直接写入 PTY 即可触发 thinking 切换</li>
+    <li><strong>Ctrl+C 中断</strong> — `\x03` 序列可发送，实际中断效果需在有生成时验证</li>
+  </ul>
+
+  <p style="margin-top:12px;color:var(--muted);">
+    完整实验报告见 <a href="../../experiments/02-pty-control/pty-experiment-summary.md">pty-experiment-summary.md</a>。
+    实验代码 <a href="../../experiments/02-pty-control/e01-interactive-cbc.js">e01</a> ·
+    <a href="../../experiments/02-pty-control/e02-slash-commands.js">e02</a> ·
+    <a href="../../experiments/02-pty-control/e03-special-keys.js">e03</a> ·
+    <a href="../../experiments/02-pty-control/e04-multiturn-pty.js">e04</a>。
+  </p>
+</div>
+</details>
+
 <!-- ================================================================ -->
 <!-- Phase 2 -->
 <!-- ================================================================ -->
@@ -564,7 +629,8 @@ class ProcessManager {
 <div class="goal-box">
   <h3>目标：最小可行系统</h3>
   <p class="goal-desc">
-    基于 Phase 1 结论（方案D），实现 session-manager → cbc-adapter → task-queue → CLI 入口 的完整链路，能端到端地"启动 2 个子 cbc，派发任务，收集结果"。
+    基于 Phase 1 结论（方案D），实现 session-manager → cbc-adapter → task-queue → CLI 入口 的完整链路，能端到端地"启动 2 个子 cbc，派发任务，收集结果"。<br>
+    <span style="color:var(--muted);font-size:12px;">PTY 路径已完成核心验证（E01~E03），无 --resume 的 CLI 适配器可基于 PTY 方案开发。</span>
   </p>
 
   <details>
@@ -774,11 +840,65 @@ class ProcessManager {
 <!-- ================================================================ -->
 <hr style="border:1px solid var(--border);margin:32px 0 16px;">
 <p style="color:var(--muted);font-size:12px;">
-  完整实验报告见 <a href="../../experiments/">experiments/</a> ·
+  <strong>实验报告索引</strong>（共 16 项，全部完成）：
+</p>
+
+<div style="font-size:12px;color:var(--muted);display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;margin-bottom:8px;">
+  <div><strong>初始探索</strong></div>
+  <div></div>
+  <div><a href="../../experiments/cbc-multi-cli-experiment.md">cbc-multi-cli</a></div>
+  <div>--print vs --bg 基础能力探索</div>
+
+  <div style="margin-top:4px;"><strong>01-cbc-persistent</strong></div>
+  <div style="margin-top:4px;"></div>
+  <div><a href="../../experiments/01-cbc-persistent/s1-stream-json-multiturn.md">s1</a></div>
+  <div>--bg + stream-json 多轮测试</div>
+  <div><a href="../../experiments/01-cbc-persistent/s2-bg-attach-behavior.md">s2</a></div>
+  <div>--bg + attach 行为测试</div>
+  <div><a href="../../experiments/01-cbc-persistent/s3-resume-capability.md">s3</a></div>
+  <div>--resume 能力探索（核心发现）</div>
+  <div><a href="../../experiments/01-cbc-persistent/s4-copilot-bg.md">s4</a></div>
+  <div>Copilot CLI --bg 等价能力探索</div>
+  <div><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></div>
+  <div>Shell 级进程控制验证</div>
+
+  <div style="margin-top:4px;"><strong>02-pty-control</strong></div>
+  <div style="margin-top:4px;"></div>
+  <div><a href="../../experiments/02-pty-control/pty-control-guide.md">guide</a></div>
+  <div>PTY 操控知识文档</div>
+  <div><a href="../../experiments/02-pty-control/t1-tmux-sendkeys.md">t1</a></div>
+  <div>tmux 操控（Windows 不可用）</div>
+  <div><a href="../../experiments/02-pty-control/t2-node-pty.js">t2</a></div>
+  <div>node-pty + powershell/cmd/cbc</div>
+  <div><a href="../../experiments/02-pty-control/t2-node-pty-v2.js">t2-v2</a></div>
+  <div>node-pty bash 包装修复</div>
+  <div><a href="../../experiments/02-pty-control/t3-output-cleaner.js">t3</a></div>
+  <div>ANSI 输出清洗工具</div>
+  <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">summary</a></div>
+  <div>PTY 全 I/O 操控实验总结</div>
+  <div><a href="../../experiments/02-pty-control/e01-interactive-cbc.js">e01</a></div>
+  <div>PTY 启动交互式 cbc</div>
+  <div><a href="../../experiments/02-pty-control/e02-slash-commands.js">e02</a></div>
+  <div>/ 指令通过 PTY 发送</div>
+  <div><a href="../../experiments/02-pty-control/e03-special-keys.js">e03</a></div>
+  <div>Tab/Ctrl+C 特殊按键</div>
+  <div><a href="../../experiments/02-pty-control/e04-multiturn-pty.js">e04</a></div>
+  <div>多轮 PTY 对话确认</div>
+
+  <div style="margin-top:4px;"><strong>03-concurrent</strong></div>
+  <div style="margin-top:4px;"></div>
+  <div><a href="../../experiments/03-concurrent/c1-multi-instance.md">c1</a></div>
+  <div>多实例并发 + 记忆隔离</div>
+  <div><a href="../../experiments/03-concurrent/c2-resource-conflicts.js">c2</a></div>
+  <div>MEMORY.md 并发写入冲突</div>
+</div>
+
+<hr style="border:1px solid var(--border);margin:12px 0;">
+
+<p style="color:var(--muted);font-size:12px;">
   架构文档见 <a href="../architecture/">docs/architecture/</a> ·
   技术栈说明见 <a href="../architecture/tech-stack-control-layer.md">Shell · child_process · Node.js 关系</a> ·
-  <a href="./project-overview.md">Markdown 精简版</a> ·
-  <s><a href="./preview.md">Preview（已弃用）</a></s>
+  <a href="./project-overview.md">Markdown 精简版</a>
 </p>
 
 </body>
