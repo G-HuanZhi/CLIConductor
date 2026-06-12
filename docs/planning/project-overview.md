@@ -149,13 +149,13 @@ class ProcessManager {
 | 实验 | 结果 | 报告 |
 |------|------|------|
 | tmux 操控 | Windows 不可用 | [t1](../experiments/02-pty-control/t1-tmux-sendkeys.md) |
-| node-pty + powershell | 可用 | [t2](../experiments/02-pty-control/t2-node-pty.js) → 报告见 [pty-experiment-summary.md](../experiments/02-pty-control/pty-experiment-summary.md) |
-| node-pty + codebuddy --print | 需 bash 包装 | [t2-v2](../experiments/02-pty-control/t2-node-pty-v2.js) → 报告见 [pty-experiment-summary.md](../experiments/02-pty-control/pty-experiment-summary.md) |
-| ANSI 输出清洗 | stripAnsi 有效 | [t3](../experiments/02-pty-control/t3-output-cleaner.js) → 报告见 [pty-experiment-summary.md](../experiments/02-pty-control/pty-experiment-summary.md) |
-| E01 — PTY 启动交互式 cbc | ✅ TUI 捕获 + 文本发送 | [e01](../experiments/02-pty-control/e01-interactive-cbc.js) → 报告见 [pty-experiment-summary.md](../experiments/02-pty-control/pty-experiment-summary.md) |
-| E02 — / 指令通过 PTY | ✅ /help /model /clear 可用 | [e02](../experiments/02-pty-control/e02-slash-commands.js) → 报告见 [pty-experiment-summary.md](../experiments/02-pty-control/pty-experiment-summary.md) |
-| E03 — 特殊按键 (Tab/Ctrl+C) | ✅ Tab thinking 切换；Ctrl+C 可发送 | [e03](../experiments/02-pty-control/e03-special-keys.js) → 报告见 [pty-experiment-summary.md](../experiments/02-pty-control/pty-experiment-summary.md) |
-| E04 — 多轮 PTY 对话 | ✅ 发送通过（AI 回复超时） | [e04](../experiments/02-pty-control/e04-multiturn-pty.js) → 报告见 [pty-experiment-summary.md](../experiments/02-pty-control/pty-experiment-summary.md) |
+| node-pty + powershell | 可用 | [t2](../experiments/02-pty-control/pty-experiment-summary.md) |
+| node-pty + codebuddy --print | 需 bash 包装 | [t2-v2](../experiments/02-pty-control/pty-experiment-summary.md) |
+| ANSI 输出清洗 | stripAnsi 有效 | [t3](../experiments/02-pty-control/pty-experiment-summary.md) |
+| E01 — PTY 启动交互式 cbc | ✅ TUI 捕获 + 文本发送 | [e01](../experiments/02-pty-control/pty-experiment-summary.md) |
+| E02 — / 指令通过 PTY | ✅ /help /model /clear 可用 | [e02](../experiments/02-pty-control/pty-experiment-summary.md) |
+| E03 — 特殊按键 (Tab/Ctrl+C) | ✅ Tab thinking 切换；Ctrl+C 可发送 | [e03](../experiments/02-pty-control/pty-experiment-summary.md) |
+| E04 — 多轮 PTY 对话 | ✅ 发送通过（AI 回复超时） | [e04](../experiments/02-pty-control/pty-experiment-summary.md) |
 
 > 结论：核心 I/O 路径已验证，已可用于无 --resume CLI 的适配器开发。
 
@@ -175,7 +175,7 @@ class ProcessManager {
 | 实验 | 结论 | 报告 |
 |------|------|------|
 | 两个 cbc 并发 | 正常，无冲突 | [c1](../experiments/03-concurrent/c1-multi-instance.md) |
-| MEMORY.md 并发写入 | 需独立 workdir 隔离 | [c2](../experiments/03-concurrent/c2-resource-conflicts.js) → 报告见 [c1](../experiments/03-concurrent/c1-multi-instance.md) |
+| MEMORY.md 并发写入 | 需独立 workdir 隔离 | [c2](../experiments/03-concurrent/c1-multi-instance.md) |
 
 ### Phase 1 核心结论
 
@@ -287,17 +287,10 @@ experiments/
 ├── 02-pty-control/                   # Phase 1.2 — PTY 操控
 │   ├── pty-control-guide.md          # PTY 操控知识文档
 │   ├── pty-experiment-summary.md     # PTY 全 I/O 操控总结
-│   ├── t1-tmux-sendkeys.md           # tmux 操控（Windows 不可用）
-│   ├── t2-node-pty.js                # node-pty + powershell/cmd/cbc
-│   ├── t2-node-pty-v2.js             # node-pty bash 包装修复
-│   ├── t3-output-cleaner.js          # ANSI 输出清洗工具
-│   ├── e01-interactive-cbc.js        # PTY 启动交互式 cbc
-│   ├── e02-slash-commands.js         # / 指令通过 PTY 发送
-│   ├── e03-special-keys.js           # Tab/Ctrl+C 特殊按键
-│   └── e04-multiturn-pty.js          # 多轮 PTY 对话确认
+│   └── t1-tmux-sendkeys.md           # tmux 操控（Windows 不可用）
 └── 03-concurrent/                    # Phase 1.3 — 多实例并发
     ├── c1-multi-instance.md          # 多实例并发 + 记忆隔离
-    └── c2-resource-conflicts.js      # MEMORY.md 并发写入冲突
+    └── c1-multi-instance.md          # MEMORY.md 并发写入冲突
 ```
 
 ---
