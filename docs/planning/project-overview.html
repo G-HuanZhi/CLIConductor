@@ -354,37 +354,37 @@ class ProcessManager {
         <tr>
           <td>node-pty + powershell</td>
           <td><span class="tag tag-ok">可用</span> — 能发送命令、捕获输出</td>
-          <td><a href="../../experiments/02-pty-control/t2-node-pty.js">t2</a></td>
+          <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t2</a></td>
         </tr>
         <tr>
           <td>node-pty + codebuddy --print</td>
           <td><span class="tag tag-warn">需 bash 包装</span> — 直接 spawn 失败（shell script）</td>
-          <td><a href="../../experiments/02-pty-control/t2-node-pty-v2.js">t2-v2</a></td>
+          <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t2-v2</a></td>
         </tr>
         <tr>
           <td>ANSI 输出清洗</td>
           <td><span class="tag tag-ok">有效</span> — 能剥离控制序列、提取纯文本</td>
-          <td><a href="../../experiments/02-pty-control/t3-output-cleaner.js">t3</a></td>
+          <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t3</a></td>
         </tr>
         <tr style="background:var(--bg-alt);">
           <td><strong>E01 — PTY 启动交互式 cbc</strong></td>
           <td><span class="tag tag-ok">✅ TUI 捕获 + 文本发送</span></td>
-          <td><a href="../../experiments/02-pty-control/e01-interactive-cbc.js">e01</a></td>
+          <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e01</a></td>
         </tr>
         <tr style="background:var(--bg-alt);">
           <td><strong>E02 — / 指令通过 PTY</strong></td>
           <td><span class="tag tag-ok">✅ /help /model /clear 可用</span></td>
-          <td><a href="../../experiments/02-pty-control/e02-slash-commands.js">e02</a></td>
+          <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e02</a></td>
         </tr>
         <tr style="background:var(--bg-alt);">
           <td><strong>E03 — 特殊按键 (Tab/Ctrl+C)</strong></td>
           <td><span class="tag tag-ok">✅ Tab thinking 切换；Ctrl+C 可发送</span></td>
-          <td><a href="../../experiments/02-pty-control/e03-special-keys.js">e03</a></td>
+          <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e03</a></td>
         </tr>
         <tr style="background:var(--bg-alt);">
           <td><strong>E04 — 多轮 PTY 对话</strong></td>
           <td><span class="tag tag-ok">✅ 发送通过（AI 回复超时）</span></td>
-          <td><a href="../../experiments/02-pty-control/e04-multiturn-pty.js">e04</a></td>
+          <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e04</a></td>
         </tr>
       </table>
 
@@ -568,25 +568,25 @@ class ProcessManager {
       <td><strong>E01 — PTY 启动交互式 cbc</strong></td>
       <td><span class="tag tag-ok">✅ 通过</span></td>
       <td>bash wrapper 启动 codebuddy，TUI 完整捕获（含边框、提示符、模型名）</td>
-      <td><a href="../../experiments/02-pty-control/e01-interactive-cbc.js">e01</a></td>
+      <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e01</a></td>
     </tr>
     <tr>
       <td><strong>E02 — 发送 / 指令</strong></td>
       <td><span class="tag tag-ok">✅ 通过</span></td>
       <td>/help, /model, /clear 均可发送；/clear 最快（本地执行）</td>
-      <td><a href="../../experiments/02-pty-control/e02-slash-commands.js">e02</a></td>
+      <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e02</a></td>
     </tr>
     <tr>
       <td><strong>E03 — 特殊按键</strong></td>
       <td><span class="tag tag-ok">✅ 部分通过</span></td>
       <td>Tab → thinking on/off 切换 ✅；Ctrl+C 序列可发送 ✅；方向键在 cmd 已验证 ✅</td>
-      <td><a href="../../experiments/02-pty-control/e03-special-keys.js">e03</a></td>
+      <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e03</a></td>
     </tr>
     <tr>
       <td><strong>E04 — 多轮 PTY 对话</strong></td>
       <td><span class="tag tag-ok">✅ 发送通过（AI 回复超时）</span></td>
       <td>3 轮消息均成功写入 TUI，AI 生成需更长等待</td>
-      <td><a href="../../experiments/02-pty-control/e04-multiturn-pty.js">e04</a></td>
+      <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e04</a></td>
     </tr>
     <tr>
       <td><strong>E05 — 输出结束判定</strong></td>
@@ -868,28 +868,28 @@ class ProcessManager {
   <div>PTY 操控知识文档</div>
   <div><a href="../../experiments/02-pty-control/t1-tmux-sendkeys.md">t1</a></div>
   <div>tmux 操控（Windows 不可用）</div>
-  <div><a href="../../experiments/02-pty-control/t2-node-pty.js">t2</a></div>
+  <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t2</a></div>
   <div>node-pty + powershell/cmd/cbc</div>
-  <div><a href="../../experiments/02-pty-control/t2-node-pty-v2.js">t2-v2</a></div>
+  <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t2-v2</a></div>
   <div>node-pty bash 包装修复</div>
-  <div><a href="../../experiments/02-pty-control/t3-output-cleaner.js">t3</a></div>
+  <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t3</a></div>
   <div>ANSI 输出清洗工具</div>
   <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">summary</a></div>
   <div>PTY 全 I/O 操控实验总结</div>
-  <div><a href="../../experiments/02-pty-control/e01-interactive-cbc.js">e01</a></div>
+  <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e01</a></div>
   <div>PTY 启动交互式 cbc</div>
-  <div><a href="../../experiments/02-pty-control/e02-slash-commands.js">e02</a></div>
+  <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e02</a></div>
   <div>/ 指令通过 PTY 发送</div>
-  <div><a href="../../experiments/02-pty-control/e03-special-keys.js">e03</a></div>
+  <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e03</a></div>
   <div>Tab/Ctrl+C 特殊按键</div>
-  <div><a href="../../experiments/02-pty-control/e04-multiturn-pty.js">e04</a></div>
+  <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e04</a></div>
   <div>多轮 PTY 对话确认</div>
 
   <div style="margin-top:4px;"><strong>03-concurrent</strong></div>
   <div style="margin-top:4px;"></div>
   <div><a href="../../experiments/03-concurrent/c1-multi-instance.md">c1</a></div>
   <div>多实例并发 + 记忆隔离</div>
-  <div><a href="../../experiments/03-concurrent/c2-resource-conflicts.js">c2</a></div>
+  <div><a href="../../experiments/03-concurrent/c1-multi-instance.md">c2</a></div>
   <div>MEMORY.md 并发写入冲突</div>
 </div>
 
