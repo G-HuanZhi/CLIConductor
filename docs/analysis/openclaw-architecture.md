@@ -443,6 +443,39 @@ Plugins（通信协议）          Channels（渠道接入）
 | **Skills 元数据格式** | YAML frontmatter + Markdown body | Phase 3 | 适配器配置文件采用同样的 frontmatter 格式 |
 | **Gateway 鉴权监控** | 全程后台常驻 + 实时监控 | Phase 3 | Dashboard 的监控面板设计参考 Gateway 的监控思路 |
 
+### 7.11 与 OpenClaw 的集成可能性
+
+**两种集成路径：**
+
+#### 路径 A：作为 OpenClaw 的 Plugin / Skill
+
+OpenClaw 的插件体系允许扩展网关的连接能力和 Agent 的工具集。MyAgentsPlan 可以封装为一个 OpenClaw 的 Skill：
+
+- OpenClaw 的 Pi Agent 将"派发任务给第三方 CLI"作为一个工具调用
+- MyAgentsPlan 的调度层作为这个 Skill 的后端服务
+- 填补了 OpenClaw 对第三方 CLI 深度管理的能力空缺
+
+**适用场景**：OpenClaw 用户想在自己的 workflow 中调用多个第三方 CLI 协同工作。
+
+#### 路径 B：作为 OpenClaw 的母级管理层
+
+OpenClaw 本身也提供 CLI 入口（`claw` 命令），可以像其他 CLI 一样被 MyAgentsPlan 的适配器管理：
+
+```
+MyAgentsPlan（母级调度）
+  ├── OpenClaw 实例 1  ← 作为子 Agent，负责渠道接入 + 个人助手任务
+  ├── OpenClaw 实例 2  ← 作为子 Agent，负责另一组渠道
+  ├── CBC 实例          ← 负责代码实现
+  └── Claude Code 实例  ← 负责架构设计
+```
+
+**优势**：
+- OpenClaw 擅长多渠道接入和用户交互，MyAgentsPlan 擅长多 Agent 编排
+- 两者互补：OpenClaw 做"前端"（与用户对话、接入 IM），MyAgentsPlan 做"后端"（调度多个 CLI 并行执行）
+- OpenClaw 已有的 Gateway + Session 管理能力可以直接复用
+
+**两种路径不互斥**：可以先做 B（母级管理跑通），再封装为 A（作为 Skill 贡献回 OpenClaw 社区）。
+
 ### 7.10 本项目不能照搬的地方
 
 | 差异点 | 原因 | 本项目的做法 |
