@@ -284,41 +284,51 @@ Claw CLI 是 OpenClaw 生态的命令行入口，采用经典三层架构：
 
 ---
 
-### 7.2 核心痛点：第三方 Agent 的"不可控性"
+### 7.2 核心痛点：第三方 Agent 的控制深度
 
-MyAgentsPlan 要解决的一个关键痛点是：**现有的 AI Agent 框架（包括 OpenClaw）只能管理"自己的" Agent，对第三方的闭源 CLI/Agent 几乎没有任何控制能力。**
+MyAgentsPlan 要解决的一个关键问题是：**现有 Agent 框架对第三方闭源 CLI 的控制深度不足。**
+
+OpenClaw 通过 CLI Backend 可以调用外部 CLI（如 `claude -p`），但这种调用是 fire-and-forget 模式——启动、执行、退出。它不会维持长生命周期进程，不支持多轮 `--resume`，也不追踪子进程的 PID 做健康检查。
+
+MyAgentsPlan 的差异不在"能不能调"，而在**控制深度**：
+
+| 控制深度 | OpenClaw | MyAgentsPlan |
+|---------|----------|-------------|
+| 启动第三方 CLI | ✅ `claude -p` | ✅ `spawn(cbc, ['-p', '--stream-json'])` |
+| 获取输出 | ✅ 捕获 stdout | ✅ 解析 stream-json |
+| 多轮对话 | ❌ 每次新进程 | ✅ `--resume <session_id>` |
+| 进程生命周期管理 | ❌ | ✅ PID 追踪 + kill -0 + kill |
+| Session 归档重建 | ❌ | ✅ 元数据 + 对话历史双存 |
+| 跨 CLI 统一管理 | ❌ 无适配器抽象 | ✅ 统一 `AgentAdapter` 接口 |
+| 操控交互式 CLI (无 -p) | ❌ | ✅ PTY 备选方案 |
 
 ```
 OpenClaw 的 Agent 控制范围：
   ┌─────────────────────────────┐
-  │  Pi Agent（自己造的）         │  ← 完全可控
-  │  Sub-agent（自己 spawn 的）   │  ← 完全可控
+  │  Pi Agent（自己造的）         │  ← 完全可控，深度管理
+  │  Sub-agent（自己 spawn 的）   │  ← 完全可控，深度管理
+  │  外部 CLI（claude -p）        │  ← 可调用，但无生命周期管理
   └─────────────────────────────┘
-  外部 CLI（CBC/Claude Code/Aider/IDE）→ ❌ 无法操控
 
 MyAgentsPlan 的 Agent 控制范围：
   ┌─────────────────────────────┐
   │  主 Agent（CBC/Claude Code） │  ← 协调者
   │      │                       │
-  │      ├── CBC (CodeBuddy)     │  ← 第三方，OS 层操控
-  │      ├── Claude Code         │  ← 第三方，OS 层操控
-  │      ├── Copilot CLI         │  ← 第三方，OS 层操控
-  │      ├── Aider               │  ← 第三方，OS 层操控
-  │      └── (未来) VS Code / Cursor / ... │  ← 第三方，OS 层操控
+  │      ├── CBC (CodeBuddy)     │  ← 第三方，OS 层深度管理
+  │      ├── Claude Code         │  ← 第三方，OS 层深度管理
+  │      ├── Copilot CLI         │  ← 第三方，OS 层深度管理
+  │      ├── Aider               │  ← 第三方，OS 层深度管理
+  │      └── (未来) VS Code / Cursor / ... │  ← 第三方，OS 层深度管理
   └─────────────────────────────┘
 ```
 
-**为什么这个痛点是真实存在的：**
+**为什么这个差异化能力有价值：**
 
-1. **闭源 CLI 不提供 API** — CBC、Claude Code、Copilot CLI 等都没有暴露程序化的控制接口。OpenClaw 的 Pi Agent 是它自己造的，天然可 API 调用，但面对第三方的闭源 CLI 就无能为力了。
+1. **各厂商 CLI 能力不统一** — 有的有 `--resume`（CBC），有的只有 `--continue`（Copilot），有的可能什么都没有。MyAgentsPlan 的适配器模式统一抽象了这些差异。
+2. **避免厂商锁定** — 底层 CLI 可以随时替换，适配器切换即可，不绑定任何单一实现。
+3. **IDE 操控是空白地带** — 目前没有框架能程序化地操控 VS Code 或 Cursor 中的 AI Agent。MyAgentsPlan 的 PTY/OS 层方案为未来操控 IDE 预留了路径。
 
-2. **各厂商 CLI 能力不统一** — 有的有 `--resume`（CBC），有的只有 `--continue`（Copilot），有的可能什么都没有。没有一个框架能统一"理解"所有这些 CLI 的状态。OpenClaw 不面对这个问题——它只有自己一种 Agent。
-
-3. **厂商锁定风险** — 如果只依赖 OpenClaw 的 Pi Agent，等于被绑定在一个 Agent 实现上。MyAgentsPlan 的目标是"不管底层是谁，我都能管"——今天用 CBC，明天换成 Claude Code，适配器切换即可。
-
-4. **IDE 操控是空白地带** — 目前没有一个框架能程序化地操控 VS Code 或 Cursor 中的 AI Agent。OpenClaw 完全没有这个能力。MyAgentsPlan 的 PTY/OS 层方案为未来操控 IDE 预留了路径（模拟按键、捕获窗口输出等）。
-
-> **注意**：这个痛点不是 OpenClaw 的缺陷——它的设计目标就是用自己的 Agent 做所有事。MyAgentsPlan 选择了一条更"硬核"的路：不要求 CLI 厂商配合，从 OS 层面强行建立控制通道。
+> **注意**：OpenClaw 的设计目标是"用自己的 Agent 做所有事"，控制第三方 CLI 本就不是它的需求。MyAgentsPlan 只是选择了一条不同的路：不要求 CLI 厂商配合，从 OS 层面建立深度控制通道。
 
 ### 7.3 架构层面异同
 
@@ -443,31 +453,7 @@ Plugins（通信协议）          Channels（渠道接入）
 | **不做守护进程** | Phase 1-2 以验证可行性为目标 | 先跑通 CLI 主控入口，daemon 化放到后续阶段 |
 | **不限制基础工具** | OpenClaw 的极简哲学是设计选择，不适合本项目 | 工具能力由被控 CLI 决定，本项目不做限制 |
 
-### 7.11 关于"管理第三方 Agent"的判断 — 事实校验
-
-上文提到"MyAgentsPlan 能管理第三方 CLI，而 OpenClaw 不能"，这需要基于事实做精确表述：
-
-**事实是什么：**
-
-- OpenClaw **支持**通过 CLI Backend 调用外部 CLI（如 `claude -p`）。这不是"不能"，而是**调用方式不同**。
-- 但 OpenClaw 的 CLI Backend 是 **fire-and-forget 模式**：启动 → 执行 → 退出。它不会维持一个长生命周期进程，不支持多轮 `--resume`，也不追踪子进程的 PID 做健康检查。
-- MyAgentsPlan 的差异在于**控制深度**，而非"能/不能"的二元判断：
-
-| 控制深度 | OpenClaw | MyAgentsPlan |
-|---------|----------|-------------|
-| 启动第三方 CLI | ✅ `claude -p` | ✅ `spawn(cbc, ['-p', '--stream-json'])` |
-| 获取输出 | ✅ 捕获 stdout | ✅ 解析 stream-json |
-| 多轮对话 | ❌ 每次新进程 | ✅ `--resume <session_id>` |
-| 进程生命周期管理 | ❌ | ✅ PID 追踪 + kill -0 + kill |
-| Session 归档重建 | ❌ | ✅ 元数据 + 对话历史双存 |
-| 跨 CLI 统一管理 | ❌ 无适配器抽象 | ✅ 统一 `AgentAdapter` 接口 |
-| 操控交互式 CLI (无 -p) | ❌ | ✅ PTY 备选方案 |
-
-**纠正后的准确表述：**
-
-OpenClaw **可以调用**第三方 CLI，但调用深度止于"单次执行"。MyAgentsPlan 的核心差异不是"能不能调"，而是**能不能把第三方 CLI 当作一等公民来管理**——给它分配 session、追踪它的健康、在它崩溃后重建、在多个厂商间无缝切换。这些是 OpenClaw 的 CLI Backend 层面没有覆盖的控制深度。
-
-### 7.12 总结
+### 7.11 总结
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -483,9 +469,8 @@ OpenClaw **可以调用**第三方 CLI，但调用深度止于"单次执行"。M
 │    • MyAgentsPlan：主 Agent 管多个第三方 Agent = AI 团队指挥官      │
 │                                                                  │
 │  核心差异化能力：                                                  │
-│    MyAgentsPlan 能管理各家闭源 CLI/Agent，而不是绑定单一实现         │
+│    对第三方 CLI 的控制深度 — 不仅是"能调"，而是生命周期管理          │
 │    → 适配器模式 + OS 原语 + --resume 多轮 + 归档重建               │
-│    → OpenClaw 可以调用外部 CLI，但缺乏深度生命周期管理              │
 │                                                                  │
 │  最大共同挑战：                                                    │
 │    Session 持久化 + 并发控制 + 状态同步                            │
@@ -494,6 +479,5 @@ OpenClaw **可以调用**第三方 CLI，但调用深度止于"单次执行"。M
 │  最大不同挑战：                                                    │
 │    MyAgentsPlan 需要深度"控制第三方 CLI 进程"                       │
 │    → child_process.spawn + --resume + PTY + 跨厂商适配             │
-│    → 这是 OpenClaw 的 CLI Backend 层面未覆盖的控制深度             │
 └──────────────────────────────────────────────────────────────────┘
 ```
