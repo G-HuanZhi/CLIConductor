@@ -443,6 +443,16 @@ Plugins（通信协议）          Channels（渠道接入）
 | **Skills 元数据格式** | YAML frontmatter + Markdown body | Phase 3 | 适配器配置文件采用同样的 frontmatter 格式 |
 | **Gateway 鉴权监控** | 全程后台常驻 + 实时监控 | Phase 3 | Dashboard 的监控面板设计参考 Gateway 的监控思路 |
 
+### 7.10 本项目不能照搬的地方
+
+| 差异点 | 原因 | 本项目的做法 |
+|--------|------|------------|
+| **不内置 Agent 推理** | OpenClaw 自带 Pi Agent 做推理，本项目不需要 | 主 Agent 本身是 CBC/Claude Code 等第三方 CLI，只管编排不管推理 |
+| **不做 Skills 市场** | MyAgentsPlan 不面向终端用户，而是面向开发者 | 适配器即"技能"，按需编写安装，不走市场分发 |
+| **不用 API 模式调子 Agent** | 第三方 CLI 不提供 API，必须走 OS 进程操控 | `child_process.spawn` + `stream-json`（首选）/ PTY（备选） |
+| **不做守护进程** | Phase 1-2 以验证可行性为目标 | 先跑通 CLI 主控入口，daemon 化放到后续阶段 |
+| **不限制基础工具** | OpenClaw 的极简哲学是设计选择，不适合本项目 | 工具能力由被控 CLI 决定，本项目不做限制 |
+
 ### 7.11 与 OpenClaw 的集成可能性
 
 **两种集成路径：**
@@ -476,17 +486,7 @@ MyAgentsPlan（母级调度）
 
 **两种路径不互斥**：可以先做 B（母级管理跑通），再封装为 A（作为 Skill 贡献回 OpenClaw 社区）。
 
-### 7.10 本项目不能照搬的地方
-
-| 差异点 | 原因 | 本项目的做法 |
-|--------|------|------------|
-| **不内置 Agent 推理** | OpenClaw 自带 Pi Agent 做推理，本项目不需要 | 主 Agent 本身是 CBC/Claude Code 等第三方 CLI，只管编排不管推理 |
-| **不做 Skills 市场** | MyAgentsPlan 不面向终端用户，而是面向开发者 | 适配器即"技能"，按需编写安装，不走市场分发 |
-| **不用 API 模式调子 Agent** | 第三方 CLI 不提供 API，必须走 OS 进程操控 | `child_process.spawn` + `stream-json`（首选）/ PTY（备选） |
-| **不做守护进程** | Phase 1-2 以验证可行性为目标 | 先跑通 CLI 主控入口，daemon 化放到后续阶段 |
-| **不限制基础工具** | OpenClaw 的极简哲学是设计选择，不适合本项目 | 工具能力由被控 CLI 决定，本项目不做限制 |
-
-### 7.11 总结
+### 7.12 总结
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
