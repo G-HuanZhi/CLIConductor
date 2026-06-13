@@ -1,26 +1,14 @@
 {
   "name": "@myagentsplan/my-agents-plan",
   "private": true,
-  "description": "Agent集群系统 - 主Agent操控多个子CLI，支持多轮长对话，session可追踪",
-  "workspaces": [
-    "packages/*",
-    "packages/adapters/*"
-  ],
+  "description": "主Agent + 用户双控 CLI 管理方案",
   "scripts": {
-    "dev": "echo '待实现'",
-    "build": "echo '待实现'",
-    "test": "echo '待实现'"
+    "bridge": "node packages/cbc-bridge/server.js"
   },
   "version": "1.0.0",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "node-pty": "^1.1.0"
+    "node-pty": "^1.1.0",
+    "ws": "^8.21.0"
   }
 }
