@@ -69,6 +69,71 @@ node send.js "/model kimi-k2.6"
 node type.js "/model kimi-k2.6"   # 逐字符发送
 ```
 
+## Agent（机器端）I/O 协议
+
+Agent 通过 WebSocket 与 `server.js` 通信。协议极简——只有两种消息。
+
+### 输出（server → Agent）
+
+PTY 输出原样广播给所有 WS 客户端。格式是**原始字节流**（UTF-8 编码的 ANSI 转义序列）。
+
+```javascript
+// Agent 端接收
+ws.on('message', data => {
+  const text = data.toString(); // UTF-8 string with ANSI escape codes
+  // 如需清洗 ANSI 提取可读文本：
+  const clean = text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '')
+                    .replace(/\x1B\][^\x1B]*(\x1B\\|\x07)/g, '');
+});
+```
+
+### 输入（Agent → server）
+
+对于**全屏 TUI** 类 CLI（cbc、vim 等），必须**逐字符发送**，模拟真实键盘输入：
+
+```javascript
+// ✅ 正确：逐字符发送
+const text = '/model kimi-k2.6\r';
+for (const ch of text) {
+  ws.send(ch);
+  await new Promise(r => setTimeout(r, 30)); // 30ms 间隔
+}
+
+// ❌ 错误：一次性整段发送（cbc TUI 不会识别为键盘输入）
+ws.send('/model kimi-k2.6\r\n');
+```
+
+对于**纯管道**类 CLI（非 TUI，支持 `-p` / `--print` 参数），可以一次性整段发送。
+
+### 特殊按键
+
+| 按键 | WebSocket payload | chat.js 工具 |
+|------|------------------|-------------|
+| Enter/提交 | `\r` | `key.js enter` |
+| Tab | `\t` | `key.js tab` |
+| Escape | `\x1b` | `key.js esc` |
+| Ctrl+C | `\x03` | `key.js ctrl-c` |
+| Alt+M | `\x1b` + `m` | `key.js alt-m` |
+
+### 多轮对话
+
+参考 `chat.js` 的实现逻辑：
+
+1. 用 `type.js`（逐字符）发送问题
+2. 等待固定时长（如 4 秒）让 cbc 回复
+3. 检测输出中的提示符（`>` / `$` / `❯`）确认回复完成
+4. 发送下一句
+
+```javascript
+// 伪代码
+async function ask(text) {
+  await typewrite(text + '\r');           // 逐字输入
+  await setTimeout(waitMs);                // 等待回复
+  // 可选：检测提示符
+  if (output.includes('>')) return;        // 回复完成
+}
+```
+
 ## 文件清单
 
 | 文件 | 用途 |
