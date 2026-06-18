@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agent 集群操控系统 — 项目总览</title>
+<title>Agent 闆嗙兢鎿嶆帶绯荤粺 鈥?椤圭洰鎬昏</title>
 <style>
   :root {
     --bg: #0d1117; --card: #161b22; --border: #30363d;
@@ -33,7 +33,7 @@
   details > summary { background:var(--card); border:1px solid var(--border); border-radius:6px; padding:12px 16px; cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px; font-weight:600; transition:background .15s; }
   details > summary:hover { background:#1c2129; }
   details > summary::-webkit-details-marker { display:none; }
-  details > summary::before { content:'▸'; display:inline-block; width:16px; font-size:12px; color:var(--muted); transition:transform .15s; }
+  details > summary::before { content:'鈻?; display:inline-block; width:16px; font-size:12px; color:var(--muted); transition:transform .15s; }
   details[open] > summary::before { transform:rotate(90deg); }
   details[open] > summary { border-radius:6px 6px 0 0; border-bottom:none; }
   .approach-body { background:var(--card); border:1px solid var(--border); border-top:none; border-radius:0 0 6px 6px; padding:16px; }
@@ -63,14 +63,14 @@
   /* checklist */
   .checklist { list-style:none; }
   .checklist li { padding:3px 0; }
-  .checklist li::before { content:'☐ '; color:var(--muted); }
-  .checklist .done::before { content:'☑ '; color:var(--green); }
+  .checklist li::before { content:'鈽?'; color:var(--muted); }
+  .checklist .done::before { content:'鈽?'; color:var(--green); }
   /* issue severity */
   .sev-block { color:var(--red); font-weight:600; }
   .sev-important { color:var(--orange); }
   .sev-optimize { color:var(--muted); }
   .decision { background:#0d3320; border:1px solid #1a5c2a; border-radius:6px; padding:12px 16px; margin:12px 0; font-size:13px; }
-  .decision::before { content:'📌 决策: '; font-weight:600; }
+  .decision::before { content:'馃搶 鍐崇瓥: '; font-weight:600; }
   a { color:var(--accent); text-decoration:none; }
   a:hover { text-decoration:underline; }
   @media (max-width:640px) { body { padding:12px; } }
@@ -78,59 +78,59 @@
 </head>
 <body>
 
-<h1>Agent 集群操控系统</h1>
+<h1>Agent 闆嗙兢鎿嶆帶绯荤粺</h1>
 <p class="subtitle">
-  主 Agent 操控多个 CLI 子 Agent 并行协作 · 
-  <span class="badge badge-ongoing">方案探索中</span>
-  <span class="badge badge-done">Phase 0-1 完成</span>
-  · 最后更新 2026-06-12
+  涓?Agent 鎿嶆帶澶氫釜 CLI 瀛?Agent 骞惰鍗忎綔 路 
+  <span class="badge badge-ongoing">鏂规鎺㈢储涓?/span>
+  <span class="badge badge-done">Phase 0-1 瀹屾垚</span>
+  路 鏈€鍚庢洿鏂?2026-06-12
 </p>
 
 <!-- ================================================================ -->
-<!-- 项目概览（来自 preview.md 合并） -->
+<!-- 椤圭洰姒傝锛堟潵鑷?preview.md 鍚堝苟锛?-->
 <!-- ================================================================ -->
-<div class="phase-header" style="margin-top:0;"><h2>项目概览</h2></div>
+<div class="phase-header" style="margin-top:0;"><h2>椤圭洰姒傝</h2></div>
 
 <div class="goal-box">
-  <h3>一句话</h3>
-  <p class="goal-desc">用一个 AI（主 Agent）调度管理多个 AI CLI（CodeBuddy Code、Copilot CLI 等），让它们像团队一样分工协作。</p>
+  <h3>涓€鍙ヨ瘽</h3>
+  <p class="goal-desc">鐢ㄤ竴涓?AI锛堜富 Agent锛夎皟搴︾鐞嗗涓?AI CLI锛圕odeBuddy Code銆丆opilot CLI 绛夛級锛岃瀹冧滑鍍忓洟闃熶竴鏍峰垎宸ュ崗浣溿€?/p>
 </div>
 
-<!-- 架构 -->
+<!-- 鏋舵瀯 -->
 <details>
-<summary>架构（三句话）</summary>
+<summary>鏋舵瀯锛堜笁鍙ヨ瘽锛?/summary>
 <div class="approach-body">
-  <pre style="margin-bottom:8px;">用户 → 消息网关 → 主 Agent → 调度器 → 适配器 → CLI 进程</pre>
+  <pre style="margin-bottom:8px;">鐢ㄦ埛 鈫?娑堟伅缃戝叧 鈫?涓?Agent 鈫?璋冨害鍣?鈫?閫傞厤鍣?鈫?CLI 杩涚▼</pre>
   <ol style="margin-left:18px;">
-    <li><strong>消息网关</strong> — 统一多入口（CLI/Web/QQ），归一化为标准消息</li>
-    <li><strong>主 Agent + 调度器</strong> — 拆分任务，分发到子 Agent</li>
-    <li><strong>适配器 + 进程管理</strong> — 每种 CLI 一个适配器，用 OS 进程原语统一控制</li>
+    <li><strong>娑堟伅缃戝叧</strong> 鈥?缁熶竴澶氬叆鍙ｏ紙CLI/Web/QQ锛夛紝褰掍竴鍖栦负鏍囧噯娑堟伅</li>
+    <li><strong>涓?Agent + 璋冨害鍣?/strong> 鈥?鎷嗗垎浠诲姟锛屽垎鍙戝埌瀛?Agent</li>
+    <li><strong>閫傞厤鍣?+ 杩涚▼绠＄悊</strong> 鈥?姣忕 CLI 涓€涓€傞厤鍣紝鐢?OS 杩涚▼鍘熻缁熶竴鎺у埗</li>
   </ol>
 </div>
 </details>
 
-<!-- 关键技术决策 -->
+<!-- 鍏抽敭鎶€鏈喅绛?-->
 <details>
-<summary>关键技术决策</summary>
+<summary>鍏抽敭鎶€鏈喅绛?/summary>
 <div class="approach-body">
   <table>
-    <tr><th>决策</th><th>方案</th><th>淘汰的方案</th></tr>
-    <tr><td>多轮对话</td><td>spawn 独立进程 + stream-json + --resume</td><td>--bg 管道多轮（失败）</td></tr>
-    <tr><td>进程管理</td><td>OS 原语 (PID/kill/wait)</td><td>依赖 CLI 自身 ps/logs（不可移植）</td></tr>
-    <tr><td>跨 CLI 兼容</td><td>适配器模式，差异仅命令行参数</td><td>—</td></tr>
-    <tr><td>Session 管理</td><td>自定义 sessions.json + PID</td><td>CLI 自带 session 管理（不统一）</td></tr>
-    <tr><td>记忆隔离</td><td>子 Agent 独立 workdir</td><td>共享目录 MEMORY.md（会泄露）</td></tr>
-    <tr><td>Windows 操控</td><td>node-pty (bash 包装)</td><td>tmux（Windows 不可用）</td></tr>
+    <tr><th>鍐崇瓥</th><th>鏂规</th><th>娣樻卑鐨勬柟妗?/th></tr>
+    <tr><td>澶氳疆瀵硅瘽</td><td>spawn 鐙珛杩涚▼ + stream-json + --resume</td><td>--bg 绠￠亾澶氳疆锛堝け璐ワ級</td></tr>
+    <tr><td>杩涚▼绠＄悊</td><td>OS 鍘熻 (PID/kill/wait)</td><td>渚濊禆 CLI 鑷韩 ps/logs锛堜笉鍙Щ妞嶏級</td></tr>
+    <tr><td>璺?CLI 鍏煎</td><td>閫傞厤鍣ㄦā寮忥紝宸紓浠呭懡浠よ鍙傛暟</td><td>鈥?/td></tr>
+    <tr><td>Session 绠＄悊</td><td>鑷畾涔?sessions.json + PID</td><td>CLI 鑷甫 session 绠＄悊锛堜笉缁熶竴锛?/td></tr>
+    <tr><td>璁板繂闅旂</td><td>瀛?Agent 鐙珛 workdir</td><td>鍏变韩鐩綍 MEMORY.md锛堜細娉勯湶锛?/td></tr>
+    <tr><td>Windows 鎿嶆帶</td><td>node-pty (bash 鍖呰)</td><td>tmux锛圵indows 涓嶅彲鐢級</td></tr>
   </table>
 </div>
 </details>
 
-<!-- 适配器接口 -->
+<!-- 閫傞厤鍣ㄦ帴鍙?-->
 <details>
-<summary>适配器统一接口 + CLI 差异</summary>
+<summary>閫傞厤鍣ㄧ粺涓€鎺ュ彛 + CLI 宸紓</summary>
 <div class="approach-body">
 
-  <h4>AgentAdapter 接口</h4>
+  <h4>AgentAdapter 鎺ュ彛</h4>
 <pre>interface AgentAdapter {
   spawn(name, workdir): { pid, sessionId }
   execute(sessionId, task): TaskResult
@@ -140,38 +140,36 @@
   list(): AgentSnapshot[]
 }</pre>
 
-  <h4>CLI 厂商差异</h4>
+  <h4>CLI 鍘傚晢宸紓</h4>
   <table>
-    <tr><th>维度</th><th>CodeBuddy Code</th><th>Copilot CLI</th><th>备注</th></tr>
-    <tr><td>非交互调用</td><td><code>-p --stream-json</code></td><td><code>-p --silent --yolo</code></td><td></td></tr>
-    <tr><td>上下文恢复</td><td><code>--resume &lt;id&gt;</code></td><td><code>--continue</code> / <code>--resume</code></td><td></td></tr>
-    <tr><td>输出格式</td><td>SSE 流</td><td>JSONL</td><td></td></tr>
-    <tr><td>后台进程管理</td><td>有 --bg（不需要，OS 补齐）</td><td>无（OS 补齐）</td><td></td></tr>
-    <tr><td>跨目录 Session</td><td><span class="tag tag-no">❌ 绑定 --cwd</span></td><td>待验证</td><td>调度器必须追踪 workdir</td></tr>
-    <tr><td>Session 过期机制</td><td><span class="tag tag-no">❌ 不可永久保留</span></td><td>待验证</td><td>需心跳保活</td></tr>
-    <tr><td>原生 Session 删除</td><td><span class="tag tag-no">❌ 无</span></td><td>待验证</td><td>OS 层清理</td></tr>
+    <tr><th>缁村害</th><th>CodeBuddy Code</th><th>Copilot CLI</th><th>澶囨敞</th></tr>
+    <tr><td>闈炰氦浜掕皟鐢?/td><td><code>-p --stream-json</code></td><td><code>-p --silent --yolo</code></td><td></td></tr>
+    <tr><td>涓婁笅鏂囨仮澶?/td><td><code>--resume &lt;id&gt;</code></td><td><code>--continue</code> / <code>--resume</code></td><td></td></tr>
+    <tr><td>杈撳嚭鏍煎紡</td><td>SSE 娴?/td><td>JSONL</td><td></td></tr>
+    <tr><td>鍚庡彴杩涚▼绠＄悊</td><td>鏈?--bg锛堜笉闇€瑕侊紝OS 琛ラ綈锛?/td><td>鏃狅紙OS 琛ラ綈锛?/td><td></td></tr>
+    <tr><td>璺ㄧ洰褰?Session</td><td><span class="tag tag-no">鉂?缁戝畾 --cwd</span></td><td>寰呴獙璇?/td><td>璋冨害鍣ㄥ繀椤昏拷韪?workdir</td></tr>
+    <tr><td>Session 杩囨湡鏈哄埗</td><td><span class="tag tag-no">鉂?涓嶅彲姘镐箙淇濈暀</span></td><td>寰呴獙璇?/td><td>闇€蹇冭烦淇濇椿</td></tr>
+    <tr><td>鍘熺敓 Session 鍒犻櫎</td><td><span class="tag tag-no">鉂?鏃?/span></td><td>寰呴獙璇?/td><td>OS 灞傛竻鐞?/td></tr>
   </table>
 
   <div class="decision" style="margin-top:10px;">
-    调度器和适配器不能依赖 CLI 自身能力管理 session 生命周期，需在 OS 层（进程管理 + sessions.json）统一补齐。
-  </div>
-  <p style="margin-top:8px;">详见下方 <a href="#cli-diff">CLI 差异与调度注意事项</a> 章节。</p>
+    璋冨害鍣ㄥ拰閫傞厤鍣ㄤ笉鑳戒緷璧?CLI 鑷韩鑳藉姏绠＄悊 session 鐢熷懡鍛ㄦ湡锛岄渶鍦?OS 灞傦紙杩涚▼绠＄悊 + sessions.json锛夌粺涓€琛ラ綈銆?  </div>
+  <p style="margin-top:8px;">璇﹁涓嬫柟 <a href="#cli-diff">CLI 宸紓涓庤皟搴︽敞鎰忎簨椤?/a> 绔犺妭銆?/p>
 </div>
 </details>
 
-<!-- 目录结构 -->
+<!-- 鐩綍缁撴瀯 -->
 <details>
-<summary>目录结构</summary>
+<summary>鐩綍缁撴瀯</summary>
 <div class="approach-body">
-<pre>MyAgentsPlan/
-├── docs/
-│   ├── planning/      → 项目计划 + 总览（本文档）
-│   ├── architecture/  → 架构设计 + 进程控制方案
-│   └── analysis/      → 外部项目分析 (OpenClaw/CAO)
-├── experiments/       → 5 个已完成的 Phase 1 实验
-├── packages/          → monorepo 源码 (Phase 2 开始写)
-├── sessions/          → 子 Agent 独立 workdir
-└── logs/              → 运行日志</pre>
+<pre>CLIConductor/
+鈹溾攢鈹€ docs/
+鈹?  鈹溾攢鈹€ planning/      鈫?椤圭洰璁″垝 + 鎬昏锛堟湰鏂囨。锛?鈹?  鈹溾攢鈹€ architecture/  鈫?鏋舵瀯璁捐 + 杩涚▼鎺у埗鏂规
+鈹?  鈹斺攢鈹€ analysis/      鈫?澶栭儴椤圭洰鍒嗘瀽 (OpenClaw/CAO)
+鈹溾攢鈹€ experiments/       鈫?5 涓凡瀹屾垚鐨?Phase 1 瀹為獙
+鈹溾攢鈹€ packages/          鈫?monorepo 婧愮爜 (Phase 2 寮€濮嬪啓)
+鈹溾攢鈹€ sessions/          鈫?瀛?Agent 鐙珛 workdir
+鈹斺攢鈹€ logs/              鈫?杩愯鏃ュ織</pre>
 </div>
 </details>
 
@@ -180,55 +178,53 @@
 <!-- ================================================================ -->
 <!-- Phase 0 -->
 <!-- ================================================================ -->
-<div class="phase-header"><h2>Phase 0</h2><span class="badge badge-done">已完成</span></div>
+<div class="phase-header"><h2>Phase 0</h2><span class="badge badge-done">宸插畬鎴?/span></div>
 
 <div class="goal-box">
-  <h3>目标：项目初始化</h3>
-  <p class="goal-desc">建立项目基础设施，收集外部资料，形成初步架构设计。</p>
+  <h3>鐩爣锛氶」鐩垵濮嬪寲</h3>
+  <p class="goal-desc">寤虹珛椤圭洰鍩虹璁炬柦锛屾敹闆嗗閮ㄨ祫鏂欙紝褰㈡垚鍒濇鏋舵瀯璁捐銆?/p>
   <table>
-    <tr><th>任务</th><th>产出</th></tr>
-    <tr><td>终端/CLI 概念学习</td><td><a href="../architecture/terminal-cli-concepts.md">terminal-cli-concepts.md</a></td></tr>
-    <tr><td>Agent 集群架构设计</td><td><a href="../architecture/agent-cluster-architecture.md">agent-cluster-architecture.md</a></td></tr>
-    <tr><td>外部资源收集</td><td><a href="../resource-index.md">resource-index.md</a></td></tr>
-    <tr><td>项目结构初始化</td><td>monorepo 目录 + package.json</td></tr>
-    <tr><td>CAO 源码研究</td><td><a href="../analysis/cao-analysis.md">cao-analysis.md</a> — 不直接使用，借鉴架构</td></tr>
-    <tr><td>OpenClaw 架构分析</td><td><a href="../analysis/openclaw-architecture.md">openclaw-architecture.md</a></td></tr>
+    <tr><th>浠诲姟</th><th>浜у嚭</th></tr>
+    <tr><td>缁堢/CLI 姒傚康瀛︿範</td><td><a href="../architecture/terminal-cli-concepts.md">terminal-cli-concepts.md</a></td></tr>
+    <tr><td>Agent 闆嗙兢鏋舵瀯璁捐</td><td><a href="../architecture/agent-cluster-architecture.md">agent-cluster-architecture.md</a></td></tr>
+    <tr><td>澶栭儴璧勬簮鏀堕泦</td><td><a href="../resource-index.md">resource-index.md</a></td></tr>
+    <tr><td>椤圭洰缁撴瀯鍒濆鍖?/td><td>monorepo 鐩綍 + package.json</td></tr>
+    <tr><td>CAO 婧愮爜鐮旂┒</td><td><a href="../analysis/cao-analysis.md">cao-analysis.md</a> 鈥?涓嶇洿鎺ヤ娇鐢紝鍊熼壌鏋舵瀯</td></tr>
+    <tr><td>OpenClaw 鏋舵瀯鍒嗘瀽</td><td><a href="../analysis/openclaw-architecture.md">openclaw-architecture.md</a></td></tr>
   </table>
 </div>
 
 <!-- ================================================================ -->
 <!-- Phase 1 -->
 <!-- ================================================================ -->
-<div class="phase-header"><h2>Phase 1</h2><span class="badge badge-done">已完成（16 项实验）</span></div>
+<div class="phase-header"><h2>Phase 1</h2><span class="badge badge-done">宸插畬鎴愶紙16 椤瑰疄楠岋級</span></div>
 
 <div class="goal-box">
-  <h3>目标：持久化 Session 操控</h3>
+  <h3>鐩爣锛氭寔涔呭寲 Session 鎿嶆帶</h3>
   <p class="goal-desc">
-    找到一种可靠方式，让主 Agent 能对子 CLI（CodeBuddy Code / Copilot CLI 等）进行<strong>多轮对话操控</strong>。
-    核心约束：子 CLI 会话必须支持长对话上下文保持，不能每次重新开始。
-  </p>
+    鎵惧埌涓€绉嶅彲闈犳柟寮忥紝璁╀富 Agent 鑳藉瀛?CLI锛圕odeBuddy Code / Copilot CLI 绛夛級杩涜<strong>澶氳疆瀵硅瘽鎿嶆帶</strong>銆?    鏍稿績绾︽潫锛氬瓙 CLI 浼氳瘽蹇呴』鏀寔闀垮璇濅笂涓嬫枃淇濇寔锛屼笉鑳芥瘡娆￠噸鏂板紑濮嬨€?  </p>
 </div>
 
-<!-- Phase 1: Approach D — 首选方案（默认展开） -->
+<!-- Phase 1: Approach D 鈥?棣栭€夋柟妗堬紙榛樿灞曞紑锛?-->
 <details open>
-<summary><strong>首选方案：Shell / child_process 通用进程控制（方案D）</strong></summary>
+<summary><strong>棣栭€夋柟妗堬細Shell / child_process 閫氱敤杩涚▼鎺у埗锛堟柟妗圖锛?/strong></summary>
 <div class="approach-body">
 
-  <h4>思路</h4>
-  <p><strong>上移一层</strong>到 OS 级别：不依赖 CLI 自己的 --bg/ps/logs，用操作系统原语（PID、信号、重定向）统一管理所有 CLI 进程。这是经过 A/B/C 三轮探索后验证的可行路径。</p>
+  <h4>鎬濊矾</h4>
+  <p><strong>涓婄Щ涓€灞?/strong>鍒?OS 绾у埆锛氫笉渚濊禆 CLI 鑷繁鐨?--bg/ps/logs锛岀敤鎿嶄綔绯荤粺鍘熻锛圥ID銆佷俊鍙枫€侀噸瀹氬悜锛夌粺涓€绠＄悊鎵€鏈?CLI 杩涚▼銆傝繖鏄粡杩?A/B/C 涓夎疆鎺㈢储鍚庨獙璇佺殑鍙璺緞銆?/p>
 
   <details>
-  <summary>实验 &amp; 分析</summary>
+  <summary>瀹為獙 &amp; 鍒嗘瀽</summary>
   <div class="body">
     <table>
-      <tr><th>操作</th><th>CBC 结果</th><th>Copilot 结果</th><th>报告</th></tr>
-      <tr><td>后台启动</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td><td><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></td></tr>
-      <tr><td>PID 追踪</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td><td><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></td></tr>
-      <tr><td>多 Worker 并行</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td><td><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></td></tr>
-      <tr><td>--resume 上下文</td><td><span class="tag tag-ok">✅</span></td><td><span class="tag tag-ok">✅</span></td><td><a href="../../experiments/01-cbc-persistent/s3-resume-capability.md">s3</a></td></tr>
+      <tr><th>鎿嶄綔</th><th>CBC 缁撴灉</th><th>Copilot 缁撴灉</th><th>鎶ュ憡</th></tr>
+      <tr><td>鍚庡彴鍚姩</td><td><span class="tag tag-ok">鉁?/span></td><td><span class="tag tag-ok">鉁?/span></td><td><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></td></tr>
+      <tr><td>PID 杩借釜</td><td><span class="tag tag-ok">鉁?/span></td><td><span class="tag tag-ok">鉁?/span></td><td><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></td></tr>
+      <tr><td>澶?Worker 骞惰</td><td><span class="tag tag-ok">鉁?/span></td><td><span class="tag tag-ok">鉁?/span></td><td><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></td></tr>
+      <tr><td>--resume 涓婁笅鏂?/td><td><span class="tag tag-ok">鉁?/span></td><td><span class="tag tag-ok">鉁?/span></td><td><a href="../../experiments/01-cbc-persistent/s3-resume-capability.md">s3</a></td></tr>
     </table>
 
-    <p><strong>核心代码</strong>（完整版见 <a href="../architecture/shell-process-control.md">shell-process-control.md</a>）：</p>
+    <p><strong>鏍稿績浠ｇ爜</strong>锛堝畬鏁寸増瑙?<a href="../architecture/shell-process-control.md">shell-process-control.md</a>锛夛細</p>
 <pre>import { spawn } from 'child_process';
 
 class ProcessManager {
@@ -247,71 +243,69 @@ class ProcessManager {
 }</pre>
 
     <div class="decision" style="background:#0d3320;border-color:#1a5c2a;">
-      <strong>方案D 是 Phase 2 的首选架构。</strong> 不依赖任何 CLI 特有功能，所有 CLI 统一适配。后续 Phase 2 实现全部基于此方案。
-    </div>
+      <strong>鏂规D 鏄?Phase 2 鐨勯閫夋灦鏋勩€?/strong> 涓嶄緷璧栦换浣?CLI 鐗规湁鍔熻兘锛屾墍鏈?CLI 缁熶竴閫傞厤銆傚悗缁?Phase 2 瀹炵幇鍏ㄩ儴鍩轰簬姝ゆ柟妗堛€?    </div>
   </div>
   </details>
 </div>
 </details>
 
-<!-- Phase 1: 废案 — 已淘汰方案 -->
+<!-- Phase 1: 搴熸 鈥?宸叉窐姹版柟妗?-->
 <details>
-<summary>📁 废案 — 已淘汰方案（A/B/C，探索记录保留备查）</summary>
+<summary>馃搧 搴熸 鈥?宸叉窐姹版柟妗堬紙A/B/C锛屾帰绱㈣褰曚繚鐣欏鏌ワ級</summary>
 <div class="approach-body">
 
   <!-- Approach A -->
   <details>
-  <summary>方案A：--bg 后台 Worker 模式 <span class="tag tag-no">不可行</span></summary>
+  <summary>鏂规A锛?-bg 鍚庡彴 Worker 妯″紡 <span class="tag tag-no">涓嶅彲琛?/span></summary>
   <div class="body">
 
-    <h4>思路</h4>
-    <p>利用 CLI 自身的后台运行能力（codebuddy --bg），启动常驻后台进程，通过管道持续通信。</p>
+    <h4>鎬濊矾</h4>
+    <p>鍒╃敤 CLI 鑷韩鐨勫悗鍙拌繍琛岃兘鍔涳紙codebuddy --bg锛夛紝鍚姩甯搁┗鍚庡彴杩涚▼锛岄€氳繃绠￠亾鎸佺画閫氫俊銆?/p>
 
     <details>
-    <summary>Todo 清单</summary>
+    <summary>Todo 娓呭崟</summary>
     <div class="body">
       <ul class="checklist">
-        <li class="done">1.1.1 --bg + stream-json 多轮测试</li>
-        <li class="done">1.1.2 --bg + attach 行为测试</li>
-        <li class="done">1.1.3 Copilot CLI 等价能力探索</li>
+        <li class="done">1.1.1 --bg + stream-json 澶氳疆娴嬭瘯</li>
+        <li class="done">1.1.2 --bg + attach 琛屼负娴嬭瘯</li>
+        <li class="done">1.1.3 Copilot CLI 绛変环鑳藉姏鎺㈢储</li>
       </ul>
     </div>
     </details>
 
     <details>
-    <summary>实验 &amp; 分析</summary>
+    <summary>瀹為獙 &amp; 鍒嗘瀽</summary>
     <div class="body">
       <table>
-        <tr><th>CLI</th><th>测试项</th><th>结果</th><th>报告</th></tr>
+        <tr><th>CLI</th><th>娴嬭瘯椤?/th><th>缁撴灉</th><th>鎶ュ憡</th></tr>
         <tr>
           <td>CodeBuddy Code</td>
-          <td><code>--bg</code> 后台持久</td>
-          <td><span class="tag tag-no">不支持</span> — 任务即完成即退出</td>
+          <td><code>--bg</code> 鍚庡彴鎸佷箙</td>
+          <td><span class="tag tag-no">涓嶆敮鎸?/span> 鈥?浠诲姟鍗冲畬鎴愬嵆閫€鍑?/td>
           <td><a href="../../experiments/01-cbc-persistent/s1-stream-json-multiturn.md">s1</a></td>
         </tr>
         <tr>
           <td>CodeBuddy Code</td>
-          <td>管道多轮 stream-json</td>
-          <td><span class="tag tag-no">失败</span> — 进程 hang</td>
+          <td>绠￠亾澶氳疆 stream-json</td>
+          <td><span class="tag tag-no">澶辫触</span> 鈥?杩涚▼ hang</td>
           <td><a href="../../experiments/01-cbc-persistent/s1-stream-json-multiturn.md">s1</a></td>
         </tr>
         <tr>
           <td>CodeBuddy Code</td>
-          <td><code>attach</code> 接入会话</td>
-          <td><span class="tag tag-warn">有条件</span> — 需要 TTY</td>
+          <td><code>attach</code> 鎺ュ叆浼氳瘽</td>
+          <td><span class="tag tag-warn">鏈夋潯浠?/span> 鈥?闇€瑕?TTY</td>
           <td><a href="../../experiments/01-cbc-persistent/s2-bg-attach-behavior.md">s2</a></td>
         </tr>
         <tr>
           <td>Copilot CLI</td>
-          <td><code>--bg</code> 及等价功能</td>
-          <td><span class="tag tag-no">不存在</span> — <code>&amp;</code> 是云端委托，非本地</td>
+          <td><code>--bg</code> 鍙婄瓑浠峰姛鑳?/td>
+          <td><span class="tag tag-no">涓嶅瓨鍦?/span> 鈥?<code>&amp;</code> 鏄簯绔鎵橈紝闈炴湰鍦?/td>
           <td><a href="../../experiments/01-cbc-persistent/s4-copilot-bg.md">s4</a></td>
         </tr>
       </table>
 
       <div class="decision" style="background:#3a1a1a;border-color:#5c1a1a;">
-        结论：--bg 方案不可行。CBC 的 --bg 是 fire-and-forget 而非持久进程；Copilot 根本没有本地 --bg。
-      </div>
+        缁撹锛?-bg 鏂规涓嶅彲琛屻€侰BC 鐨?--bg 鏄?fire-and-forget 鑰岄潪鎸佷箙杩涚▼锛汣opilot 鏍规湰娌℃湁鏈湴 --bg銆?      </div>
     </div>
     </details>
   </div>
@@ -319,79 +313,78 @@ class ProcessManager {
 
   <!-- Approach B -->
   <details>
-  <summary>方案B：PTY 终端操控 <span class="tag tag-warn">备选保留</span></summary>
+  <summary>鏂规B锛歅TY 缁堢鎿嶆帶 <span class="tag tag-warn">澶囬€変繚鐣?/span></summary>
   <div class="body">
 
-    <h4>思路</h4>
-    <p>用 node-pty 或 tmux 模拟一个终端，在 slave 端启动 CLI 交互模式，通过 master 端发送按键、读取输出。这是最"硬核"的方案，理论上能操控任何 CLI。</p>
+    <h4>鎬濊矾</h4>
+    <p>鐢?node-pty 鎴?tmux 妯℃嫙涓€涓粓绔紝鍦?slave 绔惎鍔?CLI 浜や簰妯″紡锛岄€氳繃 master 绔彂閫佹寜閿€佽鍙栬緭鍑恒€傝繖鏄渶"纭牳"鐨勬柟妗堬紝鐞嗚涓婅兘鎿嶆帶浠讳綍 CLI銆?/p>
 
     <details>
-    <summary>Todo 清单</summary>
+    <summary>Todo 娓呭崟</summary>
     <div class="body">
       <ul class="checklist">
-        <li class="done">1.2.0 PTY 操控知识文档（ANSI 序列全集）</li>
-        <li class="done">1.2.1 tmux 操控终端</li>
-        <li class="done">1.2.2 node-pty 启动子进程</li>
-        <li class="done">1.2.3 终端输出清洗工具</li>
-        <li class="done">1.2.4 PTY 启动交互式 cbc（E01）</li>
-        <li class="done">1.2.5 / 指令 PTY 发送（E02）</li>
-        <li class="done">1.2.6 特殊按键 PTY 发送（E03）</li>
-        <li class="done">1.2.7 多轮 PTY 对话确认（E04）</li>
+        <li class="done">1.2.0 PTY 鎿嶆帶鐭ヨ瘑鏂囨。锛圓NSI 搴忓垪鍏ㄩ泦锛?/li>
+        <li class="done">1.2.1 tmux 鎿嶆帶缁堢</li>
+        <li class="done">1.2.2 node-pty 鍚姩瀛愯繘绋?/li>
+        <li class="done">1.2.3 缁堢杈撳嚭娓呮礂宸ュ叿</li>
+        <li class="done">1.2.4 PTY 鍚姩浜や簰寮?cbc锛圗01锛?/li>
+        <li class="done">1.2.5 / 鎸囦护 PTY 鍙戦€侊紙E02锛?/li>
+        <li class="done">1.2.6 鐗规畩鎸夐敭 PTY 鍙戦€侊紙E03锛?/li>
+        <li class="done">1.2.7 澶氳疆 PTY 瀵硅瘽纭锛圗04锛?/li>
       </ul>
     </div>
     </details>
 
     <details>
-    <summary>实验 &amp; 分析</summary>
+    <summary>瀹為獙 &amp; 鍒嗘瀽</summary>
     <div class="body">
       <table>
-        <tr><th>实验</th><th>结果</th><th>报告</th></tr>
+        <tr><th>瀹為獙</th><th>缁撴灉</th><th>鎶ュ憡</th></tr>
         <tr>
-          <td>tmux 操控</td>
-          <td><span class="tag tag-no">Windows 不可用</span></td>
+          <td>tmux 鎿嶆帶</td>
+          <td><span class="tag tag-no">Windows 涓嶅彲鐢?/span></td>
           <td><a href="../../experiments/02-pty-control/t1-tmux-sendkeys.md">t1</a></td>
         </tr>
         <tr>
           <td>node-pty + powershell</td>
-          <td><span class="tag tag-ok">可用</span> — 能发送命令、捕获输出</td>
+          <td><span class="tag tag-ok">鍙敤</span> 鈥?鑳藉彂閫佸懡浠ゃ€佹崟鑾疯緭鍑?/td>
           <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t2</a></td>
         </tr>
         <tr>
           <td>node-pty + codebuddy --print</td>
-          <td><span class="tag tag-warn">需 bash 包装</span> — 直接 spawn 失败（shell script）</td>
+          <td><span class="tag tag-warn">闇€ bash 鍖呰</span> 鈥?鐩存帴 spawn 澶辫触锛坰hell script锛?/td>
           <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t2-v2</a></td>
         </tr>
         <tr>
-          <td>ANSI 输出清洗</td>
-          <td><span class="tag tag-ok">有效</span> — 能剥离控制序列、提取纯文本</td>
+          <td>ANSI 杈撳嚭娓呮礂</td>
+          <td><span class="tag tag-ok">鏈夋晥</span> 鈥?鑳藉墺绂绘帶鍒跺簭鍒椼€佹彁鍙栫函鏂囨湰</td>
           <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t3</a></td>
         </tr>
         <tr style="background:var(--bg-alt);">
-          <td><strong>E01 — PTY 启动交互式 cbc</strong></td>
-          <td><span class="tag tag-ok">✅ TUI 捕获 + 文本发送</span></td>
+          <td><strong>E01 鈥?PTY 鍚姩浜や簰寮?cbc</strong></td>
+          <td><span class="tag tag-ok">鉁?TUI 鎹曡幏 + 鏂囨湰鍙戦€?/span></td>
           <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e01</a></td>
         </tr>
         <tr style="background:var(--bg-alt);">
-          <td><strong>E02 — / 指令通过 PTY</strong></td>
-          <td><span class="tag tag-ok">✅ /help /model /clear 可用</span></td>
+          <td><strong>E02 鈥?/ 鎸囦护閫氳繃 PTY</strong></td>
+          <td><span class="tag tag-ok">鉁?/help /model /clear 鍙敤</span></td>
           <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e02</a></td>
         </tr>
         <tr style="background:var(--bg-alt);">
-          <td><strong>E03 — 特殊按键 (Tab/Ctrl+C)</strong></td>
-          <td><span class="tag tag-ok">✅ Tab thinking 切换；Ctrl+C 可发送</span></td>
+          <td><strong>E03 鈥?鐗规畩鎸夐敭 (Tab/Ctrl+C)</strong></td>
+          <td><span class="tag tag-ok">鉁?Tab thinking 鍒囨崲锛汣trl+C 鍙彂閫?/span></td>
           <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e03</a></td>
         </tr>
         <tr style="background:var(--bg-alt);">
-          <td><strong>E04 — 多轮 PTY 对话</strong></td>
-          <td><span class="tag tag-ok">✅ 发送通过（AI 回复超时）</span></td>
+          <td><strong>E04 鈥?澶氳疆 PTY 瀵硅瘽</strong></td>
+          <td><span class="tag tag-ok">鉁?鍙戦€侀€氳繃锛圓I 鍥炲瓒呮椂锛?/span></td>
           <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e04</a></td>
         </tr>
       </table>
 
       <div class="decision" style="background:#3a1800;border-color:#5c2a00;">
-        PTY 作为<strong>备选方案</strong>保留。核心 I/O 路径已验证（启动 / 输出 / 文本 / /指令 / Tab / 多轮），
-        <strong>已可以用于无 --resume CLI 的适配器开发</strong>。
-      </div>
+        PTY 浣滀负<strong>澶囬€夋柟妗?/strong>淇濈暀銆傛牳蹇?I/O 璺緞宸查獙璇侊紙鍚姩 / 杈撳嚭 / 鏂囨湰 / /鎸囦护 / Tab / 澶氳疆锛夛紝
+        <strong>宸插彲浠ョ敤浜庢棤 --resume CLI 鐨勯€傞厤鍣ㄥ紑鍙?/strong>銆?      </div>
     </div>
     </details>
   </div>
@@ -399,54 +392,53 @@ class ProcessManager {
 
   <!-- Approach C -->
   <details>
-  <summary>方案C：stream-json + --resume（独立进程）<span class="tag tag-ok">可行</span></summary>
+  <summary>鏂规C锛歴tream-json + --resume锛堢嫭绔嬭繘绋嬶級<span class="tag tag-ok">鍙</span></summary>
   <div class="body">
 
-    <h4>思路</h4>
-    <p>每次对话启动一个独立进程（codebuddy -p），用 stream-json 收发消息。通过 <code>--resume &lt;session_id&gt;</code> 在多次调用间保持上下文连续性。</p>
+    <h4>鎬濊矾</h4>
+    <p>姣忔瀵硅瘽鍚姩涓€涓嫭绔嬭繘绋嬶紙codebuddy -p锛夛紝鐢?stream-json 鏀跺彂娑堟伅銆傞€氳繃 <code>--resume &lt;session_id&gt;</code> 鍦ㄥ娆¤皟鐢ㄩ棿淇濇寔涓婁笅鏂囪繛缁€с€?/p>
 
     <details>
-    <summary>Todo 清单</summary>
+    <summary>Todo 娓呭崟</summary>
     <div class="body">
       <ul class="checklist">
-        <li class="done">stream-json 单轮验证</li>
-        <li class="done">--resume 上下文恢复测试</li>
-        <li class="done">--fork-session 分支测试</li>
-        <li class="done">并行多 Worker 实际测试</li>
+        <li class="done">stream-json 鍗曡疆楠岃瘉</li>
+        <li class="done">--resume 涓婁笅鏂囨仮澶嶆祴璇?/li>
+        <li class="done">--fork-session 鍒嗘敮娴嬭瘯</li>
+        <li class="done">骞惰澶?Worker 瀹為檯娴嬭瘯</li>
       </ul>
     </div>
     </details>
 
     <details>
-    <summary>实验 &amp; 分析</summary>
+    <summary>瀹為獙 &amp; 鍒嗘瀽</summary>
     <div class="body">
       <table>
-        <tr><th>测试</th><th>结果</th><th>报告</th></tr>
+        <tr><th>娴嬭瘯</th><th>缁撴灉</th><th>鎶ュ憡</th></tr>
         <tr>
-          <td>单轮 stream-json</td>
-          <td><span class="tag tag-ok">完美</span></td>
+          <td>鍗曡疆 stream-json</td>
+          <td><span class="tag tag-ok">瀹岀編</span></td>
           <td><a href="../../experiments/01-cbc-persistent/s1-stream-json-multiturn.md">s1</a></td>
         </tr>
         <tr>
-          <td>--resume 上下文</td>
-          <td><span class="tag tag-ok">上下文完全保持</span></td>
+          <td>--resume 涓婁笅鏂?/td>
+          <td><span class="tag tag-ok">涓婁笅鏂囧畬鍏ㄤ繚鎸?/span></td>
           <td><a href="../../experiments/01-cbc-persistent/s3-resume-capability.md">s3</a></td>
         </tr>
         <tr>
-          <td>--fork-session 分支</td>
-          <td><span class="tag tag-ok">分支正常</span> <span class="tag tag-warn">但 auto memory 泄露</span></td>
+          <td>--fork-session 鍒嗘敮</td>
+          <td><span class="tag tag-ok">鍒嗘敮姝ｅ父</span> <span class="tag tag-warn">浣?auto memory 娉勯湶</span></td>
           <td><a href="../../experiments/01-cbc-persistent/s3-resume-capability.md">s3</a></td>
         </tr>
         <tr>
-          <td>并行 2 Worker</td>
-          <td><span class="tag tag-ok">W1=111, W2=222 各自正确</span></td>
+          <td>骞惰 2 Worker</td>
+          <td><span class="tag tag-ok">W1=111, W2=222 鍚勮嚜姝ｇ‘</span></td>
           <td><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></td>
         </tr>
       </table>
 
       <div class="decision" style="background:#0d3320;border-color:#1a5c2a;">
-        结论：<strong>方案C 可行。</strong> --resume 机制在方案D（Shell 封装）中作为底层技术被保留使用。
-      </div>
+        缁撹锛?strong>鏂规C 鍙銆?/strong> --resume 鏈哄埗鍦ㄦ柟妗圖锛圫hell 灏佽锛変腑浣滀负搴曞眰鎶€鏈淇濈暀浣跨敤銆?      </div>
     </div>
     </details>
   </div>
@@ -457,191 +449,188 @@ class ProcessManager {
 
 <!-- Phase 1: Full comparison table -->
 <details>
-<summary>方案对比总表（含废案回顾）</summary>
+<summary>鏂规瀵规瘮鎬昏〃锛堝惈搴熸鍥為【锛?/summary>
 <div class="approach-body">
   <table>
     <tr>
-      <th>维度</th>
+      <th>缁村害</th>
       <th>A: --bg</th>
       <th>B: PTY</th>
-      <th>C: --resume 独立进程</th>
-      <th>D: child_process 封装</th>
+      <th>C: --resume 鐙珛杩涚▼</th>
+      <th>D: child_process 灏佽</th>
     </tr>
     <tr>
-      <td>可行性</td>
-      <td><span class="tag tag-no">不可行</span></td>
-      <td><span class="tag tag-warn">有条件</span></td>
-      <td><span class="tag tag-ok">可行</span></td>
-      <td><span class="tag tag-ok">可行✅</span></td>
+      <td>鍙鎬?/td>
+      <td><span class="tag tag-no">涓嶅彲琛?/span></td>
+      <td><span class="tag tag-warn">鏈夋潯浠?/span></td>
+      <td><span class="tag tag-ok">鍙</span></td>
+      <td><span class="tag tag-ok">鍙鉁?/span></td>
     </tr>
     <tr>
-      <td>跨 CLI 兼容</td>
-      <td>差（每个不同）</td>
-      <td>好（通杀）</td>
-      <td>中（需 --resume）</td>
-      <td><span class="tag tag-ok">好</span></td>
+      <td>璺?CLI 鍏煎</td>
+      <td>宸紙姣忎釜涓嶅悓锛?/td>
+      <td>濂斤紙閫氭潃锛?/td>
+      <td>涓紙闇€ --resume锛?/td>
+      <td><span class="tag tag-ok">濂?/span></td>
     </tr>
     <tr>
-      <td>代码复杂度</td>
-      <td>中</td>
-      <td>高（~200行）</td>
-      <td>低（~30行）</td>
-      <td>中（~50行）</td>
+      <td>浠ｇ爜澶嶆潅搴?/td>
+      <td>涓?/td>
+      <td>楂橈紙~200琛岋級</td>
+      <td>浣庯紙~30琛岋級</td>
+      <td>涓紙~50琛岋級</td>
     </tr>
     <tr>
-      <td>Windows 兼容</td>
-      <td>—</td>
-      <td>差</td>
-      <td><span class="tag tag-ok">好</span></td>
-      <td><span class="tag tag-ok">好</span></td>
+      <td>Windows 鍏煎</td>
+      <td>鈥?/td>
+      <td>宸?/td>
+      <td><span class="tag tag-ok">濂?/span></td>
+      <td><span class="tag tag-ok">濂?/span></td>
     </tr>
     <tr>
-      <td>输出解析难度</td>
-      <td>—</td>
-      <td>高（ANSI）</td>
-      <td><span class="tag tag-ok">低（JSON）</span></td>
-      <td><span class="tag tag-ok">低（JSON）</span></td>
+      <td>杈撳嚭瑙ｆ瀽闅惧害</td>
+      <td>鈥?/td>
+      <td>楂橈紙ANSI锛?/td>
+      <td><span class="tag tag-ok">浣庯紙JSON锛?/span></td>
+      <td><span class="tag tag-ok">浣庯紙JSON锛?/span></td>
     </tr>
     <tr>
-      <td>推荐度</td>
-      <td><span class="tag tag-no">淘汰</span></td>
-      <td>备选</td>
-      <td>可用</td>
-      <td><span class="badge badge-win">首选</span></td>
+      <td>鎺ㄨ崘搴?/td>
+      <td><span class="tag tag-no">娣樻卑</span></td>
+      <td>澶囬€?/td>
+      <td>鍙敤</td>
+      <td><span class="badge badge-win">棣栭€?/span></td>
     </tr>
   </table>
 
   <div class="decision">
-    <strong>Phase 2 以方案D（child_process.spawn）为主，方案C（--resume）为辅，方案B（PTY）备选。</strong>
+    <strong>Phase 2 浠ユ柟妗圖锛坈hild_process.spawn锛変负涓伙紝鏂规C锛?-resume锛変负杈咃紝鏂规B锛圥TY锛夊閫夈€?/strong>
   </div>
 </div>
 </details>
 
 <!-- Phase 1: Issues -->
 <details>
-<summary>待探究问题</summary>
+<summary>寰呮帰绌堕棶棰?/summary>
 <div class="approach-body">
 
-  <h4><span class="sev-block">阻塞性</span>（Phase 2 前必须明确）</h4>
+  <h4><span class="sev-block">闃诲鎬?/span>锛圥hase 2 鍓嶅繀椤绘槑纭級</h4>
   <ul class="checklist">
-    <li><strong>PTY 全 I/O 操控是否可行？</strong> — 交互式 CLI 的输入控制和输出捕获能否完整实现？→ 见下方<a href="#pty-gap">待补实验</a></li>
-    <li><strong>session 过期时间？</strong> — CodeBuddy --resume 的 session 多久不活动后不可恢复？</li>
-    <li><strong>session 跨 workdir 有效吗？</strong> — --resume 是否需要 --cwd 保持一致？</li>
-    <li><strong>独立 workdir 能否隔离 MEMORY.md？</strong> — 实测验证不同目录下 auto memory 不互串</li>
-    <li><strong>子 Agent 输出何时结束？</strong> — stream-json：看 result 消息（基本可靠）；PTY：需检测新提示符（未验证）</li>
+    <li><strong>PTY 鍏?I/O 鎿嶆帶鏄惁鍙锛?/strong> 鈥?浜や簰寮?CLI 鐨勮緭鍏ユ帶鍒跺拰杈撳嚭鎹曡幏鑳藉惁瀹屾暣瀹炵幇锛熲啋 瑙佷笅鏂?a href="#pty-gap">寰呰ˉ瀹為獙</a></li>
+    <li><strong>session 杩囨湡鏃堕棿锛?/strong> 鈥?CodeBuddy --resume 鐨?session 澶氫箙涓嶆椿鍔ㄥ悗涓嶅彲鎭㈠锛?/li>
+    <li><strong>session 璺?workdir 鏈夋晥鍚楋紵</strong> 鈥?--resume 鏄惁闇€瑕?--cwd 淇濇寔涓€鑷达紵</li>
+    <li><strong>鐙珛 workdir 鑳藉惁闅旂 MEMORY.md锛?/strong> 鈥?瀹炴祴楠岃瘉涓嶅悓鐩綍涓?auto memory 涓嶄簰涓?/li>
+    <li><strong>瀛?Agent 杈撳嚭浣曟椂缁撴潫锛?/strong> 鈥?stream-json锛氱湅 result 娑堟伅锛堝熀鏈彲闈狅級锛汸TY锛氶渶妫€娴嬫柊鎻愮ず绗︼紙鏈獙璇侊級</li>
   </ul>
 
-  <h4><span class="sev-important">重要</span>（Phase 2 中解决）</h4>
+  <h4><span class="sev-important">閲嶈</span>锛圥hase 2 涓В鍐筹級</h4>
   <ul class="checklist">
-    <li>并发数上限 — 同一机器最多稳定几个 cbc？API rate limit？</li>
-    <li>错误恢复 — 子 Agent 崩溃后如何感知和标记？</li>
-    <li>超时处理 — 子任务卡住不返回的超时策略</li>
-    <li>stdout 缓冲 — spawn 大输出会撑爆 buffer 吗？</li>
-    <li>Copilot session_id 提取 — JSON 输出无明确 session_id 字段</li>
-    <li>跨平台一致性 — Linux/macOS vs Windows 差异</li>
+    <li>骞跺彂鏁颁笂闄?鈥?鍚屼竴鏈哄櫒鏈€澶氱ǔ瀹氬嚑涓?cbc锛烝PI rate limit锛?/li>
+    <li>閿欒鎭㈠ 鈥?瀛?Agent 宕╂簝鍚庡浣曟劅鐭ュ拰鏍囪锛?/li>
+    <li>瓒呮椂澶勭悊 鈥?瀛愪换鍔″崱浣忎笉杩斿洖鐨勮秴鏃剁瓥鐣?/li>
+    <li>stdout 缂撳啿 鈥?spawn 澶ц緭鍑轰細鎾戠垎 buffer 鍚楋紵</li>
+    <li>Copilot session_id 鎻愬彇 鈥?JSON 杈撳嚭鏃犳槑纭?session_id 瀛楁</li>
+    <li>璺ㄥ钩鍙颁竴鑷存€?鈥?Linux/macOS vs Windows 宸紓</li>
   </ul>
 
-  <h4><span class="sev-optimize">优化项</span>（Phase 3+）</h4>
+  <h4><span class="sev-optimize">浼樺寲椤?/span>锛圥hase 3+锛?/h4>
   <ul class="checklist">
-    <li>PTY fallback — 遇到无 --resume 的 CLI 时自动降级</li>
-    <li>Sub-agent 间直通 — Agent A 结果直接传 Agent B</li>
-    <li>分布式部署 — 子 Agent 跨机器运行</li>
-    <li>持久化记忆共享 — 多 Agent 共享上下文</li>
+    <li>PTY fallback 鈥?閬囧埌鏃?--resume 鐨?CLI 鏃惰嚜鍔ㄩ檷绾?/li>
+    <li>Sub-agent 闂寸洿閫?鈥?Agent A 缁撴灉鐩存帴浼?Agent B</li>
+    <li>鍒嗗竷寮忛儴缃?鈥?瀛?Agent 璺ㄦ満鍣ㄨ繍琛?/li>
+    <li>鎸佷箙鍖栬蹇嗗叡浜?鈥?澶?Agent 鍏变韩涓婁笅鏂?/li>
   </ul>
 </div>
 </details>
 
-<!-- Phase 1: PTY 全 I/O 操控 — 已完成实验 -->
+<!-- Phase 1: PTY 鍏?I/O 鎿嶆帶 鈥?宸插畬鎴愬疄楠?-->
 <details open>
-<summary>PTY 全 I/O 操控实验 <span class="badge badge-done" style="font-size:11px;">已补 4/6</span></summary>
+<summary>PTY 鍏?I/O 鎿嶆帶瀹為獙 <span class="badge badge-done" style="font-size:11px;">宸茶ˉ 4/6</span></summary>
 <div class="approach-body">
 
   <div class="decision" style="background:var(--accent-warn);border-color:var(--accent-warn);">
-    <strong>⚠ 之前缺的 PTY 实验已补，核心 I/O 路径已验证可行。</strong>
-    仍待补：输出结束判定、无 --resume CLI 验证、多轮对话确认。
-  </div>
+    <strong>鈿?涔嬪墠缂虹殑 PTY 瀹為獙宸茶ˉ锛屾牳蹇?I/O 璺緞宸查獙璇佸彲琛屻€?/strong>
+    浠嶅緟琛ワ細杈撳嚭缁撴潫鍒ゅ畾銆佹棤 --resume CLI 楠岃瘉銆佸杞璇濈‘璁ゃ€?  </div>
 
-  <h4>实验结果总览</h4>
+  <h4>瀹為獙缁撴灉鎬昏</h4>
   <table>
-    <tr><th>实验</th><th>结果</th><th>关键发现</th><th>报告</th></tr>
+    <tr><th>瀹為獙</th><th>缁撴灉</th><th>鍏抽敭鍙戠幇</th><th>鎶ュ憡</th></tr>
     <tr>
-      <td><strong>E01 — PTY 启动交互式 cbc</strong></td>
-      <td><span class="tag tag-ok">✅ 通过</span></td>
-      <td>bash wrapper 启动 codebuddy，TUI 完整捕获（含边框、提示符、模型名）</td>
+      <td><strong>E01 鈥?PTY 鍚姩浜や簰寮?cbc</strong></td>
+      <td><span class="tag tag-ok">鉁?閫氳繃</span></td>
+      <td>bash wrapper 鍚姩 codebuddy锛孴UI 瀹屾暣鎹曡幏锛堝惈杈规銆佹彁绀虹銆佹ā鍨嬪悕锛?/td>
       <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e01</a></td>
     </tr>
     <tr>
-      <td><strong>E02 — 发送 / 指令</strong></td>
-      <td><span class="tag tag-ok">✅ 通过</span></td>
-      <td>/help, /model, /clear 均可发送；/clear 最快（本地执行）</td>
+      <td><strong>E02 鈥?鍙戦€?/ 鎸囦护</strong></td>
+      <td><span class="tag tag-ok">鉁?閫氳繃</span></td>
+      <td>/help, /model, /clear 鍧囧彲鍙戦€侊紱/clear 鏈€蹇紙鏈湴鎵ц锛?/td>
       <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e02</a></td>
     </tr>
     <tr>
-      <td><strong>E03 — 特殊按键</strong></td>
-      <td><span class="tag tag-ok">✅ 部分通过</span></td>
-      <td>Tab → thinking on/off 切换 ✅；Ctrl+C 序列可发送 ✅；方向键在 cmd 已验证 ✅</td>
+      <td><strong>E03 鈥?鐗规畩鎸夐敭</strong></td>
+      <td><span class="tag tag-ok">鉁?閮ㄥ垎閫氳繃</span></td>
+      <td>Tab 鈫?thinking on/off 鍒囨崲 鉁咃紱Ctrl+C 搴忓垪鍙彂閫?鉁咃紱鏂瑰悜閿湪 cmd 宸查獙璇?鉁?/td>
       <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e03</a></td>
     </tr>
     <tr>
-      <td><strong>E04 — 多轮 PTY 对话</strong></td>
-      <td><span class="tag tag-ok">✅ 发送通过（AI 回复超时）</span></td>
-      <td>3 轮消息均成功写入 TUI，AI 生成需更长等待</td>
+      <td><strong>E04 鈥?澶氳疆 PTY 瀵硅瘽</strong></td>
+      <td><span class="tag tag-ok">鉁?鍙戦€侀€氳繃锛圓I 鍥炲瓒呮椂锛?/span></td>
+      <td>3 杞秷鎭潎鎴愬姛鍐欏叆 TUI锛孉I 鐢熸垚闇€鏇撮暱绛夊緟</td>
       <td><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e04</a></td>
     </tr>
     <tr>
-      <td><strong>E05 — 输出结束判定</strong></td>
-      <td><span class="tag tag-warn">待设计</span></td>
-      <td>策略：检测新提示符出现 / 连续静默超时</td>
-      <td>—</td>
+      <td><strong>E05 鈥?杈撳嚭缁撴潫鍒ゅ畾</strong></td>
+      <td><span class="tag tag-warn">寰呰璁?/span></td>
+      <td>绛栫暐锛氭娴嬫柊鎻愮ず绗﹀嚭鐜?/ 杩炵画闈欓粯瓒呮椂</td>
+      <td>鈥?/td>
     </tr>
     <tr>
-      <td><strong>E06 — 无 --resume CLI</strong></td>
-      <td><span class="tag tag-warn">待扩展</span></td>
-      <td>Copilot/Aider 需相同 PTY 路径</td>
-      <td>—</td>
+      <td><strong>E06 鈥?鏃?--resume CLI</strong></td>
+      <td><span class="tag tag-warn">寰呮墿灞?/span></td>
+      <td>Copilot/Aider 闇€鐩稿悓 PTY 璺緞</td>
+      <td>鈥?/td>
     </tr>
   </table>
 
-  <h4>E01~E03 关键结论</h4>
+  <h4>E01~E03 鍏抽敭缁撹</h4>
   <ul>
-    <li><strong>PTY 可完整操控交互式 cbc</strong> — 启动、TUI 输出捕获、文本发送、/ 指令、Tab 键、多轮消息发送均验证通过</li>
-    <li><strong>Windows 必须 bash wrapper</strong> — 直接 pty.spawn('codebuddy') 失败（error code 2），需通过 bash 启动</li>
-    <li><strong>AI 响应时间较长</strong> — 首次交互需等待 20s+（bash → codebuddy 启动 → AI 生成），后续回合更短</li>
-    <li><strong>Tab 键无需特殊处理</strong> — `\t` 直接写入 PTY 即可触发 thinking 切换</li>
-    <li><strong>Ctrl+C 中断</strong> — `\x03` 序列可发送，实际中断效果需在有生成时验证</li>
+    <li><strong>PTY 鍙畬鏁存搷鎺т氦浜掑紡 cbc</strong> 鈥?鍚姩銆乀UI 杈撳嚭鎹曡幏銆佹枃鏈彂閫併€? 鎸囦护銆乀ab 閿€佸杞秷鎭彂閫佸潎楠岃瘉閫氳繃</li>
+    <li><strong>Windows 蹇呴』 bash wrapper</strong> 鈥?鐩存帴 pty.spawn('codebuddy') 澶辫触锛坋rror code 2锛夛紝闇€閫氳繃 bash 鍚姩</li>
+    <li><strong>AI 鍝嶅簲鏃堕棿杈冮暱</strong> 鈥?棣栨浜や簰闇€绛夊緟 20s+锛坆ash 鈫?codebuddy 鍚姩 鈫?AI 鐢熸垚锛夛紝鍚庣画鍥炲悎鏇寸煭</li>
+    <li><strong>Tab 閿棤闇€鐗规畩澶勭悊</strong> 鈥?`\t` 鐩存帴鍐欏叆 PTY 鍗冲彲瑙﹀彂 thinking 鍒囨崲</li>
+    <li><strong>Ctrl+C 涓柇</strong> 鈥?`\x03` 搴忓垪鍙彂閫侊紝瀹為檯涓柇鏁堟灉闇€鍦ㄦ湁鐢熸垚鏃堕獙璇?/li>
   </ul>
 
   <p style="margin-top:12px;color:var(--muted);">
-    完整实验报告见 <a href="../../experiments/02-pty-control/pty-experiment-summary.md">pty-experiment-summary.md</a>。
-    实验代码 <a href="../../experiments/02-pty-control/e01-interactive-cbc.js">e01</a> ·
-    <a href="../../experiments/02-pty-control/e02-slash-commands.js">e02</a> ·
-    <a href="../../experiments/02-pty-control/e03-special-keys.js">e03</a> ·
-    <a href="../../experiments/02-pty-control/e04-multiturn-pty.js">e04</a>。
-  </p>
+    瀹屾暣瀹為獙鎶ュ憡瑙?<a href="../../experiments/02-pty-control/pty-experiment-summary.md">pty-experiment-summary.md</a>銆?    瀹為獙浠ｇ爜 <a href="../../experiments/02-pty-control/e01-interactive-cbc.js">e01</a> 路
+    <a href="../../experiments/02-pty-control/e02-slash-commands.js">e02</a> 路
+    <a href="../../experiments/02-pty-control/e03-special-keys.js">e03</a> 路
+    <a href="../../experiments/02-pty-control/e04-multiturn-pty.js">e04</a>銆?  </p>
 </div>
 </details>
 
 <!-- ================================================================ -->
 <!-- Phase 2 -->
 <!-- ================================================================ -->
-<div class="phase-header"><h2>Phase 2</h2><span class="badge badge-ongoing">即将开始</span></div>
+<div class="phase-header"><h2>Phase 2</h2><span class="badge badge-ongoing">鍗冲皢寮€濮?/span></div>
 
 <div class="goal-box">
-  <h3>目标：最小可行系统</h3>
+  <h3>鐩爣锛氭渶灏忓彲琛岀郴缁?/h3>
   <p class="goal-desc">
-    基于 Phase 1 结论（方案D），实现 session-manager → cbc-adapter → task-queue → CLI 入口 的完整链路，能端到端地"启动 2 个子 cbc，派发任务，收集结果"。<br>
-    <span style="color:var(--muted);font-size:12px;">PTY 路径已完成核心验证（E01~E03），无 --resume 的 CLI 适配器可基于 PTY 方案开发。</span>
+    鍩轰簬 Phase 1 缁撹锛堟柟妗圖锛夛紝瀹炵幇 session-manager 鈫?cbc-adapter 鈫?task-queue 鈫?CLI 鍏ュ彛 鐨勫畬鏁撮摼璺紝鑳界鍒扮鍦?鍚姩 2 涓瓙 cbc锛屾淳鍙戜换鍔★紝鏀堕泦缁撴灉"銆?br>
+    <span style="color:var(--muted);font-size:12px;">PTY 璺緞宸插畬鎴愭牳蹇冮獙璇侊紙E01~E03锛夛紝鏃?--resume 鐨?CLI 閫傞厤鍣ㄥ彲鍩轰簬 PTY 鏂规寮€鍙戙€?/span>
   </p>
 
   <details>
-  <summary>Todo 清单</summary>
+  <summary>Todo 娓呭崟</summary>
   <div class="body">
     <table>
-      <tr><th>模块</th><th>文件</th><th>内容</th></tr>
+      <tr><th>妯″潡</th><th>鏂囦欢</th><th>鍐呭</th></tr>
       <tr>
         <td>2.1 Session Manager</td>
         <td><code>packages/core/src/session-manager.ts</code></td>
-        <td>实例注册/注销、心跳、sessions.json、状态机</td>
+        <td>瀹炰緥娉ㄥ唽/娉ㄩ攢銆佸績璺炽€乻essions.json銆佺姸鎬佹満</td>
       </tr>
       <tr>
         <td>2.2 CbcAdapter</td>
@@ -649,19 +638,19 @@ class ProcessManager {
         <td>spawn/execute/continue/destroy/list/status</td>
       </tr>
       <tr>
-        <td>2.3 任务队列</td>
+        <td>2.3 浠诲姟闃熷垪</td>
         <td><code>packages/core/src/task-queue.ts</code></td>
-        <td>文件系统队列，pending→running→done/failed</td>
+        <td>鏂囦欢绯荤粺闃熷垪锛宲ending鈫抮unning鈫抎one/failed</td>
       </tr>
       <tr>
-        <td>2.4 CLI 入口</td>
+        <td>2.4 CLI 鍏ュ彛</td>
         <td><code>packages/main/src/index.ts</code></td>
-        <td>spawn/ps/run 命令</td>
+        <td>spawn/ps/run 鍛戒护</td>
       </tr>
       <tr>
-        <td>2.5 端到端测试</td>
+        <td>2.5 绔埌绔祴璇?/td>
         <td><code>tests/e2e/</code></td>
-        <td>2 子 cbc 并行派发任务</td>
+        <td>2 瀛?cbc 骞惰娲惧彂浠诲姟</td>
       </tr>
     </table>
   </div>
@@ -671,166 +660,164 @@ class ProcessManager {
 <!-- ================================================================ -->
 <!-- Phase 3 & 4 -->
 <!-- ================================================================ -->
-<div class="phase-header"><h2>Phase 3</h2><span class="badge badge-pending">规划中</span></div>
+<div class="phase-header"><h2>Phase 3</h2><span class="badge badge-pending">瑙勫垝涓?/span></div>
 <div class="goal-box">
-  <h3>目标：扩展和可视化</h3>
-  <p class="goal-desc">Web Dashboard (xterm.js)、其他 CLI 适配器（Claude Code / Aider / Shell）、多渠道入口（Web / QQ Bot）。</p>
+  <h3>鐩爣锛氭墿灞曞拰鍙鍖?/h3>
+  <p class="goal-desc">Web Dashboard (xterm.js)銆佸叾浠?CLI 閫傞厤鍣紙Claude Code / Aider / Shell锛夈€佸娓犻亾鍏ュ彛锛圵eb / QQ Bot锛夈€?/p>
 </div>
 
-<div class="phase-header"><h2>Phase 4</h2><span class="badge badge-pending">规划中</span></div>
+<div class="phase-header"><h2>Phase 4</h2><span class="badge badge-pending">瑙勫垝涓?/span></div>
 <div class="goal-box">
-  <h3>目标：完整集群</h3>
-  <p class="goal-desc">消息队列替代文件队列、负载均衡、子 Agent 间协作、持久化记忆共享。</p>
+  <h3>鐩爣锛氬畬鏁撮泦缇?/h3>
+  <p class="goal-desc">娑堟伅闃熷垪鏇夸唬鏂囦欢闃熷垪銆佽礋杞藉潎琛°€佸瓙 Agent 闂村崗浣溿€佹寔涔呭寲璁板繂鍏变韩銆?/p>
 </div>
 
 <!-- ================================================================ -->
-<!-- CLI 差异与调度注意事项 -->
+<!-- CLI 宸紓涓庤皟搴︽敞鎰忎簨椤?-->
 <!-- ================================================================ -->
-<div class="phase-header" id="cli-diff"><h2>CLI 差异与调度注意事项</h2></div>
+<div class="phase-header" id="cli-diff"><h2>CLI 宸紓涓庤皟搴︽敞鎰忎簨椤?/h2></div>
 
 <div class="goal-box">
-  <p class="goal-desc">不同 CLI 在 session 管理、工作目录隔离、生命周期等方面存在显著差异。调度器和适配器必须考虑这些差异，不能假设所有 CLI 行为一致。</p>
+  <p class="goal-desc">涓嶅悓 CLI 鍦?session 绠＄悊銆佸伐浣滅洰褰曢殧绂汇€佺敓鍛藉懆鏈熺瓑鏂归潰瀛樺湪鏄捐憲宸紓銆傝皟搴﹀櫒鍜岄€傞厤鍣ㄥ繀椤昏€冭檻杩欎簺宸紓锛屼笉鑳藉亣璁炬墍鏈?CLI 琛屼负涓€鑷淬€?/p>
 </div>
 
-<h3>已确认的 CLI 差异（CBC）</h3>
+<h3>宸茬‘璁ょ殑 CLI 宸紓锛圕BC锛?/h3>
 <table>
-  <tr><th>维度</th><th>CodeBuddy Code (cbc)</th><th>备注</th></tr>
+  <tr><th>缁村害</th><th>CodeBuddy Code (cbc)</th><th>澶囨敞</th></tr>
   <tr>
-    <td><strong>跨目录 Session 切换</strong></td>
-    <td><span class="tag tag-no">❌ 不支持</span></td>
-    <td><code>--resume</code> 需与 <code>--cwd</code> 保持一致，session 绑定创建时的工作目录</td>
+    <td><strong>璺ㄧ洰褰?Session 鍒囨崲</strong></td>
+    <td><span class="tag tag-no">鉂?涓嶆敮鎸?/span></td>
+    <td><code>--resume</code> 闇€涓?<code>--cwd</code> 淇濇寔涓€鑷达紝session 缁戝畾鍒涘缓鏃剁殑宸ヤ綔鐩綍</td>
   </tr>
   <tr>
-    <td><strong>长闲置 Session 保留</strong></td>
-    <td><span class="tag tag-no">❌ 不可永久保留</span></td>
-    <td>长期不活跃的 session 可能被自动清理/过期</td>
+    <td><strong>闀块棽缃?Session 淇濈暀</strong></td>
+    <td><span class="tag tag-no">鉂?涓嶅彲姘镐箙淇濈暀</span></td>
+    <td>闀挎湡涓嶆椿璺冪殑 session 鍙兘琚嚜鍔ㄦ竻鐞?杩囨湡</td>
   </tr>
   <tr>
-    <td><strong>Session 删除</strong></td>
-    <td><span class="tag tag-no">❌ 无原生删除</span></td>
-    <td>无法通过 CLI 接口清理已结束的 session</td>
+    <td><strong>Session 鍒犻櫎</strong></td>
+    <td><span class="tag tag-no">鉂?鏃犲師鐢熷垹闄?/span></td>
+    <td>鏃犳硶閫氳繃 CLI 鎺ュ彛娓呯悊宸茬粨鏉熺殑 session</td>
   </tr>
   <tr>
-    <td><strong>Session 列表查询</strong></td>
-    <td><span class="tag tag-warn">有限</span></td>
-    <td>调度器不能依赖 CLI 自带的 session list 做管理</td>
+    <td><strong>Session 鍒楄〃鏌ヨ</strong></td>
+    <td><span class="tag tag-warn">鏈夐檺</span></td>
+    <td>璋冨害鍣ㄤ笉鑳戒緷璧?CLI 鑷甫鐨?session list 鍋氱鐞?/td>
   </tr>
   <tr>
-    <td><strong>后台进程管理</strong></td>
-    <td>有 <code>--bg</code>（已弃用）</td>
-    <td>统一用 OS 原生进程管理替代</td>
+    <td><strong>鍚庡彴杩涚▼绠＄悊</strong></td>
+    <td>鏈?<code>--bg</code>锛堝凡寮冪敤锛?/td>
+    <td>缁熶竴鐢?OS 鍘熺敓杩涚▼绠＄悊鏇夸唬</td>
   </tr>
 </table>
 
-<h3>对调度器的影响</h3>
+<h3>瀵硅皟搴﹀櫒鐨勫奖鍝?/h3>
 
 <details>
-<summary>1. Session 与工作目录绑定</summary>
+<summary>1. Session 涓庡伐浣滅洰褰曠粦瀹?/summary>
 <div class="approach-body">
-  <p>调度器在 <code>spawn</code> 阶段确定 workdir 后，该 session 的后续 <code>continue</code> 调用必须用同一 workdir。调度器需要为每个 session 持久化记录 <code>{ sessionId, workdir }</code> 映射。</p>
+  <p>璋冨害鍣ㄥ湪 <code>spawn</code> 闃舵纭畾 workdir 鍚庯紝璇?session 鐨勫悗缁?<code>continue</code> 璋冪敤蹇呴』鐢ㄥ悓涓€ workdir銆傝皟搴﹀櫒闇€瑕佷负姣忎釜 session 鎸佷箙鍖栬褰?<code>{ sessionId, workdir }</code> 鏄犲皠銆?/p>
 </div>
 </details>
 
 <details>
-<summary>2. Session 生命周期与归档策略</summary>
+<summary>2. Session 鐢熷懡鍛ㄦ湡涓庡綊妗ｇ瓥鐣?/summary>
 <div class="approach-body">
-  <p><strong>核心思路：不与 CLI 的 session 回收机制对抗，而是由主 Agent 统一接管 session 管理。</strong></p>
+  <p><strong>鏍稿績鎬濊矾锛氫笉涓?CLI 鐨?session 鍥炴敹鏈哄埗瀵规姉锛岃€屾槸鐢变富 Agent 缁熶竴鎺ョ session 绠＄悊銆?/strong></p>
 
-  <h4>三类 session，三种策略</h4>
+  <h4>涓夌被 session锛屼笁绉嶇瓥鐣?/h4>
   <table>
-    <tr><th>类型</th><th>策略</th><th>由谁负责</th></tr>
+    <tr><th>绫诲瀷</th><th>绛栫暐</th><th>鐢辫皝璐熻矗</th></tr>
     <tr>
-      <td><strong>活跃 session</strong><br><span style="color:var(--muted);font-size:12px;">当前正在执行任务或刚完成</span></td>
-      <td>心跳保活，保持 <code>--resume</code> 可用</td>
-      <td>调度器</td>
+      <td><strong>娲昏穬 session</strong><br><span style="color:var(--muted);font-size:12px;">褰撳墠姝ｅ湪鎵ц浠诲姟鎴栧垰瀹屾垚</span></td>
+      <td>蹇冭烦淇濇椿锛屼繚鎸?<code>--resume</code> 鍙敤</td>
+      <td>璋冨害鍣?/td>
     </tr>
     <tr>
-      <td><span style="color:var(--muted);"><strong>无价值 session</strong></span><br><span style="color:var(--muted);font-size:12px;">一次性任务，用完即弃</span></td>
-      <td><span style="color:var(--muted);">不做额外处理，让 CBC 自己 GC</span></td>
-      <td><span style="color:var(--muted);">CBC（免费）</span></td>
+      <td><span style="color:var(--muted);"><strong>鏃犱环鍊?session</strong></span><br><span style="color:var(--muted);font-size:12px;">涓€娆℃€т换鍔★紝鐢ㄥ畬鍗冲純</span></td>
+      <td><span style="color:var(--muted);">涓嶅仛棰濆澶勭悊锛岃 CBC 鑷繁 GC</span></td>
+      <td><span style="color:var(--muted);">CBC锛堝厤璐癸級</span></td>
     </tr>
     <tr>
-      <td><strong>有价值 session</strong><br><span style="color:var(--muted);font-size:12px;">需长期保留上下文的任务</span></td>
-      <td>由主 Agent <strong>显式标记</strong>后归档，过期后可重建</td>
-      <td>主 Agent + 调度器</td>
+      <td><strong>鏈変环鍊?session</strong><br><span style="color:var(--muted);font-size:12px;">闇€闀挎湡淇濈暀涓婁笅鏂囩殑浠诲姟</span></td>
+      <td>鐢变富 Agent <strong>鏄惧紡鏍囪</strong>鍚庡綊妗ｏ紝杩囨湡鍚庡彲閲嶅缓</td>
+      <td>涓?Agent + 璋冨害鍣?/td>
     </tr>
   </table>
 
-  <h4>归档内容（短期 + 长期）</h4>
+  <h4>褰掓。鍐呭锛堢煭鏈?+ 闀挎湡锛?/h4>
   <table>
-    <tr><th>数据类型</th><th>短期意义</th><th>长期意义</th><th>存储方式</th></tr>
+    <tr><th>鏁版嵁绫诲瀷</th><th>鐭湡鎰忎箟</th><th>闀挎湡鎰忎箟</th><th>瀛樺偍鏂瑰紡</th></tr>
     <tr>
-      <td><strong>Session 元数据</strong><br><span style="color:var(--muted);font-size:12px;">sessionId、CLI 类型、workdir、用途标签、摘要</span></td>
-      <td><span class="tag tag-ok">高</span> 快速索引/查询</td>
-      <td>中 — 不同 CLI 格式不同，难以统一</td>
+      <td><strong>Session 鍏冩暟鎹?/strong><br><span style="color:var(--muted);font-size:12px;">sessionId銆丆LI 绫诲瀷銆亀orkdir銆佺敤閫旀爣绛俱€佹憳瑕?/span></td>
+      <td><span class="tag tag-ok">楂?/span> 蹇€熺储寮?鏌ヨ</td>
+      <td>涓?鈥?涓嶅悓 CLI 鏍煎紡涓嶅悓锛岄毦浠ョ粺涓€</td>
       <td><code>sessions.json</code></td>
     </tr>
     <tr>
-      <td><strong>完整对话历史</strong><br><span style="color:var(--muted);font-size:12px;">messages[] 数组，与 CLI 无关的通用格式</span></td>
-      <td>低</td>
-      <td><span class="tag tag-ok">高</span> 跨 CLI 通用，未来可能抛弃元数据</td>
+      <td><strong>瀹屾暣瀵硅瘽鍘嗗彶</strong><br><span style="color:var(--muted);font-size:12px;">messages[] 鏁扮粍锛屼笌 CLI 鏃犲叧鐨勯€氱敤鏍煎紡</span></td>
+      <td>浣?/td>
+      <td><span class="tag tag-ok">楂?/span> 璺?CLI 閫氱敤锛屾湭鏉ュ彲鑳芥姏寮冨厓鏁版嵁</td>
       <td><code>archive/{sessionId}.json</code></td>
     </tr>
   </table>
 
   <div class="decision">
-    <strong>决策：当前阶段元数据 + 对话历史都存。</strong> 短期依靠元数据做快速查询，长期依靠对话历史实现跨 CLI session 迁移。
-  </div>
+    <strong>鍐崇瓥锛氬綋鍓嶉樁娈靛厓鏁版嵁 + 瀵硅瘽鍘嗗彶閮藉瓨銆?/strong> 鐭湡渚濋潬鍏冩暟鎹仛蹇€熸煡璇紝闀挎湡渚濋潬瀵硅瘽鍘嗗彶瀹炵幇璺?CLI session 杩佺Щ銆?  </div>
 
-  <h4>归档触发条件</h4>
+  <h4>褰掓。瑙﹀彂鏉′欢</h4>
   <ul>
-    <li><strong>显式标记</strong> — 主 Agent 调用 <code>markValuable(sessionId)</code>（非调度器启发式判断）</li>
-    <li><strong>过期监听</strong> — 检测到 <code>--resume</code> 返回 session-not-found，若已标记为有价值则自动触发重建</li>
+    <li><strong>鏄惧紡鏍囪</strong> 鈥?涓?Agent 璋冪敤 <code>markValuable(sessionId)</code>锛堥潪璋冨害鍣ㄥ惎鍙戝紡鍒ゆ柇锛?/li>
+    <li><strong>杩囨湡鐩戝惉</strong> 鈥?妫€娴嬪埌 <code>--resume</code> 杩斿洖 session-not-found锛岃嫢宸叉爣璁颁负鏈変环鍊煎垯鑷姩瑙﹀彂閲嶅缓</li>
   </ul>
 
-  <h4>重建流程</h4>
+  <h4>閲嶅缓娴佺▼</h4>
   <ol>
-    <li>从 <code>archive/{sessionId}.json</code> 读取完整对话历史</li>
-    <li>新 <code>spawn</code> 一个子 CLI 进程</li>
-    <li>将历史作为 conversationSeed 注入（适配器负责序列化为对应 CLI 的格式）</li>
+    <li>浠?<code>archive/{sessionId}.json</code> 璇诲彇瀹屾暣瀵硅瘽鍘嗗彶</li>
+    <li>鏂?<code>spawn</code> 涓€涓瓙 CLI 杩涚▼</li>
+    <li>灏嗗巻鍙蹭綔涓?conversationSeed 娉ㄥ叆锛堥€傞厤鍣ㄨ礋璐ｅ簭鍒楀寲涓哄搴?CLI 鐨勬牸寮忥級</li>
   </ol>
 </div>
 </details>
 
 <details>
-<summary>3. Session 清理（OS 层完成）</summary>
+<summary>3. Session 娓呯悊锛圤S 灞傚畬鎴愶級</summary>
 <div class="approach-body">
   <ul>
-    <li><code>kill(pid)</code> 终止进程</li>
-    <li>从 <code>sessions.json</code> 移除记录</li>
-    <li>清理 workdir 中的临时文件</li>
+    <li><code>kill(pid)</code> 缁堟杩涚▼</li>
+    <li>浠?<code>sessions.json</code> 绉婚櫎璁板綍</li>
+    <li>娓呯悊 workdir 涓殑涓存椂鏂囦欢</li>
   </ul>
 </div>
 </details>
 
 <details>
-<summary>4. 适配器能力矩阵（CLIIdentity 接口）</summary>
+<summary>4. 閫傞厤鍣ㄨ兘鍔涚煩闃碉紙CLIIdentity 鎺ュ彛锛?/summary>
 <div class="approach-body">
 <pre>interface CLIIdentity {
   name: string
   capabilities: {
-    crossDirResume: boolean    // --resume 是否跨目录有效
-    sessionTTL: number | null  // session 过期时间（毫秒），null 表示永久
-    nativeSessionDelete: boolean // 是否有原生 session 删除
-    nativeSessionList: boolean // 是否有原生 session 列表
+    crossDirResume: boolean    // --resume 鏄惁璺ㄧ洰褰曟湁鏁?    sessionTTL: number | null  // session 杩囨湡鏃堕棿锛堟绉掞級锛宯ull 琛ㄧず姘镐箙
+    nativeSessionDelete: boolean // 鏄惁鏈夊師鐢?session 鍒犻櫎
+    nativeSessionList: boolean // 鏄惁鏈夊師鐢?session 鍒楄〃
   }
 }</pre>
-  <p>每个 CLI 适配器必须明确声明自身能力矩阵，调度器据此决定策略。</p>
+  <p>姣忎釜 CLI 閫傞厤鍣ㄥ繀椤绘槑纭０鏄庤嚜韬兘鍔涚煩闃碉紝璋冨害鍣ㄦ嵁姝ゅ喅瀹氱瓥鐣ャ€?/p>
 </div>
 </details>
 
 <details>
-<summary>5. 本地提示词约束</summary>
+<summary>5. 鏈湴鎻愮ず璇嶇害鏉?/summary>
 <div class="approach-body">
-  <p>向子 CLI 发送 prompt 时，应附带 CLI 特性约束提示（如告知子 Agent 它的 session 有有效期，需及时返回结果，避免长时间思考导致 session 断开）。</p>
+  <p>鍚戝瓙 CLI 鍙戦€?prompt 鏃讹紝搴旈檮甯?CLI 鐗规€х害鏉熸彁绀猴紙濡傚憡鐭ュ瓙 Agent 瀹冪殑 session 鏈夋湁鏁堟湡锛岄渶鍙婃椂杩斿洖缁撴灉锛岄伩鍏嶉暱鏃堕棿鎬濊€冨鑷?session 鏂紑锛夈€?/p>
 </div>
 </details>
 
-<h3>后续验证项</h3>
+<h3>鍚庣画楠岃瘉椤?/h3>
 <ul class="checklist">
-  <li class="done"><strong>CBC session 实际过期时间</strong> — 策略已定，不测精确 TTL，走归档+重建</li>
-  <li><strong>其他 CLI 的 session 行为？</strong> — Claude Code / Aider 等接入时补充</li>
-  <li><strong>跨目录 resume 的精确边界？</strong> — 同一物理路径不同写法（<code>.</code> vs 绝对路径）是否视为同一目录</li>
+  <li class="done"><strong>CBC session 瀹為檯杩囨湡鏃堕棿</strong> 鈥?绛栫暐宸插畾锛屼笉娴嬬簿纭?TTL锛岃蛋褰掓。+閲嶅缓</li>
+  <li><strong>鍏朵粬 CLI 鐨?session 琛屼负锛?/strong> 鈥?Claude Code / Aider 绛夋帴鍏ユ椂琛ュ厖</li>
+  <li><strong>璺ㄧ洰褰?resume 鐨勭簿纭竟鐣岋紵</strong> 鈥?鍚屼竴鐗╃悊璺緞涓嶅悓鍐欐硶锛?code>.</code> vs 缁濆璺緞锛夋槸鍚﹁涓哄悓涓€鐩綍</li>
 </ul>
 
 <hr style="border:1px solid var(--border);margin:32px 0 16px;">
@@ -840,66 +827,67 @@ class ProcessManager {
 <!-- ================================================================ -->
 <hr style="border:1px solid var(--border);margin:32px 0 16px;">
 <p style="color:var(--muted);font-size:12px;">
-  <strong>实验报告索引</strong>（共 16 项，全部完成）：
+  <strong>瀹為獙鎶ュ憡绱㈠紩</strong>锛堝叡 16 椤癸紝鍏ㄩ儴瀹屾垚锛夛細
 </p>
 
 <div style="font-size:12px;color:var(--muted);display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;margin-bottom:8px;">
-  <div><strong>初始探索</strong></div>
+  <div><strong>鍒濆鎺㈢储</strong></div>
   <div></div>
   <div><a href="../../experiments/cbc-multi-cli-experiment.md">cbc-multi-cli</a></div>
-  <div>--print vs --bg 基础能力探索</div>
+  <div>--print vs --bg 鍩虹鑳藉姏鎺㈢储</div>
 
   <div style="margin-top:4px;"><strong>01-cbc-persistent</strong></div>
   <div style="margin-top:4px;"></div>
   <div><a href="../../experiments/01-cbc-persistent/s1-stream-json-multiturn.md">s1</a></div>
-  <div>--bg + stream-json 多轮测试</div>
+  <div>--bg + stream-json 澶氳疆娴嬭瘯</div>
   <div><a href="../../experiments/01-cbc-persistent/s2-bg-attach-behavior.md">s2</a></div>
-  <div>--bg + attach 行为测试</div>
+  <div>--bg + attach 琛屼负娴嬭瘯</div>
   <div><a href="../../experiments/01-cbc-persistent/s3-resume-capability.md">s3</a></div>
-  <div>--resume 能力探索（核心发现）</div>
+  <div>--resume 鑳藉姏鎺㈢储锛堟牳蹇冨彂鐜帮級</div>
   <div><a href="../../experiments/01-cbc-persistent/s4-copilot-bg.md">s4</a></div>
-  <div>Copilot CLI --bg 等价能力探索</div>
+  <div>Copilot CLI --bg 绛変环鑳藉姏鎺㈢储</div>
   <div><a href="../../experiments/01-cbc-persistent/s5-shell-control-cbc.md">s5</a></div>
-  <div>Shell 级进程控制验证</div>
+  <div>Shell 绾ц繘绋嬫帶鍒堕獙璇?/div>
 
   <div style="margin-top:4px;"><strong>02-pty-control</strong></div>
   <div style="margin-top:4px;"></div>
   <div><a href="../../experiments/02-pty-control/pty-control-guide.md">guide</a></div>
-  <div>PTY 操控知识文档</div>
+  <div>PTY 鎿嶆帶鐭ヨ瘑鏂囨。</div>
   <div><a href="../../experiments/02-pty-control/t1-tmux-sendkeys.md">t1</a></div>
-  <div>tmux 操控（Windows 不可用）</div>
+  <div>tmux 鎿嶆帶锛圵indows 涓嶅彲鐢級</div>
   <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t2</a></div>
   <div>node-pty + powershell/cmd/cbc</div>
   <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t2-v2</a></div>
-  <div>node-pty bash 包装修复</div>
+  <div>node-pty bash 鍖呰淇</div>
   <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">t3</a></div>
-  <div>ANSI 输出清洗工具</div>
+  <div>ANSI 杈撳嚭娓呮礂宸ュ叿</div>
   <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">summary</a></div>
-  <div>PTY 全 I/O 操控实验总结</div>
+  <div>PTY 鍏?I/O 鎿嶆帶瀹為獙鎬荤粨</div>
   <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e01</a></div>
-  <div>PTY 启动交互式 cbc</div>
+  <div>PTY 鍚姩浜や簰寮?cbc</div>
   <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e02</a></div>
-  <div>/ 指令通过 PTY 发送</div>
+  <div>/ 鎸囦护閫氳繃 PTY 鍙戦€?/div>
   <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e03</a></div>
-  <div>Tab/Ctrl+C 特殊按键</div>
+  <div>Tab/Ctrl+C 鐗规畩鎸夐敭</div>
   <div><a href="../../experiments/02-pty-control/pty-experiment-summary.md">e04</a></div>
-  <div>多轮 PTY 对话确认</div>
+  <div>澶氳疆 PTY 瀵硅瘽纭</div>
 
   <div style="margin-top:4px;"><strong>03-concurrent</strong></div>
   <div style="margin-top:4px;"></div>
   <div><a href="../../experiments/03-concurrent/c1-multi-instance.md">c1</a></div>
-  <div>多实例并发 + 记忆隔离</div>
+  <div>澶氬疄渚嬪苟鍙?+ 璁板繂闅旂</div>
   <div><a href="../../experiments/03-concurrent/c1-multi-instance.md">c2</a></div>
-  <div>MEMORY.md 并发写入冲突</div>
+  <div>MEMORY.md 骞跺彂鍐欏叆鍐茬獊</div>
 </div>
 
 <hr style="border:1px solid var(--border);margin:12px 0;">
 
 <p style="color:var(--muted);font-size:12px;">
-  架构文档见 <a href="../architecture/">docs/architecture/</a> ·
-  技术栈说明见 <a href="../architecture/tech-stack-control-layer.md">Shell · child_process · Node.js 关系</a> ·
-  <a href="./project-overview.md">Markdown 精简版</a>
+  鏋舵瀯鏂囨。瑙?<a href="../architecture/">docs/architecture/</a> 路
+  鎶€鏈爤璇存槑瑙?<a href="../architecture/tech-stack-control-layer.md">Shell 路 child_process 路 Node.js 鍏崇郴</a> 路
+  <a href="./project-overview.md">Markdown 绮剧畝鐗?/a>
 </p>
 
 </body>
 </html>
+

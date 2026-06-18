@@ -1,12 +1,10 @@
-# PTY 操控 CLI 完整指南
+﻿# PTY 鎿嶆帶 CLI 瀹屾暣鎸囧崡
 
-> 通过 PTY 实现对任意 CLI 的全输出捕获 + 非键盘输入控制（Tab 选择、箭头键、/ 命令等）。
-
+> 閫氳繃 PTY 瀹炵幇瀵逛换鎰?CLI 鐨勫叏杈撳嚭鎹曡幏 + 闈為敭鐩樿緭鍏ユ帶鍒讹紙Tab 閫夋嫨銆佺澶撮敭銆? 鍛戒护绛夛級銆?
 ---
 
-## 一、完整输出捕获
-
-### 1.1 node-pty 基本使用
+## 涓€銆佸畬鏁磋緭鍑烘崟鑾?
+### 1.1 node-pty 鍩烘湰浣跨敤
 
 ```typescript
 import * as pty from 'node-pty';
@@ -20,31 +18,28 @@ const term = pty.spawn('powershell.exe', [], {
 });
 ```
 
-### 1.2 捕获所有输出（含 ANSI 序列）
-
+### 1.2 鎹曡幏鎵€鏈夎緭鍑猴紙鍚?ANSI 搴忓垪锛?
 ```typescript
-// onData 会收到所有输出，包括颜色码、光标移动、清屏等控制序列
+// onData 浼氭敹鍒版墍鏈夎緭鍑猴紝鍖呮嫭棰滆壊鐮併€佸厜鏍囩Щ鍔ㄣ€佹竻灞忕瓑鎺у埗搴忓垪
 let rawBuffer = '';
 
 term.onData((data: string) => {
   rawBuffer += data;
-  console.log('原始输出:', JSON.stringify(data));
-  // 输出示例：
-  // "\x1b[32mHello\x1b[0m\n"     → 绿色 "Hello"
-  // "\x1b[?25l"                   → 隐藏光标
-  // "\x1b[2J\x1b[H"               → 清屏并移到左上角
-  // "\x1b[1;1H\x1b[K"             → 移到第1行第1列，清除该行
+  console.log('鍘熷杈撳嚭:', JSON.stringify(data));
+  // 杈撳嚭绀轰緥锛?  // "\x1b[32mHello\x1b[0m\n"     鈫?缁胯壊 "Hello"
+  // "\x1b[?25l"                   鈫?闅愯棌鍏夋爣
+  // "\x1b[2J\x1b[H"               鈫?娓呭睆骞剁Щ鍒板乏涓婅
+  // "\x1b[1;1H\x1b[K"             鈫?绉诲埌绗?琛岀1鍒楋紝娓呴櫎璇ヨ
 });
 ```
 
-### 1.3 输出缓冲管理
+### 1.3 杈撳嚭缂撳啿绠＄悊
 
-PTY 输出是流式的，不是完整帧。需要自建缓冲区：
-
+PTY 杈撳嚭鏄祦寮忕殑锛屼笉鏄畬鏁村抚銆傞渶瑕佽嚜寤虹紦鍐插尯锛?
 ```typescript
 class PtyOutputBuffer {
   private buffer = '';
-  private readonly frameTimeout = 200; // ms，判定一帧结束的空闲时间
+  private readonly frameTimeout = 200; // ms锛屽垽瀹氫竴甯х粨鏉熺殑绌洪棽鏃堕棿
   private frameTimer: NodeJS.Timeout | null = null;
   private lastFlush = 0;
 
@@ -52,8 +47,7 @@ class PtyOutputBuffer {
     this.buffer += data;
     this.lastFlush = Date.now();
 
-    // 延迟判定：空闲 N ms 后认为一帧结束
-    if (this.frameTimer) clearTimeout(this.frameTimer);
+    // 寤惰繜鍒ゅ畾锛氱┖闂?N ms 鍚庤涓轰竴甯х粨鏉?    if (this.frameTimer) clearTimeout(this.frameTimer);
     this.frameTimer = setTimeout(() => {
       const raw = this.buffer;
       const clean = this.stripAnsi(raw);
@@ -63,7 +57,7 @@ class PtyOutputBuffer {
   }
 
   stripAnsi(text: string): string {
-    // 简单版 ANSI 剥离（生产环境用 strip-ansi 库）
+    // 绠€鍗曠増 ANSI 鍓ョ锛堢敓浜х幆澧冪敤 strip-ansi 搴擄級
     return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')
                .replace(/\x1b\][0-9;]*[^\x07]*\x07/g, '')
                .replace(/\x1b\][0-9;]*\x1b\\/g, '')
@@ -72,7 +66,7 @@ class PtyOutputBuffer {
 }
 ```
 
-### 1.4 同步读取（等待特定输出）
+### 1.4 鍚屾璇诲彇锛堢瓑寰呯壒瀹氳緭鍑猴級
 
 ```typescript
 function waitForOutput(
@@ -84,7 +78,7 @@ function waitForOutput(
     const collected: string[] = [];
     const timer = setTimeout(() => {
       term.removeListener('data', handler);
-      reject(new Error(`等待输出超时 (${timeoutMs}ms)`));
+      reject(new Error(`绛夊緟杈撳嚭瓒呮椂 (${timeoutMs}ms)`));
     }, timeoutMs);
 
     const handler = (data: string) => {
@@ -101,51 +95,46 @@ function waitForOutput(
   });
 }
 
-// 用法：等待 CLI 出现提示符
-await waitForOutput(term, (text) => text.includes('>'));
+// 鐢ㄦ硶锛氱瓑寰?CLI 鍑虹幇鎻愮ず绗?await waitForOutput(term, (text) => text.includes('>'));
 ```
 
 ---
 
-## 二、非键盘输入：ANSI 转义序列全集
+## 浜屻€侀潪閿洏杈撳叆锛欰NSI 杞箟搴忓垪鍏ㄩ泦
 
-PTY 的 `write()` 可以直接发送 ANSI 转义序列模拟所有特殊按键，**完全不需要物理键盘**。
+PTY 鐨?`write()` 鍙互鐩存帴鍙戦€?ANSI 杞箟搴忓垪妯℃嫙鎵€鏈夌壒娈婃寜閿紝**瀹屽叏涓嶉渶瑕佺墿鐞嗛敭鐩?*銆?
+### 2.1 鎺у埗瀛楃
 
-### 2.1 控制字符
-
-| 按键 | 序列 | 说明 |
+| 鎸夐敭 | 搴忓垪 | 璇存槑 |
 |------|------|------|
-| Enter | `\r` 或 `\n` | 对于交互式 CLI，`\r` 更可靠 |
-| Tab | `\t` | 触发补全 |
-| Backspace | `\x7f` 或 `\b` | 删除前一个字符 |
-| Escape | `\x1b` | 退出当前模式 |
-| Ctrl+C | `\x03` | 中断程序 |
+| Enter | `\r` 鎴?`\n` | 瀵逛簬浜や簰寮?CLI锛宍\r` 鏇村彲闈?|
+| Tab | `\t` | 瑙﹀彂琛ュ叏 |
+| Backspace | `\x7f` 鎴?`\b` | 鍒犻櫎鍓嶄竴涓瓧绗?|
+| Escape | `\x1b` | 閫€鍑哄綋鍓嶆ā寮?|
+| Ctrl+C | `\x03` | 涓柇绋嬪簭 |
 | Ctrl+D | `\x04` | EOF |
-| Ctrl+Z | `\x1a` | 挂起进程 (Windows) |
-| Ctrl+L | `\x0c` | 清屏 |
+| Ctrl+Z | `\x1a` | 鎸傝捣杩涚▼ (Windows) |
+| Ctrl+L | `\x0c` | 娓呭睆 |
 
-### 2.2 方向键
-
-| 按键 | 序列 |
+### 2.2 鏂瑰悜閿?
+| 鎸夐敭 | 搴忓垪 |
 |------|------|
-| 上箭头 ↑ | `\x1b[A` |
-| 下箭头 ↓ | `\x1b[B` |
-| 右箭头 → | `\x1b[C` |
-| 左箭头 ← | `\x1b[D` |
+| 涓婄澶?鈫?| `\x1b[A` |
+| 涓嬬澶?鈫?| `\x1b[B` |
+| 鍙崇澶?鈫?| `\x1b[C` |
+| 宸︾澶?鈫?| `\x1b[D` |
 
-### 2.3 组合方向键
-
-| 按键 | 序列 |
+### 2.3 缁勫悎鏂瑰悜閿?
+| 鎸夐敭 | 搴忓垪 |
 |------|------|
-| Ctrl+↑ | `\x1b[1;5A` |
-| Ctrl+↓ | `\x1b[1;5B` |
-| Shift+↑ | `\x1b[1;2A` |
-| Alt+↑ | `\x1b[1;3A` |
+| Ctrl+鈫?| `\x1b[1;5A` |
+| Ctrl+鈫?| `\x1b[1;5B` |
+| Shift+鈫?| `\x1b[1;2A` |
+| Alt+鈫?| `\x1b[1;3A` |
 | Shift+Tab | `\x1b[Z` |
 
-### 2.4 功能键
-
-| 按键 | 序列 |
+### 2.4 鍔熻兘閿?
+| 鎸夐敭 | 搴忓垪 |
 |------|------|
 | F1 | `\x1bOP` |
 | F2 | `\x1bOQ` |
@@ -153,31 +142,28 @@ PTY 的 `write()` 可以直接发送 ANSI 转义序列模拟所有特殊按键�
 | F4 | `\x1bOS` |
 | F5 ~ F12 | `\x1b[15~` ~ `\x1b[24~` |
 
-### 2.5 编辑键
-
-| 按键 | 序列 |
+### 2.5 缂栬緫閿?
+| 鎸夐敭 | 搴忓垪 |
 |------|------|
-| Home | `\x1b[1~` 或 `\x1b[H` |
-| End | `\x1b[4~` 或 `\x1b[F` |
+| Home | `\x1b[1~` 鎴?`\x1b[H` |
+| End | `\x1b[4~` 鎴?`\x1b[F` |
 | PageUp | `\x1b[5~` |
 | PageDown | `\x1b[6~` |
 | Insert | `\x1b[2~` |
 | Delete | `\x1b[3~` |
 
-### 2.6 CTRL+字母快捷键
-
-| 按键 | 序列 | 常见作用 |
+### 2.6 CTRL+瀛楁瘝蹇嵎閿?
+| 鎸夐敭 | 搴忓垪 | 甯歌浣滅敤 |
 |------|------|---------|
-| Ctrl+A | `\x01` | 光标移到行首 |
-| Ctrl+E | `\x05` | 光标移到行尾 |
-| Ctrl+K | `\x0b` | 删除光标到行尾 |
-| Ctrl+U | `\x15` | 删除整行 |
-| Ctrl+W | `\x17` | 删除前一个单词 |
-| Ctrl+N | `\x0e` | 下一行/历史 |
-| Ctrl+P | `\x10` | 上一行/历史 |
+| Ctrl+A | `\x01` | 鍏夋爣绉诲埌琛岄 |
+| Ctrl+E | `\x05` | 鍏夋爣绉诲埌琛屽熬 |
+| Ctrl+K | `\x0b` | 鍒犻櫎鍏夋爣鍒拌灏?|
+| Ctrl+U | `\x15` | 鍒犻櫎鏁磋 |
+| Ctrl+W | `\x17` | 鍒犻櫎鍓嶄竴涓崟璇?|
+| Ctrl+N | `\x0e` | 涓嬩竴琛?鍘嗗彶 |
+| Ctrl+P | `\x10` | 涓婁竴琛?鍘嗗彶 |
 
-### 2.7 封装为工具函数
-
+### 2.7 灏佽涓哄伐鍏峰嚱鏁?
 ```typescript
 const Keys = {
   enter: '\r',
@@ -199,141 +185,125 @@ const Keys = {
   f3: '\x1bOR',
 } as const;
 
-// 发送按键
-term.write(Keys.up);       // 上箭头
-term.write(Keys.enter);    // 回车
+// 鍙戦€佹寜閿?term.write(Keys.up);       // 涓婄澶?term.write(Keys.enter);    // 鍥炶溅
 term.write(Keys.ctrlC);    // Ctrl+C
 
-// 组合使用：按下箭头 3 次
-term.write(Keys.down + Keys.down + Keys.down);
+// 缁勫悎浣跨敤锛氭寜涓嬬澶?3 娆?term.write(Keys.down + Keys.down + Keys.down);
 
-// 组合使用：选择列表第 3 项
-term.write(Keys.down);     // 移到第二项
-await sleep(100);
-term.write(Keys.down);     // 移到第三项
-await sleep(100);
-term.write(Keys.enter);    // 确认
+// 缁勫悎浣跨敤锛氶€夋嫨鍒楄〃绗?3 椤?term.write(Keys.down);     // 绉诲埌绗簩椤?await sleep(100);
+term.write(Keys.down);     // 绉诲埌绗笁椤?await sleep(100);
+term.write(Keys.enter);    // 纭
 ```
 
 ---
 
-## 三、交互菜单操控
-
-### 3.1 Tab 补全与选择
+## 涓夈€佷氦浜掕彍鍗曟搷鎺?
+### 3.1 Tab 琛ュ叏涓庨€夋嫨
 
 ```typescript
-// 场景：在 CLI 中输入目录名，按 Tab 触发补全
+// 鍦烘櫙锛氬湪 CLI 涓緭鍏ョ洰褰曞悕锛屾寜 Tab 瑙﹀彂琛ュ叏
 term.write('cd C:\\Users\\');
 term.write(Keys.tab);
 
-// 等待补全列表出现
+// 绛夊緟琛ュ叏鍒楄〃鍑虹幇
 await sleep(500);
 
-// 读取输出，解析补全选项
+// 璇诲彇杈撳嚭锛岃В鏋愯ˉ鍏ㄩ€夐」
 const completions = readCurrentOutput();
 
-// 如果有多个补全选项，用 Tab 或方向键选择
-term.write(Keys.down);     // 选择下一个
-term.write(Keys.enter);    // 确认
+// 濡傛灉鏈夊涓ˉ鍏ㄩ€夐」锛岀敤 Tab 鎴栨柟鍚戦敭閫夋嫨
+term.write(Keys.down);     // 閫夋嫨涓嬩竴涓?term.write(Keys.enter);    // 纭
 ```
 
-### 3.2 斜杠命令 (/ 命令)
+### 3.2 鏂滄潬鍛戒护 (/ 鍛戒护)
 
-/ 命令就是普通文本输入，无需特殊处理：
-
+/ 鍛戒护灏辨槸鏅€氭枃鏈緭鍏ワ紝鏃犻渶鐗规畩澶勭悊锛?
 ```typescript
-// 发送 /resume 命令
+// 鍙戦€?/resume 鍛戒护
 term.write('/resume');
 term.write(Keys.enter);
 
-// 发送 /fork 命令
+// 鍙戦€?/fork 鍛戒护
 term.write('/fork experiment-1');
 term.write(Keys.enter);
 
-// 发送 /help 命令
+// 鍙戦€?/help 鍛戒护
 term.write('/help');
 term.write(Keys.enter);
 ```
 
-### 3.3 菜单/列表选择器
-
+### 3.3 鑿滃崟/鍒楄〃閫夋嫨鍣?
 ```typescript
 async function selectMenuItem(term: pty.IPty, index: number): Promise<void> {
-  // 按下箭头 N 次移到目标项
+  // 鎸変笅绠ご N 娆＄Щ鍒扮洰鏍囬」
   for (let i = 0; i < index; i++) {
     term.write(Keys.down);
-    await sleep(80);  // TUI 渲染需要时间
-  }
-  // 按 Enter 确认
+    await sleep(80);  // TUI 娓叉煋闇€瑕佹椂闂?  }
+  // 鎸?Enter 纭
   term.write(Keys.enter);
 }
 
-// 用法：选择第 2 个 session
+// 鐢ㄦ硶锛氶€夋嫨绗?2 涓?session
 await selectMenuItem(term, 2);
 ```
 
-### 3.4 输入文本并提交
-
+### 3.4 杈撳叆鏂囨湰骞舵彁浜?
 ```typescript
 async function sendCommand(term: pty.IPty, command: string): Promise<void> {
-  // 逐字符发送（模拟真实输入，某些 CLI 需要）
+  // 閫愬瓧绗﹀彂閫侊紙妯℃嫙鐪熷疄杈撳叆锛屾煇浜?CLI 闇€瑕侊級
   for (const char of command) {
     term.write(char);
-    await sleep(5);  // 模拟人类打字速度，部分 CLI 需要
-  }
+    await sleep(5);  // 妯℃嫙浜虹被鎵撳瓧閫熷害锛岄儴鍒?CLI 闇€瑕?  }
   term.write(Keys.enter);
 }
 
-// 或直接发送整行（大多数情况可行）
+// 鎴栫洿鎺ュ彂閫佹暣琛岋紙澶у鏁版儏鍐靛彲琛岋級
 term.write('help\n');
 ```
 
 ---
 
-## 四、ANSI 输出解析
+## 鍥涖€丄NSI 杈撳嚭瑙ｆ瀽
 
-### 4.1 常见 ANSI 序列及含义
-
-| 序列 | 含义 |
+### 4.1 甯歌 ANSI 搴忓垪鍙婂惈涔?
+| 搴忓垪 | 鍚箟 |
 |------|------|
-| `\x1b[0m` | 重置所有样式 |
-| `\x1b[1m` | 粗体 |
-| `\x1b[3m` | 斜体 |
-| `\x1b[4m` | 下划线 |
-| `\x1b[31m` | 红色文字 |
-| `\x1b[32m` | 绿色文字 |
-| `\x1b[33m` | 黄色文字 |
-| `\x1b[34m` | 蓝色文字 |
-| `\x1b[90m` | 亮灰色（暗文本） |
-| `\x1b[41m` | 红色背景 |
-| `\x1b[2J` | 清屏 |
-| `\x1b[H` | 光标移到 (1,1) |
-| `\x1b[?25l` | 隐藏光标 |
-| `\x1b[?25h` | 显示光标 |
-| `\x1b[K` | 清除光标到行尾 |
-| `\x1b[1;1H` | 光标移到 (row=1, col=1) |
-| `\x1b[6n` | 请求光标位置（终端回复） |
+| `\x1b[0m` | 閲嶇疆鎵€鏈夋牱寮?|
+| `\x1b[1m` | 绮椾綋 |
+| `\x1b[3m` | 鏂滀綋 |
+| `\x1b[4m` | 涓嬪垝绾?|
+| `\x1b[31m` | 绾㈣壊鏂囧瓧 |
+| `\x1b[32m` | 缁胯壊鏂囧瓧 |
+| `\x1b[33m` | 榛勮壊鏂囧瓧 |
+| `\x1b[34m` | 钃濊壊鏂囧瓧 |
+| `\x1b[90m` | 浜伆鑹诧紙鏆楁枃鏈級 |
+| `\x1b[41m` | 绾㈣壊鑳屾櫙 |
+| `\x1b[2J` | 娓呭睆 |
+| `\x1b[H` | 鍏夋爣绉诲埌 (1,1) |
+| `\x1b[?25l` | 闅愯棌鍏夋爣 |
+| `\x1b[?25h` | 鏄剧ず鍏夋爣 |
+| `\x1b[K` | 娓呴櫎鍏夋爣鍒拌灏?|
+| `\x1b[1;1H` | 鍏夋爣绉诲埌 (row=1, col=1) |
+| `\x1b[6n` | 璇锋眰鍏夋爣浣嶇疆锛堢粓绔洖澶嶏級 |
 
-### 4.2 剥离 ANSI 获取纯文本
-
+### 4.2 鍓ョ ANSI 鑾峰彇绾枃鏈?
 ```typescript
-// 方案 A：使用 strip-ansi 库（推荐）
-import stripAnsi from 'strip-ansi';
+// 鏂规 A锛氫娇鐢?strip-ansi 搴擄紙鎺ㄨ崘锛?import stripAnsi from 'strip-ansi';
 const clean = stripAnsi(rawOutput);
 
-// 方案 B：手写正则（零依赖）
+// 鏂规 B锛氭墜鍐欐鍒欙紙闆朵緷璧栵級
 function stripAnsiRegex(text: string): string {
   return text
-    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')     // CSI 序列
-    .replace(/\x1b\][0-9;]*[^\x07]*\x07/g, '')  // OSC 序列
-    .replace(/\x1b[PX^_].*?\x1b\\/g, '');       // 其他序列
+    .replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '')     // CSI 搴忓垪
+    .replace(/\x1b\][0-9;]*[^\x07]*\x07/g, '')  // OSC 搴忓垪
+    .replace(/\x1b[PX^_].*?\x1b\\/g, '');       // 鍏朵粬搴忓垪
 }
 ```
 
-### 4.3 结构化解析 ANSI（保留位置信息）
+### 4.3 缁撴瀯鍖栬В鏋?ANSI锛堜繚鐣欎綅缃俊鎭級
 
 ```typescript
-// 使用 node-ansiparser 做结构化解析
+// 浣跨敤 node-ansiparser 鍋氱粨鏋勫寲瑙ｆ瀽
 // npm install node-ansiparser
 import { Parser, Terminal } from 'node-ansiparser';
 
@@ -348,8 +318,7 @@ term.onData((data: string) => {
   parser.parse(data);
 });
 
-// 获取屏幕内容（纯文本矩阵）
-function getScreenContent(): string {
+// 鑾峰彇灞忓箷鍐呭锛堢函鏂囨湰鐭╅樀锛?function getScreenContent(): string {
   const buffer = terminal.buffer;
   const lines: string[] = [];
   
@@ -371,49 +340,45 @@ function getScreenContent(): string {
 
 ---
 
-## 五、实战：操控 CodeBuddy Code
+## 浜斻€佸疄鎴橈細鎿嶆帶 CodeBuddy Code
 
-### 5.1 启动并控制
-
+### 5.1 鍚姩骞舵帶鍒?
 ```typescript
 async function controlCbc() {
   const term = pty.spawn('codebuddy', [], {
     name: 'xterm-color',
     cols: 120,
     rows: 40,
-    cwd: 'e:/code/MyProject/MyAgentsPlan',
+    cwd: 'e:/code/MyProject/CLIConductor',
     env: process.env as any,
   });
 
-  // 等待 cbc 启动完成
+  // 绛夊緟 cbc 鍚姩瀹屾垚
   await waitForOutput(term, (text) => text.includes('>'));
 
-  // 发送任务
-  term.write('列出当前目录下的所有 .md 文件\n');
+  // 鍙戦€佷换鍔?  term.write('鍒楀嚭褰撳墠鐩綍涓嬬殑鎵€鏈?.md 鏂囦欢\n');
 
-  // 等待 AI 回复完成（检测到新提示符）
-  const response = await waitForOutput(term, (text) => {
+  // 绛夊緟 AI 鍥炲瀹屾垚锛堟娴嬪埌鏂版彁绀虹锛?  const response = await waitForOutput(term, (text) => {
     const clean = stripAnsi(text);
-    return clean.split('>').length >= 2;  // 出现了新的提示符
+    return clean.split('>').length >= 2;  // 鍑虹幇浜嗘柊鐨勬彁绀虹
   });
 
-  console.log('AI 回复:', stripAnsi(response));
+  console.log('AI 鍥炲:', stripAnsi(response));
 
-  // 用 /resume 打开会话列表
+  // 鐢?/resume 鎵撳紑浼氳瘽鍒楄〃
   term.write('/resume\n');
   await sleep(500);
 
-  // 读取 /resume 菜单输出
+  // 璇诲彇 /resume 鑿滃崟杈撳嚭
   const menuOutput = readBuffer();
 
-  // 选择第二个会话
-  term.write(Keys.down);
+  // 閫夋嫨绗簩涓細璇?  term.write(Keys.down);
   await sleep(100);
   term.write(Keys.enter);
 }
 ```
 
-### 5.2 多轮对话示例
+### 5.2 澶氳疆瀵硅瘽绀轰緥
 
 ```typescript
 async function multiTurnConversation() {
@@ -421,24 +386,23 @@ async function multiTurnConversation() {
     name: 'xterm-color',
     cols: 120,
     rows: 40,
-    cwd: 'e:/code/MyProject/MyAgentsPlan',
+    cwd: 'e:/code/MyProject/CLIConductor',
     env: process.env as any,
   });
 
   const turns = [
-    '帮我写一个 TypeScript 工具函数，读取 JSON 文件并解析',
-    '给这个函数加上错误处理',
-    '再添加一个文件锁防止并发读取',
+    '甯垜鍐欎竴涓?TypeScript 宸ュ叿鍑芥暟锛岃鍙?JSON 鏂囦欢骞惰В鏋?,
+    '缁欒繖涓嚱鏁板姞涓婇敊璇鐞?,
+    '鍐嶆坊鍔犱竴涓枃浠堕攣闃叉骞跺彂璇诲彇',
   ];
 
   for (const prompt of turns) {
-    console.log(`\n>>> 用户: ${prompt}`);
+    console.log(`\n>>> 鐢ㄦ埛: ${prompt}`);
     
     term.write(prompt + '\n');
     
     const response = await waitForOutput(term, () => {
-      // 检测 AI 完成回复（连续静默 2 秒或出现新提示符）
-      ...
+      // 妫€娴?AI 瀹屾垚鍥炲锛堣繛缁潤榛?2 绉掓垨鍑虹幇鏂版彁绀虹锛?      ...
     });
 
     console.log(`\n<<< AI: ${stripAnsi(response)}\n`);
@@ -448,117 +412,100 @@ async function multiTurnConversation() {
 }
 ```
 
-### 5.3 --bg 持久化 Session 操控
+### 5.3 --bg 鎸佷箙鍖?Session 鎿嶆帶
 
 ```typescript
 async function persistentCbcSession() {
-  // 用 --bg 启动，后台运行
-  const term = pty.spawn('codebuddy', ['--bg', '--name', 'worker1'], {
+  // 鐢?--bg 鍚姩锛屽悗鍙拌繍琛?  const term = pty.spawn('codebuddy', ['--bg', '--name', 'worker1'], {
     name: 'xterm-color',
     cols: 120,
     rows: 40,
-    cwd: 'e:/code/MyProject/MyAgentsPlan',
+    cwd: 'e:/code/MyProject/CLIConductor',
     env: process.env as any,
   });
 
-  // 第一轮对话
-  term.write('分析 agent-cluster-architecture.md 的核心设计\n');
+  // 绗竴杞璇?  term.write('鍒嗘瀽 agent-cluster-architecture.md 鐨勬牳蹇冭璁n');
   const result1 = await waitForAiResponse(term);
-  console.log('第1轮:', stripAnsi(result1));
+  console.log('绗?杞?', stripAnsi(result1));
 
-  // 第二轮对话（同一 session，上下文保留）
-  term.write('在这个架构中，Gateway 模块应该怎么设计？\n');
+  // 绗簩杞璇濓紙鍚屼竴 session锛屼笂涓嬫枃淇濈暀锛?  term.write('鍦ㄨ繖涓灦鏋勪腑锛孏ateway 妯″潡搴旇鎬庝箞璁捐锛焅n');
   const result2 = await waitForAiResponse(term);
-  console.log('第2轮:', stripAnsi(result2));
+  console.log('绗?杞?', stripAnsi(result2));
 
-  // 第三轮
-  term.write('请用 TypeScript 写出 Gateway 的接口定义\n');
+  // 绗笁杞?  term.write('璇风敤 TypeScript 鍐欏嚭 Gateway 鐨勬帴鍙ｅ畾涔塡n');
   const result3 = await waitForAiResponse(term);
-  console.log('第3轮:', stripAnsi(result3));
+  console.log('绗?杞?', stripAnsi(result3));
 
-  // 退出
-  term.write('/exit\n');
+  // 閫€鍑?  term.write('/exit\n');
   await sleep(500);
   term.kill();
 }
 ```
 
-### 5.4 Fork/Resume 操控
+### 5.4 Fork/Resume 鎿嶆帶
 
 ```typescript
 async function forkAndResume() {
   const term = pty.spawn('codebuddy', [], { /* ... */ });
 
-  // 第一个任务
-  term.write('实现方案A\n');
+  // 绗竴涓换鍔?  term.write('瀹炵幇鏂规A\n');
   await waitForAiResponse(term);
 
-  // Fork 新 session 尝试方案 B
+  // Fork 鏂?session 灏濊瘯鏂规 B
   term.write('/fork plan-b\n');
   await sleep(500);
 
-  term.write('实现方案B，与方案A不同\n');
+  term.write('瀹炵幇鏂规B锛屼笌鏂规A涓嶅悓\n');
   await waitForAiResponse(term);
 
-  // 回到原 session
+  // 鍥炲埌鍘?session
   term.write('/resume\n');
   await sleep(500);
 
-  // 选择原 session（假设它是第1项）
-  // TUI 菜单出现后，不需要按方向键，直接回车选第一个
-  term.write(Keys.enter);
+  // 閫夋嫨鍘?session锛堝亣璁惧畠鏄1椤癸級
+  // TUI 鑿滃崟鍑虹幇鍚庯紝涓嶉渶瑕佹寜鏂瑰悜閿紝鐩存帴鍥炶溅閫夌涓€涓?  term.write(Keys.enter);
   await sleep(500);
 
-  term.write('继续方案A的工作\n');
+  term.write('缁х画鏂规A鐨勫伐浣淺n');
 }
 ```
 
 ---
 
-## 六、关键技术坑点
-
-### 6.1 延时同步
+## 鍏€佸叧閿妧鏈潙鐐?
+### 6.1 寤舵椂鍚屾
 
 ```typescript
-// ❌ 错误：发送命令后立即读输出
-term.write('ls\n');
-const output = readBuffer();  // 可能还没输出完
-
-// ✅ 正确：等待输出稳定
-term.write('ls\n');
+// 鉂?閿欒锛氬彂閫佸懡浠ゅ悗绔嬪嵆璇昏緭鍑?term.write('ls\n');
+const output = readBuffer();  // 鍙兘杩樻病杈撳嚭瀹?
+// 鉁?姝ｇ‘锛氱瓑寰呰緭鍑虹ǔ瀹?term.write('ls\n');
 await sleep(300);
 const output = readBuffer();
 ```
 
-### 6.2 TUI 渲染延迟
+### 6.2 TUI 娓叉煋寤惰繜
 
 ```typescript
-// ❌ 错误：快速连续按方向键
-term.write('/resume\n');
-term.write(Keys.down);     // TUI 还没渲染完！
+// 鉂?閿欒锛氬揩閫熻繛缁寜鏂瑰悜閿?term.write('/resume\n');
+term.write(Keys.down);     // TUI 杩樻病娓叉煋瀹岋紒
 term.write(Keys.enter);
 
-// ✅ 正确：每步留足渲染时间
-term.write('/resume\n');
-await sleep(500);           // 等 /resume 菜单渲染
+// 鉁?姝ｇ‘锛氭瘡姝ョ暀瓒虫覆鏌撴椂闂?term.write('/resume\n');
+await sleep(500);           // 绛?/resume 鑿滃崟娓叉煋
 term.write(Keys.down);
-await sleep(100);           // 等选择高亮移动
+await sleep(100);           // 绛夐€夋嫨楂樹寒绉诲姩
 term.write(Keys.enter);
 ```
 
-### 6.3 输出何时结束的判定
-
+### 6.3 杈撳嚭浣曟椂缁撴潫鐨勫垽瀹?
 ```typescript
-// 方案 A：检测提示符（最可靠）
-function isPromptReady(text: string): boolean {
+// 鏂规 A锛氭娴嬫彁绀虹锛堟渶鍙潬锛?function isPromptReady(text: string): boolean {
   const clean = stripAnsi(text);
   return /[>#$%]\s*$/.test(clean.trimEnd());
 }
 
-// 方案 B：空闲超时检测
-let lastOutput = Date.now();
-const IDLE_TIMEOUT = 2000;  // 2秒内无输出判定结束
-
+// 鏂规 B锛氱┖闂茶秴鏃舵娴?let lastOutput = Date.now();
+const IDLE_TIMEOUT = 2000;  // 2绉掑唴鏃犺緭鍑哄垽瀹氱粨鏉?
 term.onData(() => { lastOutput = Date.now(); });
 
 async function waitForIdle(): Promise<void> {
@@ -567,8 +514,7 @@ async function waitForIdle(): Promise<void> {
   }
 }
 
-// 方案 C：等待特定标记（最精确）
-async function waitForMarker(text: string, marker: string): Promise<string> {
+// 鏂规 C锛氱瓑寰呯壒瀹氭爣璁帮紙鏈€绮剧‘锛?async function waitForMarker(text: string, marker: string): Promise<string> {
   return new Promise((resolve) => {
     let buf = '';
     const handler = (data: string) => {
@@ -583,34 +529,29 @@ async function waitForMarker(text: string, marker: string): Promise<string> {
 }
 ```
 
-### 6.4 Windows 特有坑
-
-- ConPTY 在某些 CLI 下行为异常（如颜色丢失）
-- 文件路径分隔符：发送 `\` 而非 `/`
-- PowerShell vs cmd vs Git Bash：PTY 兼容性不同
-- node-pty Windows 底层用 winpty（非 ConPTY API）
-
+### 6.4 Windows 鐗规湁鍧?
+- ConPTY 鍦ㄦ煇浜?CLI 涓嬭涓哄紓甯革紙濡傞鑹蹭涪澶憋級
+- 鏂囦欢璺緞鍒嗛殧绗︼細鍙戦€?`\` 鑰岄潪 `/`
+- PowerShell vs cmd vs Git Bash锛歅TY 鍏煎鎬т笉鍚?- node-pty Windows 搴曞眰鐢?winpty锛堥潪 ConPTY API锛?
 ---
 
-## 七、工具库对比
+## 涓冦€佸伐鍏峰簱瀵规瘮
 
-| 库 | 平台 | 用途 | 推荐度 |
+| 搴?| 骞冲彴 | 鐢ㄩ€?| 鎺ㄨ崘搴?|
 |----|------|------|--------|
-| **node-pty** | Win/Mac/Linux | PTY 操控核心 | ⭐⭐⭐ 首选 |
-| **strip-ansi** | 通用 | 剥离 ANSI 序列 | ⭐⭐⭐ 必备 |
-| **node-ansiparser** | 通用 | 结构化解析 ANSI | ⭐⭐ 需要位置信息时 |
-| **tmux** | Mac/Linux为主 | session 管理 + 操控 | ⭐⭐ detach/reattach 场景 |
-| **pexpect** (Python) | Mac/Linux | 自动化交互 | ⭐ 备选技术栈 |
+| **node-pty** | Win/Mac/Linux | PTY 鎿嶆帶鏍稿績 | 猸愨瓙猸?棣栭€?|
+| **strip-ansi** | 閫氱敤 | 鍓ョ ANSI 搴忓垪 | 猸愨瓙猸?蹇呭 |
+| **node-ansiparser** | 閫氱敤 | 缁撴瀯鍖栬В鏋?ANSI | 猸愨瓙 闇€瑕佷綅缃俊鎭椂 |
+| **tmux** | Mac/Linux涓轰富 | session 绠＄悊 + 鎿嶆帶 | 猸愨瓙 detach/reattach 鍦烘櫙 |
+| **pexpect** (Python) | Mac/Linux | 鑷姩鍖栦氦浜?| 猸?澶囬€夋妧鏈爤 |
 
 ---
 
-## 八、任务完成判定标准
+## 鍏€佷换鍔″畬鎴愬垽瀹氭爣鍑?
+- [ ] PTY 鑳藉惎鍔ㄤ竴涓?codebuddy 杩涚▼骞舵崟鑾峰叏閮ㄨ緭鍑?- [ ] PTY 鑳藉悜 codebuddy 鍙戦€佹枃鏈换鍔″苟璇诲彇 AI 鍥炲
+- [ ] PTY 鑳藉彂閫?Tab銆佹柟鍚戦敭銆丆trl+C 绛夌壒娈婃寜閿?- [ ] PTY 鑳芥搷鎺?/resume 鑿滃崟锛岄€夋嫨骞跺垏鎹㈠埌鎸囧畾 session
+- [ ] PTY 鑳芥墽琛?/fork 鍒涘缓鍒嗘敮 session
+- [ ] 鑳藉疄鐜拌嚦灏?3 杞殑澶氳疆瀵硅瘽
+- [ ] 杈撳嚭鑳芥纭墺绂?ANSI 搴忓垪锛屾彁鍙栫函鏂囨湰
+- [ ] 鑳藉垽瀹?AI 鍥炲浣曟椂缁撴潫
 
-- [ ] PTY 能启动一个 codebuddy 进程并捕获全部输出
-- [ ] PTY 能向 codebuddy 发送文本任务并读取 AI 回复
-- [ ] PTY 能发送 Tab、方向键、Ctrl+C 等特殊按键
-- [ ] PTY 能操控 /resume 菜单，选择并切换到指定 session
-- [ ] PTY 能执行 /fork 创建分支 session
-- [ ] 能实现至少 3 轮的多轮对话
-- [ ] 输出能正确剥离 ANSI 序列，提取纯文本
-- [ ] 能判定 AI 回复何时结束

@@ -1,83 +1,74 @@
-# 1.1.2 --bg + attach 行为测试
+﻿# 1.1.2 --bg + attach 琛屼负娴嬭瘯
 
-> 实验日期：2026-06-11
+> 瀹為獙鏃ユ湡锛?026-06-11
 
-## 实验目的
+## 瀹為獙鐩殑
 
-验证 `codebuddy attach` 到运行中的 bg 会话的可行性。
+楠岃瘉 `codebuddy attach` 鍒拌繍琛屼腑鐨?bg 浼氳瘽鐨勫彲琛屾€с€?
+## 娴嬭瘯缁撴灉
 
-## 测试结果
-
-### 测试：attach 运行中的会话
+### 娴嬭瘯锛歛ttach 杩愯涓殑浼氳瘽
 
 ```bash
-# 启动一个会运行一段时间的 bg 任务
+# 鍚姩涓€涓細杩愯涓€娈垫椂闂寸殑 bg 浠诲姟
 codebuddy --bg --name test-wait -y "Please wait for 10 seconds..."
 
-# 立即 attach
+# 绔嬪嵆 attach
 codebuddy attach test-wait
 ```
 
-**输出**：
-```
+**杈撳嚭**锛?```
 Attaching to session test-wait (log: C:\Users\14709\.codebuddy\logs\test-wait.log)
 Press Ctrl+C to detach (session will continue running)
 ```
 
-**结果**：
-- `attach` 启动了但需要交互式终端环境
-- 在我们项目的 bash 管道环境中无法正常使用（依赖 TTY）
-- ⚠️ 在生产环境中，通过 node-pty 应该可以正常 attach
+**缁撴灉**锛?- `attach` 鍚姩浜嗕絾闇€瑕佷氦浜掑紡缁堢鐜
+- 鍦ㄦ垜浠」鐩殑 bash 绠￠亾鐜涓棤娉曟甯镐娇鐢紙渚濊禆 TTY锛?- 鈿狅笍 鍦ㄧ敓浜х幆澧冧腑锛岄€氳繃 node-pty 搴旇鍙互姝ｅ父 attach
 
-### 测试：attach 已退出的会话
+### 娴嬭瘯锛歛ttach 宸查€€鍑虹殑浼氳瘽
 
 ```bash
-codebuddy attach test3  # test3 已完成并退出
-```
+codebuddy attach test3  # test3 宸插畬鎴愬苟閫€鍑?```
 
-**输出**：`Error: Session not found: test3`
+**杈撳嚭**锛歚Error: Session not found: test3`
 
-### 测试：log 读取
-
-```bash
-codebuddy logs test-wait  # 运行中的会话
-```
-
-**输出**：`Error: Session not found: test-wait` (即使 ps 中可见)
+### 娴嬭瘯锛歭og 璇诲彇
 
 ```bash
-cat C:\Users\14709\.codebuddy\logs\test-wait.log  # 直接读文件
+codebuddy logs test-wait  # 杩愯涓殑浼氳瘽
 ```
 
-**输出**：`I waited 10 seconds.` ✅
+**杈撳嚭**锛歚Error: Session not found: test-wait` (鍗充娇 ps 涓彲瑙?
 
-### 测试：codebuddy ps 能力
+```bash
+cat C:\Users\14709\.codebuddy\logs\test-wait.log  # 鐩存帴璇绘枃浠?```
+
+**杈撳嚭**锛歚I waited 10 seconds.` 鉁?
+### 娴嬭瘯锛歝odebuddy ps 鑳藉姏
 
 ```bash
 codebuddy ps
 ```
 
-运行期输出示例：
+杩愯鏈熻緭鍑虹ず渚嬶細
 ```
 PID       KIND            NAME              STATUS      CWD                             STARTED
-1188      bg              test-wait         unknown     e:\code\MyProject\MyAgentsPlan  11s ago
-25768     interactive     -                 unknown     E:\code\MyProject\MyAgentsPlan  49m ago
+1188      bg              test-wait         unknown     e:\code\MyProject\CLIConductor  11s ago
+25768     interactive     -                 unknown     E:\code\MyProject\CLIConductor  49m ago
 ```
 
-## 结论
+## 缁撹
 
-| 功能 | 可行性 | 备注 |
+| 鍔熻兘 | 鍙鎬?| 澶囨敞 |
 |------|--------|------|
-| attach 运行中会话 | 有条件 | 需要 TTY 环境，管道/bash 中无法使用 |
-| attach 已退出会话 | 不支持 | 会话退出后不可 attach |
-| codebuddy logs | 有 bug | 运行中会话报 "not found"，需直接读文件 |
-| codebuddy ps | 支持 | 能看到 bg 类型和 interactive 类型会话 |
-| codebuddy kill | 支持 | 可终止运行中的 bg 进程 |
-| 直接读 log 文件 | 支持 | 最可靠的方式 |
+| attach 杩愯涓細璇?| 鏈夋潯浠?| 闇€瑕?TTY 鐜锛岀閬?bash 涓棤娉曚娇鐢?|
+| attach 宸查€€鍑轰細璇?| 涓嶆敮鎸?| 浼氳瘽閫€鍑哄悗涓嶅彲 attach |
+| codebuddy logs | 鏈?bug | 杩愯涓細璇濇姤 "not found"锛岄渶鐩存帴璇绘枃浠?|
+| codebuddy ps | 鏀寔 | 鑳界湅鍒?bg 绫诲瀷鍜?interactive 绫诲瀷浼氳瘽 |
+| codebuddy kill | 鏀寔 | 鍙粓姝㈣繍琛屼腑鐨?bg 杩涚▼ |
+| 鐩存帴璇?log 鏂囦欢 | 鏀寔 | 鏈€鍙潬鐨勬柟寮?|
 
-## 对本项目的影响
+## 瀵规湰椤圭洰鐨勫奖鍝?
+- `attach` 涓嶉€傚悎浣滀负鑷姩鍖栨柟妗堬紙渚濊禆 TTY锛?- 璇诲彇 bg 浠诲姟鐨勮緭鍑猴細鐩存帴璇?`.codebuddy/logs/<name>.log` 鏂囦欢
+- `codebuddy ps` 鍙敤浜庣洃鎺у瓙 agent 鐘舵€?- `codebuddy kill` 鍙敤浜庣粓姝㈠瓙 agent
 
-- `attach` 不适合作为自动化方案（依赖 TTY）
-- 读取 bg 任务的输出：直接读 `.codebuddy/logs/<name>.log` 文件
-- `codebuddy ps` 可用于监控子 agent 状态
-- `codebuddy kill` 可用于终止子 agent

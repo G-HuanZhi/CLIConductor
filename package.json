@@ -1,7 +1,7 @@
-{
-  "name": "@myagentsplan/my-agents-plan",
+﻿{
+  "name": "@CLIConductor/cli-conductor",
   "private": true,
-  "description": "主Agent + 用户双控 CLI 管理方案",
+  "description": "涓籄gent + 鐢ㄦ埛鍙屾帶 CLI 绠＄悊鏂规",
   "scripts": {
     "bridge": "node packages/cbc-bridge/server.js"
   },
@@ -12,3 +12,4 @@
     "ws": "^8.21.0"
   }
 }
+
