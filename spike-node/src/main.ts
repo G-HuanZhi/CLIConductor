@@ -98,6 +98,8 @@ function setupWorkerIO(w: WorkerState, child: ChildProcess) {
   });
 
   child.on("close", (code) => {
+    // 如果进程已被 restart 替换，忽略陈旧事件
+    if (w.process !== child) return;
     if (w.status === "idle" || w.status === "running") {
       w.status = "error";
     }
