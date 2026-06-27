@@ -10,9 +10,9 @@ import json
 async def main():
     print("CLIConductor Spike (Python)")
 
-    # 启动 cbc 子进程
+    # 启动 cbc 子进程 (Windows 需完整路径，cbc.cmd 在 node_global 目录)
     process = await asyncio.create_subprocess_exec(
-        "cbc",
+        r"D:\node_npm\node_global\cbc.cmd",
         "-p",
         "--output-format", "stream-json",
         "--input-format", "stream-json",
@@ -22,7 +22,7 @@ async def main():
         stderr=asyncio.subprocess.STDOUT,
     )
 
-    # 发送测试消息
+    # 发送测试消息 (stdin stream-json 格式)
     msg = json.dumps({
         "type": "user",
         "message": {
@@ -32,6 +32,7 @@ async def main():
     })
     process.stdin.write((msg + "\n").encode())
     await process.stdin.drain()
+    process.stdin.close()  # 告诉 cbc 没有更多输入了
 
     # 逐行读取 stdout
     async for line in process.stdout:
