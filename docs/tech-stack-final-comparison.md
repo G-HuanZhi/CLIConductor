@@ -138,6 +138,62 @@
 
 这不是致命问题，但运维时会多一层心智负担。
 
+### 3.3 OpenClaw 参考：为什么网关重的项目选了 Node.js
+
+OpenClaw（源码 `D:\project\openclaw`）是一个自托管 AI 网关，连接 20+ 消息渠道 + 30+ AI 模型提供商，网关要求远比 CLIConductor 高。它选了 Node.js / TypeScript。
+
+#### OpenClaw 的网关不是 REST 网关
+
+用"网关"这个词时容易想到：认证中间件 → 限流 → 路由分发 → API endpoint，即 FastAPI 擅长的洋葱模型。但 OpenClaw 的实际架构是：
+
+```
+Client (WebSocket) ──→ [ RPC 协议层 ] ──→ [ 方法注册表 ] ──→ 25+ 懒加载 handler 族
+                           ↑
+                     TypeBox Schema 校验
+                     协议版本协商
+```
+
+关键差异：
+
+| | 传统 REST 网关（FastAPI 强项） | OpenClaw 网关 |
+|---|---|---|
+| 通信协议 | HTTP request/response | **WebSocket RPC** — 一条长连接，双向流 |
+| 路由模型 | URL → handler | **方法名 → 动态加载 handler module** |
+| 中间件链 | 洋葱模型：auth→rate→route→handler | 全局 dispatch + scoped context |
+| 接口定义 | OpenAPI / Swagger 自动生成 | 自定义 TypeBox schema + 版本协商 |
+
+**OpenClaw 不是一个 REST API 网关，它是一个 WebSocket 事件总线的 dispatch 层。**
+
+#### 为什么这个形态适合 Node.js
+
+**1. 插件系统押注 npm 生态（最关键）**
+
+OpenClaw 有 120+ 插件。Telegram 用 grammy、Signal 用 libsignal-node、WhatsApp 用 baileys——这些渠道库都是 JS 原生，Python 没有等价物。chnnel 适配 + AI provider SDK 全部来自 npm，这是选型的第一驱动力。
+
+**2. 全栈同构**
+
+`openclaw` CLI → Gateway 服务器 → Web 控制台 UI，全部是同一份 TypeScript。`VISION.md` 原话：选 TypeScript 是为了"hackable by default"——任何人都能看懂、改、扩。
+
+**3. WebSocket 是 JS 的原生心智模型**
+
+Node.js event loop → `ws` 库 → req/res/event 帧模型，这条链路从 JS 设计哲学里长出来。Python asyncio 也能做，但 async iterator 对接事件流不如 `on("message")` 自然。
+
+#### 这对 CLIConductor 意味着什么
+
+**CLIConductor 的网关需求是混合体**：
+
+| CLIConductor 场景 | 像 OpenClaw（WS 驱动） | 像 REST 网关 |
+|---|---|---|
+| Agent 通过 HTTP API 派发任务 | 否 — OpenClaw 全走 WS | **是** |
+| Dashboard 实时流 | **是** — WS 广播 | 否 |
+| 人类注入消息 | **是** — WS 双向 | 否 |
+| QQ/微信消息渠道接入 | **是** — 渠道适配器模型 | 否 |
+| CLI 管理操作 | 否 | 否（太简单） |
+
+**结论**：OpenClaw 证明的是 WS 事件驱动模式下 Node.js 更自然。但它不能证明 Node.js 做 REST 网关比 Python 更好——OpenClaw 根本没做大量 REST 端点。
+
+CLIConductor 介于两者之间，需要判断：Agent HTTP API（REST 模型）和 Dashboard 实时流 + 渠道接入（WS 模型），哪个比重更大。
+
 ---
 
 ## 四、按 Phase 推演
@@ -188,12 +244,17 @@
 
 ## 六、决策框架
 
-最终选择取决于你对以下三个问题的权重分配：
+最终选择取决于你对以下问题的权重分配：
 
 1. **PTY 接管**有多重要？（node-pty → Node.js）
 2. **Live2D / 复杂前端**有多确定？（同构类型 → Node.js）
-3. **API 网关复杂度和长期维护**？（FastAPI → Python）
+3. **CLIConductor 的网关更像 REST 还是更像 WS 事件总线**？（REST → Python / WS 事件 → Node.js）
+
+补充判断标准：
+- 如果未来 Agent 控制更多走 HTTP API（REST 风格），FastAPI 的校验/文档/中间件优势会越来越显著
+- 如果未来控制流更多走 WebSocket（双向流 + 事件驱动），Node.js 的原生模型更自然
+- OpenClaw 走通了 WS 事件总线这条路，但它的驱动因素是插件生态（npm）而非网关复杂度
 
 如果前两项权重高 → **Node.js**  
-如果第三项权重高 → **Python**  
-如果三项差不多 → **Node.js**（因为后端 Node.js 也能写，但前端 Python 写不了）
+如果第三项权重高且偏向 REST → **Python**  
+如果三项差不多 → **Node.js**（后端 Node.js 也能写，但前端 Python 写不了）
