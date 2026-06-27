@@ -31,6 +31,7 @@ class Worker:
     process: asyncio.subprocess.Process | None = None
     session_id: str | None = None
     history: list[dict] = field(default_factory=list)
+    _stdout_task: asyncio.Task | None = None
 
 
 workers: dict[str, Worker] = {}
@@ -57,7 +58,7 @@ async def create_worker(name: str) -> Worker:
     workers[worker_id] = w
     await broadcast({"type": "worker.spawned", "workerId": worker_id, "name": name, "status": "idle"})
 
-    asyncio.create_task(_read_stdout(w))
+    w._stdout_task = asyncio.create_task(_read_stdout(w))
     return w
 
 
@@ -141,6 +142,51 @@ async def kill_worker(worker_id: str) -> str | None:
     return None
 
 
+async def restart_worker(worker_id: str) -> str | None:
+    w = workers.get(worker_id)
+    if not w:
+        return "Worker not found"
+
+    # 停旧进程
+    if w.process:
+        try:
+            w.process.kill()
+        except ProcessLookupError:
+            pass
+
+    # 取消旧的 stdout reader
+    if w._stdout_task:
+        w._stdout_task.cancel()
+
+    # 起新进程
+    process = await asyncio.create_subprocess_exec(
+        CBC_PATH,
+        "-p",
+        "--output-format", "stream-json",
+        "--input-format", "stream-json",
+        "-y",
+        stdout=asyncio.subprocess.PIPE,
+        stdin=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+
+    w.process = process
+    w.status = "idle"
+    w.session_id = None
+    w.history = []
+
+    # 重新挂载 stdout reader
+    w._stdout_task = asyncio.create_task(_read_stdout(w))
+
+    await broadcast({
+        "type": "worker.restarted",
+        "workerId": worker_id,
+        "name": w.name,
+        "status": "idle",
+    })
+    return None
+
+
 # ────────────────────────────────────────────
 # WebSocket
 # ────────────────────────────────────────────
@@ -216,6 +262,14 @@ async def api_kill(worker_id: str):
     if err:
         return {"error": err}
     return {"workerId": worker_id, "status": "killed"}
+
+
+@app.post("/api/worker/{worker_id}/restart")
+async def api_restart(worker_id: str):
+    err = await restart_worker(worker_id)
+    if err:
+        return {"error": err}
+    return {"workerId": worker_id, "status": "restarted"}
 
 
 # ────────────────────────────────────────────

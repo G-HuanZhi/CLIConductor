@@ -51,6 +51,13 @@ function createWorker(name: string): WorkerState {
     history: [],
   };
 
+  setupWorkerIO(w, child);
+  workers.set(id, w);
+  broadcast({ type: "worker.spawned", workerId: id, name, status: "idle" });
+  return w;
+}
+
+function setupWorkerIO(w: WorkerState, child: ChildProcess) {
   const rl = createInterface({ input: child.stdout! });
 
   rl.on("line", (line: string) => {
@@ -60,12 +67,10 @@ function createWorker(name: string): WorkerState {
 
     const t = event.type;
 
-    // 提取 session_id
     if (t === "system" && event.subtype === "init") {
       w.sessionId = event.session_id;
     }
 
-    // 收集对话历史
     if (t === "assistant") {
       const blocks = event.message?.content ?? [];
       for (const b of blocks) {
@@ -75,24 +80,21 @@ function createWorker(name: string): WorkerState {
       }
     }
 
-    // 任务完成
     if (t === "result") {
       w.status = event.is_error ? "error" : "done";
       broadcast({
         type: "worker.result",
-        workerId: id,
+        workerId: w.id,
         status: w.status,
         result: event.result,
         sessionId: w.sessionId,
         history: w.history,
       });
-      // 重置为 idle，准备下一轮（不 return，继续等 stdout）
       w.status = "idle";
       return;
     }
 
-    // 推送给所有客户端
-    broadcast({ type: "worker.stream", workerId: id, event });
+    broadcast({ type: "worker.stream", workerId: w.id, event });
   });
 
   child.on("close", (code) => {
@@ -100,10 +102,6 @@ function createWorker(name: string): WorkerState {
       w.status = "error";
     }
   });
-
-  workers.set(id, w);
-  broadcast({ type: "worker.spawned", workerId: id, name, status: "idle" });
-  return w;
 }
 
 // ────────────────────────────────────────────
@@ -137,6 +135,41 @@ function killWorker(workerId: string): string | null {
   w.process?.kill();
   workers.delete(workerId);
   broadcast({ type: "worker.destroyed", workerId });
+  return null;
+}
+
+function restartWorker(workerId: string): string | null {
+  const w = workers.get(workerId);
+  if (!w) return "Worker not found";
+
+  // 停旧进程
+  w.process?.kill();
+
+  // 起新进程
+  const child = spawn("cbc", [
+    "-p",
+    "--output-format", "stream-json",
+    "--input-format", "stream-json",
+    "-y",
+  ], {
+    stdio: ["pipe", "pipe", "pipe"],
+    shell: true,
+  });
+
+  w.process = child;
+  w.status = "idle";
+  w.sessionId = null;
+  w.history = [];
+
+  // 重新挂载 stdout reader
+  setupWorkerIO(w, child);
+
+  broadcast({
+    type: "worker.restarted",
+    workerId,
+    name: w.name,
+    status: "idle",
+  });
   return null;
 }
 
@@ -199,6 +232,12 @@ app.post("/api/kill/:id", (req, res) => {
   const err = killWorker(req.params.id);
   if (err) { res.status(400).json({ error: err }); return; }
   res.json({ workerId: req.params.id, status: "killed" });
+});
+
+app.post("/api/worker/:id/restart", (req, res) => {
+  const err = restartWorker(req.params.id);
+  if (err) { res.status(400).json({ error: err }); return; }
+  res.json({ workerId: req.params.id, status: "restarted" });
 });
 
 // HTTP + WS on same port
