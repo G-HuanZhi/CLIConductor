@@ -10,6 +10,8 @@ import json
 from dataclasses import dataclass, field
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from pathlib import Path
+
 from fastapi.responses import HTMLResponse
 
 app = FastAPI()
@@ -97,7 +99,9 @@ async def _read_stdout(w: Worker):
                 "sessionId": w.session_id,
                 "history": w.history,
             })
-            return
+            # 重置为 idle，准备下一轮（继续循环等待 stdin）
+            w.status = "idle"
+            continue
 
         await broadcast({"type": "worker.stream", "workerId": w.worker_id, "event": event})
 
@@ -158,77 +162,12 @@ async def broadcast(data: dict):
 # HTTP Routes
 # ────────────────────────────────────────────
 
-DASHBOARD = """<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>CLIConductor Spike (Python)</title>
-<style>
-  body{font-family:monospace;background:#111;color:#ff0;padding:20px}
-  .worker{border:1px solid #333;margin:10px 0;padding:10px}
-  .status{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
-  .idle{background:#888}.running{background:#0f0}.done{background:#0af}.error{background:#f00}
-  pre{white-space:pre-wrap;max-height:300px;overflow-y:auto;background:#000;padding:10px}
-  input,button{padding:5px;margin:3px;font-family:monospace}
-  input{width:300px}
-</style></head><body>
-<h2>CLIConductor Spike (Python)</h2>
-<div id="workers"></div>
-<script>
-const ws = new WebSocket('ws://' + location.host + '/ws');
-ws.onmessage = e => {
-  const d = JSON.parse(e.data);
-  if (d.type === 'worker.spawned') drawWorker(d);
-  else if (d.type === 'worker.stream') append(d.workerId, d.event);
-  else if (d.type === 'worker.result') done(d.workerId, d.result);
-  else if (d.type === 'worker.status') setStatus(d.workerId, d.status);
-  else if (d.type === 'worker.destroyed') remove(d.workerId);
-};
-function spawn() {
-  const name = document.getElementById('newName').value || 'default';
-  fetch('/api/spawn', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
-}
-function send(id) {
-  const text = document.getElementById('input-'+id).value;
-  fetch('/api/task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workerId:id,text})});
-}
-function kill(id) { fetch('/api/kill/'+id,{method:'POST'}); }
-function drawWorker(d) {
-  const div = document.createElement('div'); div.className = 'worker'; div.id = 'w-'+d.workerId;
-  div.innerHTML = '<b>'+d.name+'</b> <span id="st-'+d.workerId+'" class="status idle"></span> ('+d.workerId+') ' +
-    '<button onclick="kill(\''+d.workerId+'\')">Kill</button><br>' +
-    '<input id="input-'+d.workerId+'" placeholder="Task text..."> ' +
-    '<button onclick="send(\''+d.workerId+'\')">Send</button>' +
-    '<pre id="log-'+d.workerId+'"></pre>';
-  document.getElementById('workers').appendChild(div);
-}
-function append(id,event) {
-  const pre = document.getElementById('log-'+id); if(!pre) return;
-  const t = event.type; let line = '';
-  if (t === 'assistant') {
-    for (const b of event.message?.content||[]) {
-      if (b.type === 'text') line += '[TEXT] '+b.text+'\\n';
-      if (b.type === 'thinking') line += '[THINK] '+b.thinking.slice(0,120)+'...\\n';
-      if (b.type === 'tool_use') line += '[TOOL] '+b.name+'\\n';
-    }
-  } else if (t === 'system' && event.subtype === 'init') {
-    line = '[INIT] session: '+event.session_id+' model: '+event.model+'\\n';
-  }
-  if (line) pre.textContent += line;
-}
-function done(id,result) {
-  const pre = document.getElementById('log-'+id); if(pre) pre.textContent += '[DONE] '+JSON.stringify(result)+'\\n';
-  setStatus(id,'done');
-}
-function setStatus(id,s) {
-  const st = document.getElementById('st-'+id); if(st) {st.className='status '+s; st.title=s;}
-}
-function remove(id) {const el = document.getElementById('w-'+id); if(el) el.remove();}
-</script>
-<input id="newName" placeholder="Worker name"><button onclick="spawn()">Spawn</button>
-</body></html>"""
+DASHBOARD_FILE = Path(__file__).parent / "index.html"
 
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
-    return DASHBOARD
+    return DASHBOARD_FILE.read_text(encoding="utf-8")
 
 
 @app.websocket("/ws")
