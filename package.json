@@ -1,7 +1,7 @@
 ﻿{
   "name": "@CLIConductor/cli-conductor",
   "private": true,
-  "description": "涓籄gent + 鐢ㄦ埛鍙屾帶 CLI 绠＄悊鏂规",
+  "description": "主Agent + 用户双控 CLI 管理方案",
   "scripts": {
     "bridge": "node packages/cbc-bridge/server.js"
   },
