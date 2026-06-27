@@ -146,7 +146,6 @@ async function ask(text) {
 | `key.js` | 发送特殊按键（Tab/Alt+M/Esc/Ctrl+C） |
 | `send.js` | 一次性发送字符串（不推荐，cbc TUI 需要逐字符） |
 | `claw-client.js` | Agent 端备用连接脚本（已弃用） |
-| `connect.ps1` | PowerShell WebSocket 客户端（弃用，PS 5.1 兼容性问题） |
 
 ## 双控原理
 
