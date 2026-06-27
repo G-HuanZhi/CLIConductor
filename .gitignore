@@ -6,3 +6,5 @@ dist/
 *.tsbuildinfo
 coverage/
 docs/oversight/
+.idea/
+.vscode/
