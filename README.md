@@ -1,6 +1,6 @@
 # CLIConductor
 
-> 中间层，让主 Agent 调度管理多个 cbc 进程，同时人类可随时观察、插话、接管任意进程。
+> 中间层，让 Meta-Agent 调度管理多个 cbc 进程，同时人类可随时观察、插话、接管任意进程。
 
 **技术栈**：Python 3.14 + FastAPI + WebSocket
 
@@ -10,46 +10,54 @@
 
 | Phase | 目标 | 状态 |
 |:-----|------|:----:|
-| Phase 1 | Agent 操控 2 个 Worker + 人类观察/插话/接管 | 进行中 |
+| Phase 1 | Meta-Agent 操控多个 Worker + 人类观察/插话/接管 | 进行中 |
 
 ### 已实现功能
 
 | 功能 | 说明 |
 |------|------|
 | Worker 生命周期 | spawn / list / kill / restart / branch |
+| Session 独立管理 | Session（UUID 持久化）与 Worker（运行时进程）分离，kill 不删 Session |
 | cbc 集成 | stdin stream-json 长驻进程，多轮对话 |
 | 任务队列 | 每个 Worker 独立 asyncio.Queue，一次一条写入 stdin |
-| 模型切换 | switch-model / switch-mode，kill + --resume 保留历史 |
-| Session 持久化 | 每次 result 自动保存 JSON 到 `data/sessions/` |
-| 重启恢复 | 服务器启动时自动 `--resume` 恢复所有 Worker |
+| 模型/模式切换 | switch-model / switch-mode，kill + --resume 保留历史 |
+| Session 持久化 | `data/sessions/ses_<uuid>.json`，每次 result 保存 |
+| 重启恢复 Session | 启动时自动加载所有 Session（不自动 spawn Worker，按需 spawn）|
 | 中断任务 | interrupt 端点：kill + --resume 重启 |
-| Dashboard | 实时事件流、对话日志、状态灯、per-worker 控制面板 |
+| Dashboard | 左栏 Session 列表 + 聊天式消息区（用户右、助手左、thinking 可折叠）|
 | 用户注入 | Dashboard 输入 → WS → Worker 队列 |
 | 接管模式 | 后端打开 PowerShell 运行交互式 `cbc --resume`，Worker 进入 held 态 |
 | 优雅关闭 | lifespan handler：退出时 kill 所有子进程 |
-| 默认模型 | `deepseek-v4-flash`，spawn 时可指定 model / mode / workdir |
-| 主 Agent 通道 | `/ws/agent` 端点，Agent 实时接收事件 + 派发任务 |
-| `lastResult` | 每次任务完成保存 {status, result, timestamp}，API 可查 |
+| 默认模型 | `deepseek-v4-flash`，Session 级别可配置 |
+| Meta-Agent 通道 | `/ws/agent` 端点，Agent 实时接收事件 + 派发任务 |
+| 命令来源辨別 | `send_task()` 含 `source` 参数（agent/user），两套独立 WS 通道 |
+| cbc 重放去重 | `--resume` 重放事件不重复追加到 history |
+| 状态灯即时更新 | WS 事件 → 本地 modelData 立即更新 → 异步 API 同步 |
 
 ### API 总览
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/` | Dashboard（单页 HTML） |
+| GET | `/favicon.ico` | SVG favicon |
 | WS | `/ws` | Dashboard WebSocket（观察 + user_inject） |
-| WS | `/ws/agent` | 主 Agent WebSocket（事件流 + task/spawn/kill/list）|
-| GET | `/api/models` | 获取支持模型列表 + 默认模型 |
-| GET | `/api/list` | 列出所有 Worker（含 lastResult） |
-| POST | `/api/spawn` | 创建 Worker `{name, model?, permissionMode?, workdir?}` |
-| POST | `/api/task` | 发任务 `{workerId, text}` |
-| POST | `/api/kill/{id}` | 销毁 Worker |
+| WS | `/ws/agent` | Meta-Agent WebSocket（事件流 + task/spawn/kill/list）|
+| GET | `/api/models` | 支持模型列表 + 默认模型 |
+| GET | `/api/sessions` | 列出所有 Session（含 history、workerStatus）|
+| POST | `/api/sessions` | 创建 Session（不 spawn Worker）|
+| GET | `/api/sessions/{id}` | 获取单个 Session 详情 |
+| DELETE | `/api/sessions/{id}` | 删除 Session + kill Worker |
+| POST | `/api/spawn` | 为 Session 创建 Worker（可指定 model/mode）|
+| POST | `/api/task` | 发任务（workerId 或 sessionId）|
+| GET | `/api/list` | 列出运行中的 Worker |
+| POST | `/api/kill/{worker_id}` | 销毁 Worker（不删 Session）|
 | POST | `/api/worker/{id}/restart` | 重启 cbc 进程 |
 | POST | `/api/worker/{id}/interrupt` | 中断当前任务 |
 | POST | `/api/worker/{id}/takeover` | 打开交互式 PowerShell + held |
-| POST | `/api/worker/{id}/switch-model` | 切换模型 `{model}` |
-| POST | `/api/worker/{id}/switch-mode` | 切换权限模式 `{permissionMode}` |
-| POST | `/api/worker/{id}/rename` | 重命名 `{name}` |
-| POST | `/api/worker/{id}/branch` | 从当前 session 分支出新 Worker |
+| POST | `/api/worker/{id}/switch-model` | 切换模型 |
+| POST | `/api/worker/{id}/switch-mode` | 切换权限模式 |
+| POST | `/api/worker/{id}/rename` | 重命名 Session |
+| POST | `/api/worker/{id}/branch` | 从当前 Session 分支 |
 
 ---
 
@@ -71,8 +79,8 @@ python main.py
 ## 架构
 
 ```
-        主 Agent                   你（人类）
-    (CodeBuddy 等)              (Dashboard / CLI)
+         Meta-Agent                   人类
+    (CodeBuddy 等)              (Dashboard)
           │                          │
     /ws/agent 通道              /ws + HTTP
     （事件流 + 命令）          （观察 + 注入 + 接管）
@@ -101,53 +109,59 @@ CLIConductor/
 ├── src/
 │   ├── __init__.py
 │   ├── server.py            FastAPI 路由 + WS
-│   ├── worker.py            Worker 类 + 生命周期管理
-│   └── session.py           Session JSON 持久化
-├── index.html               Dashboard 单页
-├── target.md                项目目标定义
-├── notes.md                 研究笔记
+│   ├── worker.py            Worker 数据类 + 生命周期管理
+│   └── session.py           Session 存储（UUID key）
+├── index.html               Dashboard 单页（两栏：session 列表 + 聊天区）
+├── data/
+│   ├── sessions/            Session JSON 文件（ses_<uuid>.json）
+│   └── workdirs/            Worker 工作目录
 ├── requirements.txt         fastapi, uvicorn, websockets
 ├── docs/
-│   ├── global_plan.md       全局规划 + 路线图
-│   ├── first_plan.md        Phase 1 详细计划
-│   ├── known-issues.md      已知限制
-│   └── ...                  技术分析文档
-└── experiments/             实验脚本
+│   ├── plans&overviews/
+│   │   ├── global.md        全局规划（目标/架构/路线图/命名约定）
+│   │   ├── current.md       当前 Phase 1 计划
+│   │   └── myTODO.md        个人 TODO
+│   └── references/
+│       └── dionysusc-reference.md
+└── devNote.md               协作笔记
 ```
 
 ## 关键设计
 
-### cbc 集成模式
+### Worker 与 Session 分离
 
-每个 Worker 对应一个长驻 cbc 进程：
+- **Worker** — 运行时 cbc 进程，持有 session_id 引用。kill 后 Worker 消失。
+- **Session** — 持久化数据（UUID `ses_<16hex>`），含 history、model、cbc_session_id。独立于 Worker 生命周期。
 
-```
+### cbc 集成模式（长驻进程）
+
+```bash
 cbc -p --output-format stream-json --input-format stream-json -y
 ```
 
-- stdin：持续写入 JSON 格式的 user 消息
-- stdout：逐行解析 stream-json 事件（thinking / text / tool_use / result）
-- `-y`：跳过所有权限确认（包括信任目录提示）
-- 进程不退出，result 事件后继续等待下一条 stdin
-
-### 消息队列
+### 消息队列（stdin 互斥）
 
 ```
 Agent 任务 ──→ asyncio.Queue (FIFO) ──→ consumer ──→ cbc.stdin.write()
 用户注入 ──→                                         result → 取下一条
 ```
 
-- 一次一条，等 result 后才取下一条
-- 用户注入（source="user"）和 Agent 任务走同一队列
-- takeover 后状态变 held，拒绝所有输入，直到 restart
-
 ### 特殊命令处理
 
-cbc 的 /model、/branch、Shift+Tab 等无法通过 stream-json stdin 发送。解决：kill + `--resume <session_id>` + CLI 参数重启。
+cbc 的 /model、/branch 等无法通过 stdin stream-json 发送。方案：kill + `--resume <cbc_session_id>` + CLI 参数重启。
 
 | 命令 | 实现方式 |
 |------|---------|
 | `/model` | `--model <model>` + respawn |
 | Shift+Tab | `--permission-mode <mode>` + respawn |
 | `/branch` | `--resume <sid> --fork-session` + spawn |
-| `/rename` | CLIConductor 自维护 name 字段 |
+| `/rename` | CLIConductor 自维护 Session name 字段 |
+
+### 命名约定
+
+| 术语 | 定义 |
+|------|------|
+| **Meta-Agent** | 具有与 Worker 交互权限和能力的上层 AI Agent（如 CodeBuddy Code）。通过 `/ws/agent` 通道操作。 |
+| **Worker** | 一个运行中的 cbc 子进程。进程终止后不删除 Session。 |
+| **Session** | 持久化会话。UUID 管理，含 cbc_session_id、history、last_result 等。 |
+| **Human** | 人类用户。通过 Dashboard 观察/注入/接管。来源标记为 `"user"`。 |

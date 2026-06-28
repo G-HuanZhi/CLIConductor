@@ -1,1 +1,0 @@
-1. 消息队列可以开放给user权限，就像我使用devnotes一样，一条接着一条的发出去，不用一直等worker done。但是注意agent必须done了才fa
