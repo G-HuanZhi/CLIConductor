@@ -26,6 +26,11 @@ Python+FastAPI 和 Node.js+Express 两边 spike 已实现对等功能（HTTP API
 - 代码行数和改动文件数
 - 主观开发体验
 
+**结果（已执行）**：
+- Python: 改 4 处，~50 行，零重构。`_read_stdout` 从第一天就是独立函数，直接 `create_task(_read_stdout(w))` 复用。需显式 `_stdout_task` 字段 + `cancel()`。`ProcessLookupError` 需 try/except。
+- Node.js: 改 3 处，但需先抽 `setupWorkerIO`（~45 行重构）。旧 `close` 事件回调在 restart 后异步触发，产生 bug（状态被覆盖为 error）。修复：加 `w.process !== child` guard。TypeScript interface 无需改动。
+- **核心差异**：Python asyncio 鼓励显式生命周期管理（create→store→cancel），干净但需要记住。Node.js 事件驱动更简洁但产生潜藏 bug，需要防御式编程。
+
 ---
 
 ### 试验 1：多 Worker 并发
@@ -37,6 +42,13 @@ Python+FastAPI 和 Node.js+Express 两边 spike 已实现对等功能（HTTP API
 - Dashboard 面板是否正确路由，有无串流
 - WebSocket 广播是否有丢帧或乱序
 - CPU/内存使用情况
+
+**结果（已执行）**：
+- 两边均 spawn 3 个 worker，同时发 3 个不同任务，全部正常完成
+- Session ID 各不相同，证明事件正确路由到各自 Worker（无串流）
+- 第二轮多轮对话并发正常，Session ID 不变（证明复用同一 cbc 进程）
+- Kill worker-1 后 worker-2、worker-3 正常收发任务（隔离性：两边通过）
+- **结论**：2-5 Worker 并发两边无差异，均无饥饿、串流、阻塞
 
 ---
 
@@ -74,10 +86,10 @@ Python+FastAPI 和 Node.js+Express 两边 spike 已实现对等功能（HTTP API
 
 ---
 
-## 执行顺序
+## 执行进度
 
-1. **试验 5**：添加 restart 功能，记录开发体验
-2. **试验 1**：多 worker 并发测试
+1. **试验 5** ✅：添加 restart 功能，记录开发体验
+2. **试验 1** ✅：多 worker 并发测试
 3. **试验 3**：崩溃恢复测试
 4. **试验 2**：stdin 注入冲突
 5. **试验 4**：长时间稳定性
