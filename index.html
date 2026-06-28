@@ -27,7 +27,7 @@
   .sess-item .sess-count{color:#484f58;font-size:.75rem}
 
   .s-dot{display:inline-block;width:8px;height:8px;border-radius:50%}
-  .s-dot.idle{background:#58a6ff}.s-dot.running{background:#3fb950}.s-dot.held{background:#f0883e}.s-dot.error{background:#f85149}
+  .s-dot.idle{background:#58a6ff}.s-dot.running{background:#3fb950}.s-dot.held{background:#f0883e}.s-dot.error{background:#f85149}.s-dot.offline{background:#8b949e}
 
   /* ── Chat area ── */
   #chat{flex:1;display:flex;flex-direction:column;height:100%;min-width:0}
@@ -222,7 +222,7 @@ function renderSessionList() {
 
     div.innerHTML =
       '<div style="display:flex;justify-content:space-between;align-items:start">' +
-      '<div class="sess-name"><span class="s-dot ' + (s.workerStatus || 'idle') + '"></span>' + esc(s.name) + '</div>' +
+      '<div class="sess-name"><span class="s-dot ' + (s.workerStatus || 'offline') + '"></span>' + esc(s.name) + '</div>' +
       '<button class="sess-del" onclick="deleteSession(\'' + s.id + '\')" title="Delete session" style="background:none;border:none;color:#484f58;cursor:pointer;font-size:.85rem;padding:0 2px">⚙</button>' +
       '</div>' +
       (lastMsg ? '<div class="sess-preview">' + esc(lastMsg) + '</div>' : '') +
@@ -255,7 +255,7 @@ function updateTopBar() {
   document.getElementById('chatModel').style.display = '';
   document.getElementById('chatName').textContent = s.name || currentSessionId.slice(0,12);
   document.getElementById('chatModel').textContent = s.model || defaultModel;
-  var status = s.workerStatus || 'idle';
+  var status = s.workerStatus || 'offline';
   document.getElementById('chatStatus').textContent = status + (currentWorkerId ? ' (' + currentWorkerId + ')' : ' (no worker)');
   // sync settings panel
   syncSettingsPanel(s);

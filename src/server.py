@@ -284,6 +284,12 @@ async def api_spawn(data: dict):
         s = sess.get(session_id)
         if not s:
             return {"error": f"Session {session_id} not found"}
+        # apply settings from request if provided
+        if data.get("model"):
+            s.model = data["model"]
+        if data.get("permissionMode"):
+            s.permission_mode = data["permissionMode"]
+        sess.save(s)
     else:
         name = data.get("name", "default")
         model = data.get("model") or worker.DEFAULT_MODEL
