@@ -25,6 +25,8 @@ interface WorkerState {
   process: ChildProcess | null;
   sessionId: string | null;
   history: any[];
+  model: string | null;
+  permissionMode: string | null;
 }
 
 const workers = new Map<string, WorkerState>();
@@ -49,6 +51,8 @@ function createWorker(name: string): WorkerState {
     process: child,
     sessionId: null,
     history: [],
+    model: null,
+    permissionMode: null,
   };
 
   setupWorkerIO(w, child);
@@ -144,24 +148,22 @@ function restartWorker(workerId: string): string | null {
   const w = workers.get(workerId);
   if (!w) return "Worker not found";
 
+  const sessionId = w.sessionId;
+
   // 停旧进程
   w.process?.kill();
 
-  // 起新进程
-  const child = spawn("cbc", [
-    "-p",
-    "--output-format", "stream-json",
-    "--input-format", "stream-json",
-    "-y",
-  ], {
+  // 起新进程（保留 session 以保留对话历史）
+  const args = ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "-y"];
+  if (sessionId) args.push("--resume", sessionId);
+
+  const child = spawn("cbc", args, {
     stdio: ["pipe", "pipe", "pipe"],
     shell: true,
   });
 
   w.process = child;
   w.status = "idle";
-  w.sessionId = null;
-  w.history = [];
 
   // 重新挂载 stdout reader
   setupWorkerIO(w, child);
@@ -171,6 +173,97 @@ function restartWorker(workerId: string): string | null {
     workerId,
     name: w.name,
     status: "idle",
+    sessionId,
+  });
+  return null;
+}
+
+function respawnWorker(workerId: string, extraArgs: string[] = []): string | null {
+  const w = workers.get(workerId);
+  if (!w) return "Worker not found";
+
+  const sessionId = w.sessionId;
+
+  w.process?.kill();
+
+  const args = ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "-y"];
+  if (sessionId) args.push("--resume", sessionId);
+  args.push(...extraArgs);
+
+  const child = spawn("cbc", args, {
+    stdio: ["pipe", "pipe", "pipe"],
+    shell: true,
+  });
+
+  w.process = child;
+  w.status = "idle";
+
+  setupWorkerIO(w, child);
+
+  broadcast({
+    type: "worker.reconfigured",
+    workerId,
+    name: w.name,
+    status: "idle",
+    sessionId,
+  });
+  return null;
+}
+
+function branchWorker(workerId: string, name?: string): WorkerState | string {
+  const w = workers.get(workerId);
+  if (!w) return "Worker not found";
+  if (!w.sessionId) return "Worker has no session yet";
+
+  const newId = `worker-${nextId++}`;
+  const newName = name || `${w.name}-branch`;
+
+  const args = ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "-y",
+    "--resume", w.sessionId, "--fork-session"];
+  if (w.model) args.push("--model", w.model);
+  if (w.permissionMode) args.push("--permission-mode", w.permissionMode);
+
+  const child = spawn("cbc", args, {
+    stdio: ["pipe", "pipe", "pipe"],
+    shell: true,
+  });
+
+  const newW: WorkerState = {
+    id: newId, name: newName,
+    status: "idle",
+    process: child,
+    sessionId: null,
+    history: [],
+    model: w.model,
+    permissionMode: w.permissionMode,
+  };
+
+  setupWorkerIO(newW, child);
+  workers.set(newId, newW);
+
+  broadcast({
+    type: "worker.spawned",
+    workerId: newId,
+    name: newName,
+    status: "idle",
+    parentWorkerId: workerId,
+    parentSessionId: w.sessionId,
+  });
+  return newW;
+}
+
+function renameWorker(workerId: string, newName: string): string | null {
+  const w = workers.get(workerId);
+  if (!w) return "Worker not found";
+
+  const oldName = w.name;
+  w.name = newName;
+
+  broadcast({
+    type: "worker.renamed",
+    workerId,
+    oldName,
+    newName,
   });
   return null;
 }
@@ -219,6 +312,7 @@ app.post("/api/spawn", (_req, res) => {
 app.get("/api/list", (_req, res) => {
   const list = [...workers.values()].map(w => ({
     workerId: w.id, name: w.name, status: w.status, sessionId: w.sessionId,
+    model: w.model, permissionMode: w.permissionMode,
   }));
   res.json({ workers: list });
 });
@@ -240,6 +334,41 @@ app.post("/api/worker/:id/restart", (req, res) => {
   const err = restartWorker(req.params.id);
   if (err) { res.status(400).json({ error: err }); return; }
   res.json({ workerId: req.params.id, status: "restarted" });
+});
+
+app.post("/api/worker/:id/switch-model", (req, res) => {
+  const { model } = req.body;
+  if (!model) { res.status(400).json({ error: "model is required" }); return; }
+  const err = respawnWorker(req.params.id, ["--model", model]);
+  if (err) { res.status(400).json({ error: err }); return; }
+  const w = workers.get(req.params.id)!;
+  w.model = model;
+  res.json({ workerId: req.params.id, model, status: "switched" });
+});
+
+app.post("/api/worker/:id/switch-mode", (req, res) => {
+  const { permissionMode } = req.body;
+  if (!permissionMode) { res.status(400).json({ error: "permissionMode is required" }); return; }
+  const err = respawnWorker(req.params.id, ["--permission-mode", permissionMode]);
+  if (err) { res.status(400).json({ error: err }); return; }
+  const w = workers.get(req.params.id)!;
+  w.permissionMode = permissionMode;
+  res.json({ workerId: req.params.id, permissionMode, status: "switched" });
+});
+
+app.post("/api/worker/:id/branch", (req, res) => {
+  const { name } = req.body;
+  const result = branchWorker(req.params.id, name);
+  if (typeof result === "string") { res.status(400).json({ error: result }); return; }
+  res.json({ workerId: result.id, name: result.name, status: "idle", parentWorkerId: req.params.id });
+});
+
+app.post("/api/worker/:id/rename", (req, res) => {
+  const { name } = req.body;
+  if (!name) { res.status(400).json({ error: "name is required" }); return; }
+  const err = renameWorker(req.params.id, name);
+  if (err) { res.status(400).json({ error: err }); return; }
+  res.json({ workerId: req.params.id, name, status: "renamed" });
 });
 
 // HTTP + WS on same port
