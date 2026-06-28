@@ -34,6 +34,7 @@ class Worker:
     _stdout_task: asyncio.Task | None = None
     _consume_task: asyncio.Task | None = None
     queue: asyncio.Queue | None = None
+    _replaying: bool = False  # true during cbc --resume event replay
 
 
 workers: dict[str, Worker] = {}
@@ -102,8 +103,8 @@ async def _read_stdout(w: Worker):
                     s.model = event.get("model")
                 _sess.save(s)
 
-        # 收集对话历史 → 写入 Session
-        if t == "assistant":
+        # 收集对话历史（replay 期间跳过，避免重复追加）
+        if t == "assistant" and not w._replaying:
             s = _session(w)
             if s:
                 for b in event.get("message", {}).get("content", []) or []:
@@ -122,6 +123,13 @@ async def _read_stdout(w: Worker):
             s = _session(w)
             is_error = event.get("is_error", False)
             w.status = "error" if is_error else "done"
+
+            # replay 结束：标记完成，不保存（history 无变化）
+            if w._replaying:
+                w._replaying = False
+                w.status = "idle"
+                continue
+
             if s:
                 s.last_result = {
                     "status": w.status,
@@ -200,6 +208,8 @@ async def create_worker(session_id: str) -> Worker | str:
 
     worker_id = await _next_worker_id()
 
+    resuming = bool(s.cbc_session_id)
+
     extra_args = ["--model", s.model or DEFAULT_MODEL]
     if s.permission_mode:
         extra_args.extend(["--permission-mode", s.permission_mode])
@@ -222,7 +232,8 @@ async def create_worker(session_id: str) -> Worker | str:
         return f"OS error: {e}"
 
     w = Worker(worker_id=worker_id, session_id=session_id,
-               status="idle", process=process, queue=asyncio.Queue())
+               status="idle", process=process, queue=asyncio.Queue(),
+               _replaying=resuming)
     workers[worker_id] = w
     w._stdout_task = asyncio.create_task(_read_stdout(w))
     w._consume_task = asyncio.create_task(_consumer(w))
@@ -338,6 +349,9 @@ async def restart_worker(worker_id: str) -> str | None:
         return f"Spawn failed ({w.session_id}): {proc}"
     w.process = proc
     w.status = "idle"
+    # if session has cbc_session_id, --resume was used → enter replay mode
+    s = _sess.get(w.session_id)
+    w._replaying = bool(s and s.cbc_session_id)
     await _restart_tasks(w)
 
     s = _session(w)
