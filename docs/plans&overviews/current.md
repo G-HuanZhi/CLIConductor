@@ -96,3 +96,55 @@ CLIConductor/
 | 4 | Workdir 清理机制 | 目前 kill Worker 不删 workdir。将来需要清理无效的临时工作目录 |
 | 5 | 权限控制 | 目前通过 `source` 参数和独立 WS 通道辨别命令来源，未实现真正的权限限制 |
 | 6 | 崩溃自动恢复 | Worker 进程崩溃后自动检测并恢复 |
+
+---
+
+## 五、QQ 集成（开发中）
+
+### 架构
+
+```
+QQ 用户 → NapCat（OneBot v11 WS 协议端）
+        → NoneBot2（Python 框架）
+          → CLIConductor QQ Plugin
+            → CLIConductor HTTP API
+              → Worker → cbc
+```
+
+### 实现方式
+
+| 组件 | 用途 |
+|------|------|
+| [NapCat](https://github.com/NapNeko/NapCatQQ) | QQ 协议实现，作为 OneBot v11 WebSocket 服务端 |
+| [NoneBot2](https://github.com/nonebot/nonebot2) | 异步 Python 聊天机器人框架 |
+| `nonebot-adapter-onebot` | NoneBot2 的 OneBot v11 适配器 |
+| `qq-bridge/` | CLIConductor 自带 NoneBot2 插件 + 配置 |
+
+### 工作流程
+
+1. 用户在 QQ 中向 bot 发消息
+2. NapCat 接收 → 通过 WS 转发给 NoneBot2
+3. 插件收到消息 → 查 QQ→Session 映射
+4. 无映射 → `POST /api/sessions` 创建 Session → `POST /api/spawn` 启动 Worker
+5. `POST /api/task {sessionId, text}` → 任务入队
+6. 轮询 `GET /api/sessions/{id}` → 检测 last_result 更新
+7. 结果通过 QQ 消息返回给用户
+
+### 文件结构
+
+```
+CLIConductor/
+├── qq-bridge/
+│   ├── bot.py                  # NoneBot2 入口 + 主插件
+│   ├── .env                    # NoneBot2 配置
+│   └── requirements.txt        # 依赖
+```
+
+### TODO
+
+- [ ] NapCat 安装与配置文档
+- [ ] NoneBot2 插件基础框架（消息接收 + API 调用）
+- [ ] Session 映射管理（QQ 用户 ↔ CLIConductor Session）
+- [ ] 任务结果轮询与回传
+- [ ] 并发消息处理（多用户同时使用）
+
