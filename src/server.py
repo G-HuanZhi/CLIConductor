@@ -324,3 +324,38 @@ async def api_interrupt(worker_id: str):
     if err:
         return {"error": err}
     return {"workerId": worker_id, "status": "interrupted"}
+
+
+@app.post("/api/worker/{worker_id}/takeover")
+async def api_takeover(worker_id: str):
+    """Open a new PowerShell window running interactive cbc --resume in the worker's workdir."""
+    import subprocess
+
+    w = worker.get_worker(worker_id)
+    if not w:
+        return {"error": "Worker not found"}
+    if not w.session_id:
+        return {"error": "Worker has no session yet"}
+
+    # Kill the managed cbc process so the interactive session can use --resume
+    err = await worker.restart_worker(worker_id)
+    if err:
+        return {"error": err}
+
+    cmd = f'cd /d "{w.workdir}" && cbc --resume {w.session_id}'
+    try:
+        subprocess.Popen(
+            ["powershell.exe", "-NoExit", "-Command", cmd],
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
+    except FileNotFoundError:
+        return {"error": "powershell.exe not found"}
+    except OSError as e:
+        return {"error": str(e)}
+
+    return {
+        "workerId": worker_id,
+        "sessionId": w.session_id,
+        "workdir": w.workdir,
+        "status": "takeover started",
+    }
