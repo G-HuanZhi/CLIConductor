@@ -1,11 +1,23 @@
+# Python virtual environment
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Node (if any)
 node_modules/
-dist/
-*.log
-.env
-.DS_Store
-*.tsbuildinfo
-coverage/
-docs/oversight/
-.idea/
+
+# IDE
 .vscode/
-archive/others/image.png
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# spike residues (may be locked by running processes)
+spike-node/
+spike-python/
