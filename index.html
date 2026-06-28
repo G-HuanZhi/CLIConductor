@@ -421,25 +421,46 @@ function send() {
   // show user message locally
   addMessage('user', text);
 
-  // send via WS
-  ws.send(JSON.stringify({type:'user_inject', sessionId:currentSessionId, text:text}));
+  // helper: actually send via WS
+  function doSend() {
+    ws.send(JSON.stringify({type:'user_inject', sessionId:currentSessionId, text:text}));
+  }
+
+  // if no worker, spawn first with settings panel's model/mode
+  if (!currentWorkerId) {
+    var model = getSettingModel();
+    var mode = document.getElementById('settingMode').value;
+    var body = {sessionId: currentSessionId, model: model};
+    if (mode) body.permissionMode = mode;
+    fetch('/api/spawn', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.error) return toast('Spawn failed: ' + d.error);
+      currentWorkerId = d.workerId;
+      doSend();
+    });
+    return;
+  }
+
+  doSend();
 }
 
 // ── New Session ──
 function newSession() {
   var name = 'session-' + (modelData.length + 1);
-  // check name uniqueness
   var n = 1;
   while (modelData.find(function(s) { return s.name === name; })) {
     name = 'session-' + (modelData.length + n);
     n++;
   }
-
-  fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name})})
+  // only create session, don't spawn worker yet
+  fetch('/api/sessions', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name})})
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (d.error) return toast(d.error);
-      // the WS event will refresh the list
+      refreshSessions();
+      selectSession(d.id);
     });
 }
 
