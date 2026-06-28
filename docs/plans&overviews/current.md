@@ -140,11 +140,28 @@ CLIConductor/
 │   └── requirements.txt        # 依赖
 ```
 
-### TODO
+### 当前状态
 
-- [ ] NapCat 安装与配置文档
-- [ ] NoneBot2 插件基础框架（消息接收 + API 调用）
-- [ ] Session 映射管理（QQ 用户 ↔ CLIConductor Session）
-- [ ] 任务结果轮询与回传
-- [ ] 并发消息处理（多用户同时使用）
+| 事项 | 状态 |
+|------|:----:|
+| NapCat 安装与配置 | ✅ 已安装，端口 3001 运行中 |
+| NoneBot2 插件框架（消息接收 + API 调用） | ✅ `qq-bridge/bot.py` + `plugin.py` |
+| QQ 消息可达 NoneBot2 | ✅ NapCat → NoneBot2 链路已通 |
+| 调用 CLIConductor API 创建 Session | ❌ 返回 `[CLIConductor] 无法创建会话`，待排查 |
+| Session 映射管理 | 待修复 |
+| 任务结果轮询与回传 | 待修复 |
+
+### 启动顺序
+
+1. NapCat（先启动，保持后台）
+2. `cd CLIConductor-test && python main.py`
+3. `cd CLIConductor-test/qq-bridge && python bot.py`
+
+### 端口
+
+| 服务 | 端口 |
+|------|------|
+| CLIConductor | 8767 |
+| NoneBot2 HTTP | 8080 |
+| NapCat WS | 3001 |
 
