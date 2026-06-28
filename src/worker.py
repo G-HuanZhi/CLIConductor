@@ -11,6 +11,16 @@ from . import session as _sess
 CBC_PATH = r"D:\node_npm\node_global\cbc.cmd"
 DEFAULT_MODEL = "deepseek-v4-flash"
 
+# Supported models (from `cbc --help` --model flag, manual list)
+SUPPORTED_MODELS = [
+    "glm-5.2", "glm-5.1", "glm-5.0", "glm-5.0-turbo", "glm-5v-turbo", "glm-4.7",
+    "minimax-m3", "minimax-m2.7",
+    "kimi-k2.7", "kimi-k2.6", "kimi-k2.5",
+    "hy3-preview",
+    "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v3-2-volc",
+    "custom-local:deepseek-v4-pro",
+]
+
 
 @dataclass
 class Worker:

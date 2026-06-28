@@ -203,6 +203,11 @@ async def api_spawn(data: dict):
     }
 
 
+@app.get("/api/models")
+async def api_models():
+    return {"models": worker.SUPPORTED_MODELS, "default": worker.DEFAULT_MODEL}
+
+
 @app.get("/api/list")
 async def api_list():
     return {

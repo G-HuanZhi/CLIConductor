@@ -57,6 +57,10 @@
 <div id="toast" class="toast"></div>
 
 <script>
+// ── Model list (populated from API) ──
+var allModels = [];
+var defaultModel = 'deepseek-v4-flash';
+
 // ── WebSocket ──
 var ws = new WebSocket('ws://' + location.host + '/ws');
 ws.onopen = () => { fetchWorkers(); };
@@ -77,6 +81,12 @@ ws.onmessage = function(e) {
 
 // ── Fetch current state on reconnect ──
 function fetchWorkers() {
+  fetch('/api/models').then(r => r.json()).then(data => {
+    allModels = data.models || [];
+    defaultModel = data.default || 'deepseek-v4-flash';
+    // re-populate any existing model selects
+    document.querySelectorAll('[id^="model-"]').forEach(sel => rebuildModelSelect(sel.id.replace('model-', '')));
+  });
   fetch('/api/list').then(r => r.json()).then(data => {
     clearGrid();
     (data.workers || []).forEach(w => {
@@ -115,8 +125,9 @@ function addCard(d) {
       </div>
     </div>
     <div class="controls">
-      <input id="model-${id}" placeholder="model" value="">
-      <button class="btn" onclick="switchModel('${id}')">Model</button>
+      <select id="model-${id}" data-current="${d.model || ''}" onchange="onModelChange('${id}')"></select>
+      <input id="model-custom-${id}" placeholder="custom model" style="display:none;max-width:140px">
+      <button class="btn btn-primary" onclick="switchModel('${id}')">Model</button>
       <select id="mode-${id}">
         <option value="">mode…</option>
         <option value="default">default</option>
@@ -141,6 +152,7 @@ function addCard(d) {
   `;
 
   document.getElementById('grid').appendChild(card);
+  rebuildModelSelect(id);
   updateCount();
 }
 
@@ -163,6 +175,55 @@ function updateCount() {
 function updateName(id, newName) {
   var el = document.getElementById('title-' + id);
   if (el) el.innerHTML = '<span id="dot-'+id+'" class="status-dot idle"></span>' + esc(newName);
+}
+
+// ── Model select helpers ──
+function rebuildModelSelect(id) {
+  var sel = document.getElementById('model-' + id);
+  if (!sel) return;
+  var current = sel.getAttribute('data-current') || '';
+  sel.innerHTML = '';
+  // blank option
+  var blank = document.createElement('option');
+  blank.value = ''; blank.textContent = '— model —';
+  sel.appendChild(blank);
+  // all known models
+  allModels.forEach(function(m) {
+    var opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m;
+    if (m === current || m === defaultModel && !current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  // custom option
+  var custom = document.createElement('option');
+  custom.value = '__custom__';
+  custom.textContent = '✎ custom…';
+  sel.appendChild(custom);
+  // show custom input if needed
+  if (current && allModels.indexOf(current) === -1) {
+    sel.value = '__custom__';
+    var inp = document.getElementById('model-custom-' + id);
+    if (inp) { inp.value = current; inp.style.display = 'inline-block'; }
+  }
+}
+
+function onModelChange(id) {
+  var sel = document.getElementById('model-' + id);
+  var inp = document.getElementById('model-custom-' + id);
+  if (!sel || !inp) return;
+  inp.style.display = sel.value === '__custom__' ? 'inline-block' : 'none';
+  if (sel.value !== '__custom__') inp.value = '';
+}
+
+function getModelValue(id) {
+  var sel = document.getElementById('model-' + id);
+  if (!sel) return '';
+  if (sel.value === '__custom__') {
+    var inp = document.getElementById('model-custom-' + id);
+    return inp ? inp.value.trim() : '';
+  }
+  return sel.value;
 }
 
 // ── Event rendering ──
@@ -271,8 +332,8 @@ function interrupt(id) {
 }
 
 function switchModel(id) {
-  var model = document.getElementById('model-' + id).value.trim();
-  if (!model) return toast('Enter a model name');
+  var model = getModelValue(id);
+  if (!model) return toast('Select or enter a model');
   fetch('/api/worker/' + id + '/switch-model', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model:model})}).then(r => r.json()).then(d => {
     if (d.error) toast(d.error);
   });
