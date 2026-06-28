@@ -374,6 +374,8 @@ async def send_task(worker_id: str, text: str, source: str = "agent") -> str | N
     w = workers.get(worker_id)
     if not w:
         return "Worker not found"
+    if w.status == "held":
+        return "Worker is held (takeover mode). Restart first."
     if w.process is None or w.process.returncode is not None:
         return "Worker process dead"
     if w.queue is None:

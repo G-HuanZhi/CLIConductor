@@ -344,6 +344,14 @@ async def api_takeover(worker_id: str):
     if err:
         return {"error": err}
 
+    # Mark as held: block all task input until restart
+    w.status = "held"
+    await broadcast({
+        "type": "worker.status",
+        "workerId": worker_id,
+        "status": "held",
+    })
+
     cmd = f'cd "{w.workdir}"; cbc --resume {w.session_id}'
     try:
         subprocess.Popen(

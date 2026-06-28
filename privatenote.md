@@ -1,0 +1,1 @@
+takeover后还可以继续通过dashboard对话，且对话的记录无法在resume中找到。这是怎么回事？
