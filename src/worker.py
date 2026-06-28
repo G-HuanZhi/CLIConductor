@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from . import session as _sess
 
 CBC_PATH = r"D:\node_npm\node_global\cbc.cmd"
+DEFAULT_MODEL = "deepseek-v4-flash"
 
 
 @dataclass
@@ -139,13 +140,14 @@ async def _consumer(w: Worker):
 
 # ── lifecycle ──
 
-async def create_worker(name: str, workdir: str) -> Worker:
+async def create_worker(name: str, workdir: str,
+                        extra_args: list[str] | None = None) -> Worker:
     global _next_id
     worker_id = f"worker-{_next_id}"
     _next_id += 1
 
     process = await asyncio.create_subprocess_exec(
-        *_base_args(),
+        *_base_args(), *(extra_args or []),
         stdout=asyncio.subprocess.PIPE,
         stdin=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
@@ -368,3 +370,91 @@ def get_worker(worker_id: str) -> Worker | None:
 
 def list_workers() -> list[Worker]:
     return list(workers.values())
+
+
+# ── restore & shutdown (for server lifecycle) ──
+
+
+async def restore_worker_from_session(session: dict) -> Worker | None:
+    """Restore a worker from saved session data.
+
+    *session* dict keys: worker_id, name, workdir, session_id,
+    model, permission_mode, history.
+    """
+    worker_id = session.get("worker_id")
+    name = session.get("name", "restored")
+    workdir = session.get("workdir", "")
+    session_id = session.get("session_id")
+    model = session.get("model") or DEFAULT_MODEL
+    permission_mode = session.get("permission_mode")
+    history = session.get("history", [])
+
+    if not session_id:
+        return None  # no session to resume
+
+    extra_args = ["--model", model]
+    if permission_mode:
+        extra_args.extend(["--permission-mode", permission_mode])
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *_base_args(), *(extra_args or []),
+            "--resume", session_id,
+            stdout=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=workdir or None,
+        )
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return None
+
+    w = Worker(worker_id=worker_id, name=name, workdir=workdir,
+               status="idle", process=process,
+               session_id=session_id, model=model,
+               permission_mode=permission_mode,
+               history=history.copy(), queue=asyncio.Queue())
+    workers[worker_id] = w
+
+    # keep _next_id from reusing restored ids
+    global _next_id
+    try:
+        num = int(worker_id.rsplit("-", 1)[-1])
+        _next_id = max(_next_id, num + 1)
+    except (ValueError, IndexError):
+        pass
+    w._stdout_task = asyncio.create_task(_read_stdout(w))
+    w._consume_task = asyncio.create_task(_consumer(w))
+
+    await _broadcast({
+        "type": "worker.restored",
+        "workerId": worker_id,
+        "name": name,
+        "status": "idle",
+        "sessionId": session_id,
+        "model": model,
+        "workdir": workdir,
+    })
+    return w
+
+
+async def shutdown_all():
+    """Kill all child processes and cancel tasks."""
+    ids = list(workers.keys())
+    for wid in ids:
+        w = workers.get(wid)
+        if not w:
+            continue
+        # cancel consumer first
+        if w._consume_task:
+            w._consume_task.cancel()
+        if w._stdout_task:
+            w._stdout_task.cancel()
+        # kill process
+        if w.process:
+            try:
+                w.process.kill()
+            except ProcessLookupError:
+                pass
+    workers.clear()

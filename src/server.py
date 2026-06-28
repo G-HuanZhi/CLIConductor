@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -11,23 +12,64 @@ from fastapi.responses import HTMLResponse
 from . import worker
 from . import session as sess
 
-app = FastAPI(title="CLIConductor")
+# ── lifespan ──
 
-# ── WebSocket ──
-ws_clients: set[WebSocket] = set()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: restore workers from saved sessions.
+    Shutdown: kill all child processes."""
+    restored = await _restore_workers()
+    if restored:
+        print(f"[CLIConductor] Restored {len(restored)} workers from session files")
+    yield
+    await worker.shutdown_all()
+    print("[CLIConductor] All workers shut down")
+
+
+app = FastAPI(title="CLIConductor", lifespan=lifespan)
+
+# ── WS client sets ──
+ws_clients: set[WebSocket] = set()     # Dashboard
+agent_clients: set[WebSocket] = set()  # Main Agent
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 WORKDIRS_DIR = DATA_DIR / "workdirs"
 DASHBOARD_FILE = Path(__file__).resolve().parent.parent / "index.html"
 
+# ── startup helpers ──
+
+
+async def _restore_workers() -> list[str]:
+    """Restore workers from saved session JSON files."""
+    sessions = sess.load_all_sessions()
+    restored_ids: list[str] = []
+    for s in sessions:
+        w = await worker.restore_worker_from_session(s)
+        if w:
+            restored_ids.append(w.worker_id)
+    return restored_ids
+
+
+# ── broadcast (dashboard + agent) ──
+
 
 async def broadcast(data: dict):
     dead = set()
-    for ws in ws_clients:
+    for ws in list(ws_clients):
         try:
             await ws.send_json(data)
         except Exception:
             dead.add(ws)
     ws_clients.difference_update(dead)
+
+    dead_a = set()
+    for ws in list(agent_clients):
+        try:
+            await ws.send_json(data)
+        except Exception:
+            dead_a.add(ws)
+    agent_clients.difference_update(dead_a)
 
 
 # Install broadcaster into worker module
@@ -41,7 +83,7 @@ async def dashboard():
     return DASHBOARD_FILE.read_text(encoding="utf-8")
 
 
-# ── WebSocket ──
+# ── WebSocket: Dashboard ──
 
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
@@ -69,6 +111,81 @@ async def ws_endpoint(ws: WebSocket):
         ws_clients.discard(ws)
 
 
+# ── WebSocket: Main Agent ──
+
+@app.websocket("/ws/agent")
+async def ws_agent_endpoint(ws: WebSocket):
+    """Dedicated WebSocket endpoint for the main Agent.
+
+    Agent receives all events (worker.spawned, worker.stream,
+    worker.result, etc.) and can send task commands:
+
+        {"type": "task", "workerId": "worker-1", "text": "do something"}
+
+    Also supports: spawn, kill, list via WS.
+    """
+    await ws.accept()
+    agent_clients.add(ws)
+    try:
+        while True:
+            raw = await ws.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            msg_type = msg.get("type")
+
+            if msg_type == "task":
+                worker_id = msg.get("workerId")
+                text = msg.get("text")
+                if worker_id and text:
+                    err = await worker.send_task(worker_id, text, source="agent")
+                    if err:
+                        await ws.send_json({"type": "error", "message": err})
+
+            elif msg_type == "spawn":
+                name = msg.get("name", "agent-worker")
+                workdir = WORKDIRS_DIR / name
+                workdir.mkdir(parents=True, exist_ok=True)
+                w = await worker.create_worker(
+                    name, str(workdir),
+                    extra_args=["--model", worker.DEFAULT_MODEL],
+                )
+                await ws.send_json({
+                    "type": "worker.spawned",
+                    "workerId": w.worker_id, "name": w.name,
+                    "status": w.status, "workdir": w.workdir,
+                })
+
+            elif msg_type == "kill":
+                worker_id = msg.get("workerId")
+                if worker_id:
+                    err = await worker.kill_worker(worker_id)
+                    if not err:
+                        sess.delete_session(worker_id)
+
+            elif msg_type == "list":
+                wl = worker.list_workers()
+                await ws.send_json({
+                    "type": "worker.list",
+                    "workers": [
+                        {
+                            "workerId": w.worker_id, "name": w.name,
+                            "status": w.status, "sessionId": w.session_id,
+                            "model": w.model,
+                            "permissionMode": w.permission_mode,
+                        }
+                        for w in wl
+                    ],
+                })
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        agent_clients.discard(ws)
+
+
 # ── API routes ──
 
 @app.post("/api/spawn")
@@ -76,8 +193,14 @@ async def api_spawn(data: dict):
     name = data.get("name", "default")
     workdir = WORKDIRS_DIR / name
     workdir.mkdir(parents=True, exist_ok=True)
-    w = await worker.create_worker(name, str(workdir))
-    return {"workerId": w.worker_id, "name": w.name, "status": w.status, "workdir": w.workdir}
+    w = await worker.create_worker(
+        name, str(workdir),
+        extra_args=["--model", worker.DEFAULT_MODEL],
+    )
+    return {
+        "workerId": w.worker_id, "name": w.name,
+        "status": w.status, "workdir": w.workdir, "model": w.model or worker.DEFAULT_MODEL,
+    }
 
 
 @app.get("/api/list")
