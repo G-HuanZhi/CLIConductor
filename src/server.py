@@ -147,16 +147,24 @@ async def ws_agent_endpoint(ws: WebSocket):
             elif msg_type == "spawn":
                 name = msg.get("name", "agent-worker")
                 model = msg.get("model") or worker.DEFAULT_MODEL
-                workdir = WORKDIRS_DIR / name
+                permission_mode = msg.get("permissionMode") or ""
+                workdir_name = msg.get("workdir") or name
+                workdir = WORKDIRS_DIR / workdir_name
                 workdir.mkdir(parents=True, exist_ok=True)
+                extra_args = ["--model", model]
+                if permission_mode:
+                    extra_args.extend(["--permission-mode", permission_mode])
                 w = await worker.create_worker(
-                    name, str(workdir),
-                    extra_args=["--model", model],
+                    name, str(workdir), extra_args=extra_args,
                 )
+                if permission_mode:
+                    w.permission_mode = permission_mode
                 await ws.send_json({
                     "type": "worker.spawned",
                     "workerId": w.worker_id, "name": w.name,
-                    "status": w.status, "workdir": w.workdir, "model": model,
+                    "status": w.status, "workdir": w.workdir,
+                    "model": model,
+                    "permissionMode": permission_mode or None,
                 })
 
             elif msg_type == "kill":
@@ -193,15 +201,23 @@ async def ws_agent_endpoint(ws: WebSocket):
 async def api_spawn(data: dict):
     name = data.get("name", "default")
     model = data.get("model") or worker.DEFAULT_MODEL
-    workdir = WORKDIRS_DIR / name
+    permission_mode = data.get("permissionMode") or ""
+    workdir_name = data.get("workdir") or name
+    workdir = WORKDIRS_DIR / workdir_name
     workdir.mkdir(parents=True, exist_ok=True)
-    w = await worker.create_worker(
-        name, str(workdir),
-        extra_args=["--model", model],
-    )
+
+    extra_args = ["--model", model]
+    if permission_mode:
+        extra_args.extend(["--permission-mode", permission_mode])
+
+    w = await worker.create_worker(name, str(workdir), extra_args=extra_args)
+    if permission_mode:
+        w.permission_mode = permission_mode
+
     return {
         "workerId": w.worker_id, "name": w.name,
-        "status": w.status, "workdir": w.workdir, "model": model,
+        "status": w.status, "workdir": w.workdir,
+        "model": model, "permissionMode": permission_mode or None,
     }
 
 

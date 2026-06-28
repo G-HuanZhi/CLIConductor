@@ -45,13 +45,26 @@
 
 <h1>⚡ CLIConductor</h1>
 
-<div class="toolbar">
-  <span>New Worker:</span>
-  <input id="newName" placeholder="name (optional)" value="worker">
-  <select id="spawnModel" onchange="onSpawnModelChange()"></select>
-  <input id="spawnModelCustom" placeholder="custom model" style="display:none;max-width:140px">
-  <button class="btn btn-primary" onclick="spawn()">+ Spawn</button>
-  <span id="workerCount" style="margin-left:auto;font-size:.8rem;color:#8b949e">0 workers</span>
+<div class="toolbar" style="flex-direction:column;align-items:stretch;gap:6px">
+  <div style="display:flex;gap:8px;align-items:center">
+    <span style="font-weight:600;white-space:nowrap">+ New Worker</span>
+    <input id="newName" placeholder="name" value="worker" style="flex:1;min-width:80px">
+    <button class="btn btn-primary" onclick="spawn()" style="white-space:nowrap">+ Spawn</button>
+    <span id="workerCount" style="font-size:.8rem;color:#8b949e;white-space:nowrap">0 workers</span>
+  </div>
+  <div class="controls" style="margin-bottom:0">
+    <select id="spawnModel" onchange="onSpawnModelChange()"></select>
+    <input id="spawnModelCustom" placeholder="custom model" style="display:none;max-width:140px">
+    <select id="spawnMode">
+      <option value="">mode…</option>
+      <option value="default">default</option>
+      <option value="acceptEdits">acceptEdits</option>
+      <option value="bypassPermissions">bypass</option>
+      <option value="plan">plan</option>
+      <option value="dontAsk">dontAsk</option>
+    </select>
+    <input id="spawnWorkdir" placeholder="workdir (auto)" style="max-width:200px">
+  </div>
 </div>
 
 <div id="grid" class="grid"></div>
@@ -338,7 +351,12 @@ function setStatus(id, s) {
 function spawn() {
   var name = document.getElementById('newName').value || 'worker';
   var model = getSpawnModel();
-  fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name, model:model})});
+  var mode = document.getElementById('spawnMode').value;
+  var workdir = document.getElementById('spawnWorkdir').value.trim() || undefined;
+  var body = {name: name, model: model};
+  if (mode) body.permissionMode = mode;
+  if (workdir) body.workdir = workdir;
+  fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
 }
 
 function inject(id) {
