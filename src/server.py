@@ -342,7 +342,7 @@ async def api_takeover(worker_id: str):
     if err:
         return {"error": err}
 
-    cmd = f'cd /d "{w.workdir}" && cbc --resume {w.session_id}'
+    cmd = f'cd "{w.workdir}"; cbc --resume {w.session_id}'
     try:
         subprocess.Popen(
             ["powershell.exe", "-NoExit", "-Command", cmd],
