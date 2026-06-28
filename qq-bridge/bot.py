@@ -6,7 +6,7 @@
 使用方式：
   1. 启动 NapCat（QQ 协议端）
   2. 启动 CLIConductor（python main.py）
-  3. 启动本 bot：nb run 或 python bot.py
+  3. 启动本 bot：python bot.py
 """
 
 from __future__ import annotations
@@ -269,3 +269,12 @@ if driver:
         for task in _poll_tasks.values():
             task.cancel()
         await _http.aclose()
+
+
+# ── 主入口 ──
+
+if __name__ == "__main__":
+    import nonebot
+    nonebot.init()
+    nonebot.load_plugin(__name__)
+    nonebot.run()
