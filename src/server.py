@@ -185,6 +185,7 @@ async def ws_agent_endpoint(ws: WebSocket):
                             "model": w.model,
                             "permissionMode": w.permission_mode,
                             "lastResult": w.last_result,
+                            "history": w.history,
                         }
                         for w in wl
                     ],
@@ -236,6 +237,7 @@ async def api_list():
                 "sessionId": w.session_id, "model": w.model,
                 "permissionMode": w.permission_mode, "workdir": w.workdir,
                 "lastResult": w.last_result,
+                "history": w.history,
             }
             for w in worker.list_workers()
         ]

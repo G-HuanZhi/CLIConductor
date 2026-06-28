@@ -108,7 +108,8 @@ function fetchWorkers() {
     (data.workers || []).forEach(w => {
       addCard({workerId: w.workerId, name: w.name, status: w.status,
                sessionId: w.sessionId, model: w.model,
-               permissionMode: w.permissionMode, workdir: w.workdir});
+               permissionMode: w.permissionMode, workdir: w.workdir,
+               lastResult: w.lastResult, history: w.history});
     });
   });
 }
@@ -125,12 +126,13 @@ function addCard(d) {
   card.innerHTML = `
     <div class="card-header">
       <div>
-        <h2 id="title-${id}"><span id="dot-${id}" class="status-dot idle"></span>${esc(d.name)}</h2>
+        <h2 id="title-${id}"><span id="dot-${id}" class="status-dot ${d.status || 'idle'}"></span>${esc(d.name)}</h2>
         <div class="meta" id="meta-${id}">
           ${d.workerId}
           ${d.sessionId ? ' · session: ' + d.sessionId.slice(0,8)+'…' : ''}
           ${d.model ? ' · ' + esc(d.model) : ''}
           ${d.workdir ? ' · ' + esc(d.workdir) : ''}
+          ${d.lastResult ? ' · last: ' + d.lastResult.status : ''}
         </div>
       </div>
       <div class="controls">
@@ -169,6 +171,7 @@ function addCard(d) {
 
   document.getElementById('grid').appendChild(card);
   rebuildModelSelect(id);
+  if (d.history) replayHistory(id, d.history);
   updateCount();
 }
 
@@ -191,6 +194,24 @@ function updateCount() {
 function updateName(id, newName) {
   var el = document.getElementById('title-' + id);
   if (el) el.innerHTML = '<span id="dot-'+id+'" class="status-dot idle"></span>' + esc(newName);
+}
+
+// ── Replay history into log (used on page refresh) ──
+function replayHistory(id, history) {
+  var log = document.getElementById('log-' + id);
+  if (!log || !history) return;
+  log.innerHTML = '';
+  history.forEach(function(h) {
+    var div = document.createElement('div');
+    div.className = 'msg';
+    if (h.role === 'user') { div.className += ' u'; div.textContent = h.content; }
+    else if (h.role === 'thinking') { div.className += ' th'; div.textContent = '💭 ' + h.content; }
+    else if (h.role === 'assistant') { div.className += ' tx'; div.textContent = h.content; }
+    else if (h.role === 'tool') { div.className += ' tl'; div.textContent = '🔧 ' + h.content; }
+    else { div.className += ' sys'; div.textContent = h.content || ''; }
+    log.appendChild(div);
+  });
+  log.scrollTop = log.scrollHeight;
 }
 
 // ── Model select helpers ──
