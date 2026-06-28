@@ -232,6 +232,66 @@ async def respawn_worker(worker_id: str, extra_args: list[str] | None = None) ->
     return None
 
 
+async def branch_worker(worker_id: str, name: str | None = None) -> Worker | str:
+    """从已有 worker 的会话分支出一个新 worker（新 sessionId + 旧历史）"""
+    w = workers.get(worker_id)
+    if not w:
+        return "Worker not found"
+    if not w.session_id:
+        return "Worker has no session yet"
+
+    global _next_id
+    new_id = f"worker-{_next_id}"
+    _next_id += 1
+    new_name = name or f"{w.name}-branch"
+
+    args = [CBC_PATH, "-p", "--output-format", "stream-json",
+            "--input-format", "stream-json", "-y",
+            "--resume", w.session_id, "--fork-session"]
+    if w.model:
+        args.extend(["--model", w.model])
+    if w.permission_mode:
+        args.extend(["--permission-mode", w.permission_mode])
+
+    process = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stdin=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+
+    new_w = Worker(worker_id=new_id, name=new_name, status="idle", process=process,
+                   model=w.model, permission_mode=w.permission_mode)
+    workers[new_id] = new_w
+    new_w._stdout_task = asyncio.create_task(_read_stdout(new_w))
+
+    await broadcast({
+        "type": "worker.spawned",
+        "workerId": new_id,
+        "name": new_name,
+        "status": "idle",
+        "parentWorkerId": worker_id,
+        "parentSessionId": w.session_id,
+    })
+    return new_w
+
+
+async def rename_worker(worker_id: str, new_name: str) -> str | None:
+    w = workers.get(worker_id)
+    if not w:
+        return "Worker not found"
+
+    old_name = w.name
+    w.name = new_name
+    await broadcast({
+        "type": "worker.renamed",
+        "workerId": worker_id,
+        "oldName": old_name,
+        "newName": new_name,
+    })
+    return None
+
+
 # ────────────────────────────────────────────
 # WebSocket
 # ────────────────────────────────────────────
@@ -342,6 +402,27 @@ async def api_switch_mode(worker_id: str, data: dict):
     w = workers[worker_id]
     w.permission_mode = mode
     return {"workerId": worker_id, "permissionMode": mode, "status": "switched"}
+
+
+@app.post("/api/worker/{worker_id}/rename")
+async def api_rename(worker_id: str, data: dict):
+    new_name = data.get("name")
+    if not new_name:
+        return {"error": "name is required"}
+    err = await rename_worker(worker_id, new_name)
+    if err:
+        return {"error": err}
+    return {"workerId": worker_id, "name": new_name, "status": "renamed"}
+
+
+@app.post("/api/worker/{worker_id}/branch")
+async def api_branch(worker_id: str, data: dict):
+    name = data.get("name")
+    result = await branch_worker(worker_id, name)
+    if isinstance(result, str):
+        return {"error": result}
+    return {"workerId": result.worker_id, "name": result.name, "status": "idle",
+            "parentWorkerId": worker_id}
 
 
 # ────────────────────────────────────────────
