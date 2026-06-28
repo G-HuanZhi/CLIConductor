@@ -38,12 +38,19 @@ class Worker:
 
 workers: dict[str, Worker] = {}
 
-_broadcast: callable = lambda data: None
+_broadcast: callable = None
 
 
 def set_broadcaster(fn: callable):
     global _broadcast
     _broadcast = fn
+
+
+async def _bcast(data: dict):
+    if _broadcast is not None:
+        r = _broadcast(data)
+        if hasattr(r, "__await__"):
+            await r
 
 
 # ── helpers ──
@@ -124,7 +131,7 @@ async def _read_stdout(w: Worker):
                 }
                 _sess.save(s)
 
-            await _broadcast({
+            await _bcast({
                 "type": "worker.result",
                 "workerId": w.worker_id,
                 "sessionId": w.session_id,
@@ -134,7 +141,7 @@ async def _read_stdout(w: Worker):
             w.status = "idle"
             continue
 
-        await _broadcast({
+        await _bcast({
             "type": "worker.stream",
             "workerId": w.worker_id,
             "sessionId": w.session_id,
@@ -171,7 +178,7 @@ async def _consumer(w: Worker):
         w.process.stdin.write((msg + "\n").encode())
         await w.process.stdin.drain()
 
-        await _broadcast({
+        await _bcast({
             "type": "worker.status",
             "workerId": w.worker_id,
             "sessionId": w.session_id,
@@ -210,9 +217,9 @@ async def create_worker(session_id: str) -> Worker | str:
             cwd=s.workdir or None,
         )
     except FileNotFoundError:
-        return "cbc not found"
+        return f"cbc not found at: {CBC_PATH}"
     except OSError as e:
-        return str(e)
+        return f"OS error: {e}"
 
     w = Worker(worker_id=worker_id, session_id=session_id,
                status="idle", process=process, queue=asyncio.Queue())
@@ -220,7 +227,7 @@ async def create_worker(session_id: str) -> Worker | str:
     w._stdout_task = asyncio.create_task(_read_stdout(w))
     w._consume_task = asyncio.create_task(_consumer(w))
 
-    await _broadcast({
+    await _bcast({
         "type": "worker.spawned",
         "workerId": worker_id,
         "sessionId": session_id,
@@ -251,7 +258,7 @@ async def kill_worker(worker_id: str) -> str | None:
             pass
 
     workers.pop(worker_id, None)
-    await _broadcast({
+    await _bcast({
         "type": "worker.destroyed",
         "workerId": worker_id,
         "sessionId": w.session_id,
@@ -285,8 +292,10 @@ async def _spawn_process(session_id: str,
             stderr=asyncio.subprocess.STDOUT,
             cwd=s.workdir or None,
         )
-    except (FileNotFoundError, OSError) as e:
-        return str(e)
+    except FileNotFoundError:
+        return f"cbc not found at: {CBC_PATH}"
+    except OSError as e:
+        return f"OS error spawning cbc: {e}"
 
 
 async def _restart_tasks(w: Worker):
@@ -305,21 +314,34 @@ async def restart_worker(worker_id: str) -> str | None:
     if not w:
         return "Worker not found"
 
+    # always clear held status
+    w.status = "idle"
+
+    # kill existing process regardless of state
     if w.process:
         try:
             w.process.kill()
         except ProcessLookupError:
             pass
+        except Exception:
+            pass
+        w.process = None
+
+    # cancel stale tasks
+    if w._consume_task:
+        w._consume_task.cancel()
+    if w._stdout_task:
+        w._stdout_task.cancel()
 
     proc = await _spawn_process(w.session_id)
     if isinstance(proc, str):
-        return proc
+        return f"Spawn failed ({w.session_id}): {proc}"
     w.process = proc
     w.status = "idle"
     await _restart_tasks(w)
 
     s = _session(w)
-    await _broadcast({
+    await _bcast({
         "type": "worker.restarted",
         "workerId": worker_id,
         "sessionId": w.session_id,
@@ -348,7 +370,7 @@ async def respawn_worker(worker_id: str, extra_args: list[str] | None = None) ->
     w.status = "idle"
     await _restart_tasks(w)
 
-    await _broadcast({
+    await _bcast({
         "type": "worker.reconfigured",
         "workerId": worker_id,
         "sessionId": w.session_id,
@@ -401,7 +423,7 @@ async def branch_worker(worker_id: str, new_session_id: str) -> Worker | str:
 
     _sess.save(s)
 
-    await _broadcast({
+    await _bcast({
         "type": "worker.spawned",
         "workerId": new_id,
         "sessionId": new_session_id,
