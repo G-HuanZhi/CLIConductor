@@ -140,6 +140,7 @@ var modelData = [];           // cache of sessions from API
 
 // ── WebSocket ──
 var ws = new WebSocket('ws://' + location.host + '/ws');
+ws.onopen = refreshSessions;
 ws.onmessage = onWsMessage;
 
 function onWsMessage(e) {
@@ -206,7 +207,10 @@ function renderSessionList() {
   modelData.forEach(function(s) {
     var div = document.createElement('div');
     div.className = 'sess-item' + (s.id === currentSessionId ? ' active' : '');
-    div.onclick = function() { selectSession(s.id); };
+    div.onclick = function(e) {
+      if (e.target.closest('.sess-del')) return;
+      selectSession(s.id);
+    };
 
     var lastMsg = '';
     var h = s.history || [];
@@ -217,7 +221,10 @@ function renderSessionList() {
     }
 
     div.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:start">' +
       '<div class="sess-name"><span class="s-dot ' + (s.workerStatus || 'idle') + '"></span>' + esc(s.name) + '</div>' +
+      '<button class="sess-del" onclick="deleteSession(\'' + s.id + '\')" title="Delete session" style="background:none;border:none;color:#484f58;cursor:pointer;font-size:.85rem;padding:0 2px">⚙</button>' +
+      '</div>' +
       (lastMsg ? '<div class="sess-preview">' + esc(lastMsg) + '</div>' : '') +
       '<div class="sess-meta"><span class="sess-model">' + esc(s.model || defaultModel) + '</span>' +
       '<span>' + (s.history || []).length + ' msgs</span></div>';
@@ -378,10 +385,21 @@ function applyMode() {
 }
 
 function restartWorker() {
-  if (!currentWorkerId) return toast('No worker running');
-  fetch('/api/worker/' + currentWorkerId + '/restart', {method:'POST'}).then(function(r) { return r.json(); }).then(function(d) {
-    if (d.error) toast(d.error);
-  });
+  if (currentWorkerId) {
+    fetch('/api/worker/' + currentWorkerId + '/restart', {method:'POST'}).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.error) toast(d.error);
+    });
+  } else {
+    // no worker: spawn one with current settings
+    var model = getSettingModel();
+    var mode = document.getElementById('settingMode').value;
+    var body = {sessionId: currentSessionId, model: model};
+    if (mode) body.permissionMode = mode;
+    fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
+      .then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) toast('Spawn failed: ' + d.error);
+      });
+  }
 }
 
 function interruptWorker() {
@@ -462,6 +480,19 @@ function newSession() {
       refreshSessions();
       selectSession(d.id);
     });
+}
+
+function deleteSession(id) {
+  if (!confirm('Delete session ' + id.slice(0,12) + '…?')) return;
+  fetch('/api/sessions/' + id, {method:'DELETE'}).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) return toast(d.error);
+    if (currentSessionId === id) {
+      currentSessionId = null;
+      currentWorkerId = null;
+      showEmpty();
+    }
+    refreshSessions();
+  });
 }
 
 // ── Init ──
