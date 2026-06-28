@@ -1,81 +1,333 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>CLIConductor Spike (Python)</title>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>CLIConductor Dashboard</title>
 <style>
-  body{font-family:monospace;background:#111;color:#ff0;padding:20px}
-  .worker{border:1px solid #333;margin:10px 0;padding:10px}
-  .status{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
-  .idle{background:#888}.running{background:#0f0}.done{background:#0af}.error{background:#f00}
-  pre{white-space:pre-wrap;max-height:300px;overflow-y:auto;background:#000;padding:10px}
-  input,button{padding:5px;margin:3px;font-family:monospace}
-  input{width:300px}
-</style></head><body>
-<h2>CLIConductor Spike (Python)</h2>
-<div id="workers"></div>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3;padding:20px}
+  h1{font-size:1.5rem;margin-bottom:16px;color:#58a6ff}
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:16px}
+  .toolbar input{padding:6px 10px;border:1px solid #30363d;border-radius:6px;background:#161b22;color:#e6edf3;font-size:.875rem}
+  .toolbar input:focus{outline:none;border-color:#58a6ff}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:12px}
+  .card{border:1px solid #30363d;border-radius:8px;background:#161b22;padding:12px;display:flex;flex-direction:column}
+  .card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px}
+  .card-header h2{font-size:1rem;color:#e6edf3}
+  .card-header .meta{font-size:.75rem;color:#8b949e}
+  .status-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+  .idle{background:#8b949e}.running{background:#3fb950}.done{background:#58a6ff}.error{background:#f85149}
+  .btn{padding:4px 10px;border:1px solid #30363d;border-radius:6px;font-size:.75rem;cursor:pointer;background:#21262d;color:#e6edf3}
+  .btn:hover{background:#30363d}
+  .btn-danger{border-color:#f85149;color:#f85149}
+  .btn-danger:hover{background:#f8514911}
+  .btn-primary{border-color:#58a6ff;color:#58a6ff}
+  .btn-primary:hover{background:#58a6ff11}
+  .controls{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center}
+  .controls input,.controls select{padding:3px 6px;border:1px solid #30363d;border-radius:4px;background:#0d1117;color:#e6edf3;font-size:.75rem;max-width:120px}
+  .controls input:focus,.controls select:focus{outline:none;border-color:#58a6ff}
+  .log{border:1px solid #21262d;border-radius:6px;background:#0d1117;padding:8px;height:280px;overflow-y:auto;font-family:monospace;font-size:.8rem;line-height:1.5;margin-bottom:8px;flex:1}
+  .log .msg{margin:2px 0;white-space:pre-wrap;word-break:break-word}
+  .log .u{color:#7ee787}.log .th{color:#d2a8ff}.log .tx{color:#e6edf3}.log .tl{color:#ffa657}.log .err{color:#f85149}
+  .log .sys{margin:4px 0;padding:2px 6px;background:#161b22;border-radius:4px;font-size:.7rem;color:#8b949e}
+  .inject-row{display:flex;gap:6px}
+  .inject-row input{flex:1;padding:6px 10px;border:1px solid #30363d;border-radius:6px;background:#0d1117;color:#e6edf3;font-size:.8rem}
+  .inject-row input:focus{outline:none;border-color:#58a6ff}
+  .empty{color:#8b949e;font-size:.8rem;font-style:italic}
+  ::-webkit-scrollbar{width:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
+  .toast{position:fixed;bottom:20px;right:20px;background:#21262d;border:1px solid #30363d;border-radius:6px;padding:10px 16px;font-size:.8rem;color:#e6edf3;opacity:0;transition:opacity .3s}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<h1>⚡ CLIConductor</h1>
+
+<div class="toolbar">
+  <span>New Worker:</span>
+  <input id="newName" placeholder="name (optional)" value="worker">
+  <button class="btn btn-primary" onclick="spawn()">+ Spawn</button>
+  <span id="workerCount" style="margin-left:auto;font-size:.8rem;color:#8b949e">0 workers</span>
+</div>
+
+<div id="grid" class="grid"></div>
+
+<div id="toast" class="toast"></div>
+
 <script>
+// ── WebSocket ──
 var ws = new WebSocket('ws://' + location.host + '/ws');
+ws.onopen = () => { fetchWorkers(); };
 ws.onmessage = function(e) {
   var d = JSON.parse(e.data);
-  if (d.type === 'worker.spawned') drawWorker(d);
-  else if (d.type === 'worker.stream') append(d.workerId, d.event);
-  else if (d.type === 'worker.result') done(d.workerId, d.result);
-  else if (d.type === 'worker.status') setStatus(d.workerId, d.status);
-  else if (d.type === 'worker.destroyed') remove(d.workerId);
+  switch (d.type) {
+    case 'worker.spawned':   addCard(d); break;
+    case 'worker.stream':    appendEvent(d.workerId, d.event); break;
+    case 'worker.result':    onResult(d); break;
+    case 'worker.status':    setStatus(d.workerId, d.status); break;
+    case 'worker.destroyed': removeCard(d.workerId); break;
+    case 'worker.restarted':
+    case 'worker.reconfigured': setStatus(d.workerId, d.status); break;
+    case 'worker.renamed':   updateName(d.workerId, d.newName); break;
+    case 'error':            toast(d.message); break;
+  }
 };
-function spawn() {
-  var name = document.getElementById('newName').value || 'default';
-  var body = JSON.stringify({name: name});
-  fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body: body});
+
+// ── Fetch current state on reconnect ──
+function fetchWorkers() {
+  fetch('/api/list').then(r => r.json()).then(data => {
+    clearGrid();
+    (data.workers || []).forEach(w => {
+      addCard({workerId: w.workerId, name: w.name, status: w.status,
+               sessionId: w.sessionId, model: w.model,
+               permissionMode: w.permissionMode, workdir: w.workdir});
+    });
+  });
 }
-function send(id) {
-  var text = document.getElementById('input-' + id).value;
-  var body = JSON.stringify({workerId: id, text: text});
-  fetch('/api/task', {method:'POST', headers:{'Content-Type':'application/json'}, body: body});
+
+// ── Worker card ──
+function addCard(d) {
+  var id = d.workerId;
+  if (document.getElementById('c-' + id)) return;
+
+  var card = document.createElement('div');
+  card.className = 'card';
+  card.id = 'c-' + id;
+
+  card.innerHTML = `
+    <div class="card-header">
+      <div>
+        <h2 id="title-${id}"><span id="dot-${id}" class="status-dot idle"></span>${esc(d.name)}</h2>
+        <div class="meta" id="meta-${id}">
+          ${d.workerId}
+          ${d.sessionId ? ' · session: ' + d.sessionId.slice(0,8)+'…' : ''}
+          ${d.model ? ' · ' + esc(d.model) : ''}
+          ${d.workdir ? ' · ' + esc(d.workdir) : ''}
+        </div>
+      </div>
+      <div class="controls">
+        <button class="btn" onclick="restart('${id}')">Restart</button>
+        <button class="btn" onclick="interrupt('${id}')">Interrupt</button>
+        <button class="btn" onclick="takeover('${id}')">Takeover</button>
+        <button class="btn btn-danger" onclick="kill('${id}')">Kill</button>
+      </div>
+    </div>
+    <div class="controls">
+      <input id="model-${id}" placeholder="model" value="">
+      <button class="btn" onclick="switchModel('${id}')">Model</button>
+      <select id="mode-${id}">
+        <option value="">mode…</option>
+        <option value="default">default</option>
+        <option value="acceptEdits">acceptEdits</option>
+        <option value="bypassPermissions">bypass</option>
+        <option value="plan">plan</option>
+        <option value="dontAsk">dontAsk</option>
+      </select>
+      <button class="btn" onclick="switchMode('${id}')">Mode</button>
+      <input id="rename-${id}" placeholder="new name" value="">
+      <button class="btn" onclick="rename('${id}')">Rename</button>
+      <input id="branch-${id}" placeholder="branch name" value="">
+      <button class="btn" onclick="branch('${id}')">Branch</button>
+    </div>
+    <div class="log" id="log-${id}">
+      <div class="msg sys">Worker created (${d.workerId})</div>
+    </div>
+    <div class="inject-row">
+      <input id="inject-${id}" placeholder="Type a message to inject…">
+      <button class="btn btn-primary" onclick="inject('${id}')">Send</button>
+    </div>
+  `;
+
+  document.getElementById('grid').appendChild(card);
+  updateCount();
 }
-function kill(id) {
-  fetch('/api/kill/' + id, {method:'POST'});
+
+function removeCard(id) {
+  var el = document.getElementById('c-' + id);
+  if (el) el.remove();
+  updateCount();
 }
-function drawWorker(d) {
-  var div = document.createElement('div');
-  div.className = 'worker';
-  div.id = 'w-' + d.workerId;
-  div.innerHTML = '<b>' + d.name + '</b> <span id="st-' + d.workerId + '" class="status idle"></span> (' + d.workerId + ') ' +
-    '<button onclick="kill(\'' + d.workerId + '\')">Kill</button><br>' +
-    '<input id="input-' + d.workerId + '" placeholder="Task text..."> ' +
-    '<button onclick="send(\'' + d.workerId + '\')">Send</button>' +
-    '<pre id="log-' + d.workerId + '"></pre>';
-  document.getElementById('workers').appendChild(div);
+
+function clearGrid() {
+  document.getElementById('grid').innerHTML = '';
+  updateCount();
 }
-function append(id, event) {
-  var pre = document.getElementById('log-' + id);
-  if (!pre) return;
+
+function updateCount() {
+  var n = document.getElementById('grid').children.length;
+  document.getElementById('workerCount').textContent = n + ' worker' + (n !== 1 ? 's' : '');
+}
+
+function updateName(id, newName) {
+  var el = document.getElementById('title-' + id);
+  if (el) el.innerHTML = '<span id="dot-'+id+'" class="status-dot idle"></span>' + esc(newName);
+}
+
+// ── Event rendering ──
+function appendEvent(id, event) {
+  var log = document.getElementById('log-' + id);
+  if (!log) return;
   var t = event.type;
-  var line = '';
-  if (t === 'assistant') {
+  var div;
+
+  if (t === 'system' && event.subtype === 'init') {
+    div = document.createElement('div');
+    div.className = 'msg sys';
+    div.textContent = `[INIT] session: ${event.session_id}  model: ${event.model}`;
+  } else if (t === 'assistant') {
     var content = (event.message && event.message.content) || [];
     for (var i = 0; i < content.length; i++) {
       var b = content[i];
-      if (b.type === 'text') line += '[TEXT] ' + b.text + '\n';
-      if (b.type === 'thinking') line += '[THINK] ' + b.thinking.slice(0, 120) + '...\n';
-      if (b.type === 'tool_use') line += '[TOOL] ' + b.name + '\n';
+      div = document.createElement('div');
+      if (b.type === 'text') {
+        div.className = 'msg tx';
+        div.textContent = b.text;
+      } else if (b.type === 'thinking') {
+        div.className = 'msg th';
+        div.textContent = '💭 ' + b.thinking;
+      } else if (b.type === 'tool_use') {
+        div.className = 'msg tl';
+        div.textContent = '🔧 ' + b.name + '(' + JSON.stringify(b.input || {}) + ')';
+      } else {
+        continue;
+      }
+      log.appendChild(div);
     }
-  } else if (t === 'system' && event.subtype === 'init') {
-    line = '[INIT] session: ' + event.session_id + ' model: ' + event.model + '\n';
+    return;
+  } else if (t === 'result') {
+    return; // handled by onResult
+  } else {
+    return;
   }
-  if (line) pre.textContent += line;
+
+  if (div) log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
 }
-function done(id, result) {
-  var pre = document.getElementById('log-' + id);
-  if (pre) pre.textContent += '[DONE] ' + JSON.stringify(result) + '\n';
-  setStatus(id, 'done');
+
+// ── Status updates ──
+function onResult(d) {
+  setStatus(d.workerId, d.status);
+  var log = document.getElementById('log-' + d.workerId);
+  if (!log) return;
+  var cls = d.status === 'error' ? 'err' : 'tx';
+  var div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = '[' + d.status.toUpperCase() + '] ' + JSON.stringify(d.result || '');
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  // update meta with session id
+  var meta = document.getElementById('meta-' + d.workerId);
+  if (meta && d.sessionId) {
+    meta.textContent = meta.textContent.replace(/session: [^·]+/, 'session: ' + d.sessionId.slice(0,8)+'…');
+    if (!meta.textContent.includes('session:')) meta.textContent += ' · session: ' + d.sessionId.slice(0,8)+'…';
+  }
 }
+
 function setStatus(id, s) {
-  var st = document.getElementById('st-' + id);
-  if (st) { st.className = 'status ' + s; st.title = s; }
+  var dot = document.getElementById('dot-' + id);
+  if (dot) { dot.className = 'status-dot ' + s; dot.title = s; }
 }
-function remove(id) {
-  var el = document.getElementById('w-' + id);
-  if (el) el.remove();
+
+// ── API calls ──
+function spawn() {
+  var name = document.getElementById('newName').value || 'worker';
+  fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name})});
+}
+
+function inject(id) {
+  var input = document.getElementById('inject-' + id);
+  var text = input.value.trim();
+  if (!text) return;
+  // show user message locally
+  var log = document.getElementById('log-' + id);
+  if (log) {
+    var div = document.createElement('div');
+    div.className = 'msg u';
+    div.textContent = text;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+  ws.send(JSON.stringify({type:'user_inject', workerId:id, text:text}));
+  input.value = '';
+}
+
+function kill(id) {
+  if (!confirm('Kill ' + id + '?')) return;
+  fetch('/api/kill/' + id, {method:'POST'});
+}
+
+function restart(id) {
+  fetch('/api/worker/' + id + '/restart', {method:'POST'}).then(r => r.json()).then(d => {
+    if (d.error) toast(d.error);
+  });
+}
+
+function interrupt(id) {
+  fetch('/api/worker/' + id + '/interrupt', {method:'POST'}).then(r => r.json()).then(d => {
+    if (d.error) toast(d.error);
+  });
+}
+
+function switchModel(id) {
+  var model = document.getElementById('model-' + id).value.trim();
+  if (!model) return toast('Enter a model name');
+  fetch('/api/worker/' + id + '/switch-model', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model:model})}).then(r => r.json()).then(d => {
+    if (d.error) toast(d.error);
+  });
+}
+
+function switchMode(id) {
+  var mode = document.getElementById('mode-' + id).value;
+  if (!mode) return toast('Select a mode');
+  fetch('/api/worker/' + id + '/switch-mode', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({permissionMode:mode})}).then(r => r.json()).then(d => {
+    if (d.error) toast(d.error);
+  });
+}
+
+function rename(id) {
+  var name = document.getElementById('rename-' + id).value.trim();
+  if (!name) return toast('Enter a name');
+  fetch('/api/worker/' + id + '/rename', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name})}).then(r => r.json()).then(d => {
+    if (d.error) toast(d.error); else document.getElementById('rename-'+id).value = '';
+  });
+}
+
+function branch(id) {
+  var name = document.getElementById('branch-' + id).value.trim() || undefined;
+  fetch('/api/worker/' + id + '/branch', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name})}).then(r => r.json()).then(d => {
+    if (d.error) toast(d.error); else document.getElementById('branch-'+id).value = '';
+  });
+}
+
+function takeover(id) {
+  // Show the cbc --resume command the user can run in their native terminal
+  fetch('/api/list').then(r => r.json()).then(data => {
+    var w = (data.workers || []).find(x => x.workerId === id);
+    if (!w || !w.sessionId) return toast('Worker has no session yet');
+    var cmd = 'cbc -p --resume ' + w.sessionId;
+    // copy to clipboard
+    navigator.clipboard.writeText(cmd).then(() => {
+      toast('Session ID copied! Run in terminal:\n' + cmd);
+    }).catch(() => {
+      toast('Run in terminal:\n' + cmd);
+    });
+  });
+}
+
+function toast(msg) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show';
+  setTimeout(() => el.className = 'toast', 3000);
+}
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
 }
 </script>
-<input id="newName" placeholder="Worker name"><button onclick="spawn()">Spawn</button>
-</body></html>
+</body>
+</html>

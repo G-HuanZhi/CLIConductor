@@ -18,6 +18,9 @@ node_modules/
 Thumbs.db
 .DS_Store
 
+# Runtime data
+data/
+
 # spike residues (may be locked by running processes)
 spike-node/
 spike-python/
