@@ -148,18 +148,21 @@ function onWsMessage(e) {
   switch (d.type) {
     case 'worker.spawned':
     case 'worker.restarted':
-      refreshSessions();
+    case 'worker.reconfigured':
+      _setLocalWorker(d.sessionId, d.workerId, 'idle');
       if (d.sessionId === currentSessionId) {
         currentWorkerId = d.workerId;
         updateTopBar();
       }
+      refreshSessions();
       break;
     case 'worker.destroyed':
-      refreshSessions();
+      _setLocalWorker(d.sessionId, null, null);
       if (d.sessionId === currentSessionId) {
         currentWorkerId = null;
         updateTopBar();
       }
+      refreshSessions();
       break;
     case 'worker.stream':
       if (d.sessionId === currentSessionId) appendEvent(d.event);
@@ -169,12 +172,9 @@ function onWsMessage(e) {
       refreshSessions();
       break;
     case 'worker.status':
+      _setLocalWorker(d.sessionId, d.workerId, d.status);
       if (d.sessionId === currentSessionId) updateTopBar();
       refreshSessions();
-      break;
-    case 'worker.reconfigured':
-      refreshSessions();
-      if (d.sessionId === currentSessionId) updateTopBar();
       break;
     case 'session.renamed':
     case 'session.deleted':
@@ -184,6 +184,18 @@ function onWsMessage(e) {
       toast(d.message);
       break;
   }
+}
+
+// ── Instant local state update (before server sync) ──
+function _setLocalWorker(sessionId, workerId, status) {
+  for (var i = 0; i < modelData.length; i++) {
+    if (modelData[i].id === sessionId) {
+      modelData[i].workerId = workerId;
+      modelData[i].workerStatus = status;
+      break;
+    }
+  }
+  renderSessionList();
 }
 
 // ── Session list ──
