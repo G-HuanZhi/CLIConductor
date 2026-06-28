@@ -176,6 +176,7 @@ function onWsMessage(e) {
       if (d.sessionId === currentSessionId) updateTopBar();
       refreshSessions();
       break;
+    case 'session.created':
     case 'session.renamed':
     case 'session.deleted':
       refreshSessions();

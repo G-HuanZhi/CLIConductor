@@ -240,6 +240,11 @@ async def api_create_session(data: dict):
     s = sess.create(name, model=model,
                     permission_mode=permission_mode,
                     workdir=str(workdir))
+    await broadcast({
+        "type": "session.created",
+        "sessionId": s.id,
+        "name": s.name,
+    })
     return _session_to_api(s)
 
 
