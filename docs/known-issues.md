@@ -10,11 +10,10 @@
 
 **原因**：`--input-format stream-json` 模式下，所有 stdin 内容都被当作对话消息，不会触发 cbc 的斜杠命令解析器。
 
-**影响**：无法通过 Dashboard 动态切换模型、修改配置等。
+**解决方案（已验证）**：使用 `--resume <session_id> --model <new-model>` 重启 Worker，cbc 加载历史对话后以新模型继续。
+- 已验证流程：spawn cbc → 发消息 → kill → `--resume` + `--model` → 新模型记得旧对话
+- 实现：Python spike 新增 `POST /api/worker/:id/switch-model` 和 `switch-mode` 端点
+- 局限：需重启 cbc 进程（有启动开销），但对话历史通过 `--resume` 完整保留
+- 同样适用于 `--permission-mode`（对应 Shift+Tab 的模式切换）
 
-**可能的解决方案**：
-- 在 Worker 启动时通过 CLI 参数预设配置（`--model`, `--permission-mode` 等）
-- 调查 cbc 是否有 `system` 类型的 JSON 消息格式来模拟斜杠命令
-- Dashboard 单独提供参数选择界面，重启 Worker 时带新参数
-
-**状态**：待解决
+**状态**：已解决（via restart + --resume）

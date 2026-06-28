@@ -31,6 +31,8 @@ class Worker:
     process: asyncio.subprocess.Process | None = None
     session_id: str | None = None
     history: list[dict] = field(default_factory=list)
+    model: str | None = None
+    permission_mode: str | None = None
     _stdout_task: asyncio.Task | None = None
 
 
@@ -158,13 +160,13 @@ async def restart_worker(worker_id: str) -> str | None:
     if w._stdout_task:
         w._stdout_task.cancel()
 
-    # 起新进程
+    # 起新进程（保留 session 以保留对话历史）
+    args = [CBC_PATH, "-p", "--output-format", "stream-json", "--input-format", "stream-json", "-y"]
+    if w.session_id:
+        args.extend(["--resume", w.session_id])
+
     process = await asyncio.create_subprocess_exec(
-        CBC_PATH,
-        "-p",
-        "--output-format", "stream-json",
-        "--input-format", "stream-json",
-        "-y",
+        *args,
         stdout=asyncio.subprocess.PIPE,
         stdin=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
@@ -172,10 +174,8 @@ async def restart_worker(worker_id: str) -> str | None:
 
     w.process = process
     w.status = "idle"
-    w.session_id = None
-    w.history = []
+    # history 由 cbc --resume 恢复，stdout 流会重新输出历史事件
 
-    # 重新挂载 stdout reader
     w._stdout_task = asyncio.create_task(_read_stdout(w))
 
     await broadcast({
@@ -183,6 +183,51 @@ async def restart_worker(worker_id: str) -> str | None:
         "workerId": worker_id,
         "name": w.name,
         "status": "idle",
+        "sessionId": w.session_id,
+    })
+    return None
+
+
+async def respawn_worker(worker_id: str, extra_args: list[str] | None = None) -> str | None:
+    """kill 旧进程后用 --resume + 新参数重启，保留对话历史"""
+    w = workers.get(worker_id)
+    if not w:
+        return "Worker not found"
+
+    session_id = w.session_id
+
+    if w.process:
+        try:
+            w.process.kill()
+        except ProcessLookupError:
+            pass
+    if w._stdout_task:
+        w._stdout_task.cancel()
+
+    args = [CBC_PATH, "-p", "--output-format", "stream-json", "--input-format", "stream-json", "-y"]
+    if session_id:
+        args.extend(["--resume", session_id])
+    if extra_args:
+        args.extend(extra_args)
+
+    process = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stdin=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+
+    w.process = process
+    w.status = "idle"
+
+    w._stdout_task = asyncio.create_task(_read_stdout(w))
+
+    await broadcast({
+        "type": "worker.reconfigured",
+        "workerId": worker_id,
+        "name": w.name,
+        "status": "idle",
+        "sessionId": session_id,
     })
     return None
 
@@ -240,7 +285,8 @@ async def api_spawn(data: dict):
 async def api_list():
     return {
         "workers": [
-            {"workerId": w.worker_id, "name": w.name, "status": w.status, "sessionId": w.session_id}
+            {"workerId": w.worker_id, "name": w.name, "status": w.status,
+             "sessionId": w.session_id, "model": w.model, "permissionMode": w.permission_mode}
             for w in workers.values()
         ]
     }
@@ -270,6 +316,32 @@ async def api_restart(worker_id: str):
     if err:
         return {"error": err}
     return {"workerId": worker_id, "status": "restarted"}
+
+
+@app.post("/api/worker/{worker_id}/switch-model")
+async def api_switch_model(worker_id: str, data: dict):
+    model = data.get("model")
+    if not model:
+        return {"error": "model is required"}
+    err = await respawn_worker(worker_id, ["--model", model])
+    if err:
+        return {"error": err}
+    w = workers[worker_id]
+    w.model = model
+    return {"workerId": worker_id, "model": model, "status": "switched"}
+
+
+@app.post("/api/worker/{worker_id}/switch-mode")
+async def api_switch_mode(worker_id: str, data: dict):
+    mode = data.get("permissionMode")
+    if not mode:
+        return {"error": "permissionMode is required"}
+    err = await respawn_worker(worker_id, ["--permission-mode", mode])
+    if err:
+        return {"error": err}
+    w = workers[worker_id]
+    w.permission_mode = mode
+    return {"workerId": worker_id, "permissionMode": mode, "status": "switched"}
 
 
 # ────────────────────────────────────────────
