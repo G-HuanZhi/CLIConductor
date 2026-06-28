@@ -204,10 +204,19 @@ function refreshSessions() {
     modelData = data.sessions || [];
     renderSessionList();
     // re-sync current session if it exists
-    if (currentSessionId && !modelData.find(function(s) { return s.id === currentSessionId; })) {
+    var matched = modelData.find(function(s) { return s.id === currentSessionId; });
+    if (!matched) {
       currentSessionId = null;
       currentWorkerId = null;
       showEmpty();
+    } else {
+      // update workerId from server data
+      currentWorkerId = matched.workerId || null;
+      // re-render messages if we have chat open
+      if (document.getElementById('chatName').style.display !== 'none') {
+        renderMessages(matched.history || []);
+      }
+    }
     }
     if (currentSessionId) updateTopBar();
   });
