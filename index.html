@@ -48,6 +48,8 @@
 <div class="toolbar">
   <span>New Worker:</span>
   <input id="newName" placeholder="name (optional)" value="worker">
+  <select id="spawnModel" onchange="onSpawnModelChange()"></select>
+  <input id="spawnModelCustom" placeholder="custom model" style="display:none;max-width:140px">
   <button class="btn btn-primary" onclick="spawn()">+ Spawn</button>
   <span id="workerCount" style="margin-left:auto;font-size:.8rem;color:#8b949e">0 workers</span>
 </div>
@@ -86,6 +88,7 @@ function fetchWorkers() {
     defaultModel = data.default || 'deepseek-v4-flash';
     // re-populate any existing model selects
     document.querySelectorAll('[id^="model-"]').forEach(sel => rebuildModelSelect(sel.id.replace('model-', '')));
+    rebuildSpawnModel();
   });
   fetch('/api/list').then(r => r.json()).then(data => {
     clearGrid();
@@ -226,6 +229,46 @@ function getModelValue(id) {
   return sel.value;
 }
 
+// ── Spawn model select ──
+function rebuildSpawnModel() {
+  var sel = document.getElementById('spawnModel');
+  if (!sel) return;
+  sel.innerHTML = '';
+  // default option
+  var def = document.createElement('option');
+  def.value = ''; def.textContent = 'default (' + defaultModel + ')';
+  sel.appendChild(def);
+  // all models
+  allModels.forEach(function(m) {
+    var opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    if (m === defaultModel) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  // custom
+  var c = document.createElement('option');
+  c.value = '__custom__'; c.textContent = '✎ custom…';
+  sel.appendChild(c);
+}
+
+function onSpawnModelChange() {
+  var sel = document.getElementById('spawnModel');
+  var inp = document.getElementById('spawnModelCustom');
+  if (!sel || !inp) return;
+  inp.style.display = sel.value === '__custom__' ? 'inline-block' : 'none';
+  if (sel.value !== '__custom__') inp.value = '';
+}
+
+function getSpawnModel() {
+  var sel = document.getElementById('spawnModel');
+  if (!sel) return defaultModel;
+  if (sel.value === '__custom__') {
+    var inp = document.getElementById('spawnModelCustom');
+    return inp && inp.value.trim() ? inp.value.trim() : defaultModel;
+  }
+  return sel.value || defaultModel;
+}
+
 // ── Event rendering ──
 function appendEvent(id, event) {
   var log = document.getElementById('log-' + id);
@@ -294,7 +337,8 @@ function setStatus(id, s) {
 // ── API calls ──
 function spawn() {
   var name = document.getElementById('newName').value || 'worker';
-  fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name})});
+  var model = getSpawnModel();
+  fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name, model:model})});
 }
 
 function inject(id) {

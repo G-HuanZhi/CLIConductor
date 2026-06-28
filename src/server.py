@@ -146,16 +146,17 @@ async def ws_agent_endpoint(ws: WebSocket):
 
             elif msg_type == "spawn":
                 name = msg.get("name", "agent-worker")
+                model = msg.get("model") or worker.DEFAULT_MODEL
                 workdir = WORKDIRS_DIR / name
                 workdir.mkdir(parents=True, exist_ok=True)
                 w = await worker.create_worker(
                     name, str(workdir),
-                    extra_args=["--model", worker.DEFAULT_MODEL],
+                    extra_args=["--model", model],
                 )
                 await ws.send_json({
                     "type": "worker.spawned",
                     "workerId": w.worker_id, "name": w.name,
-                    "status": w.status, "workdir": w.workdir,
+                    "status": w.status, "workdir": w.workdir, "model": model,
                 })
 
             elif msg_type == "kill":
@@ -191,15 +192,16 @@ async def ws_agent_endpoint(ws: WebSocket):
 @app.post("/api/spawn")
 async def api_spawn(data: dict):
     name = data.get("name", "default")
+    model = data.get("model") or worker.DEFAULT_MODEL
     workdir = WORKDIRS_DIR / name
     workdir.mkdir(parents=True, exist_ok=True)
     w = await worker.create_worker(
         name, str(workdir),
-        extra_args=["--model", worker.DEFAULT_MODEL],
+        extra_args=["--model", model],
     )
     return {
         "workerId": w.worker_id, "name": w.name,
-        "status": w.status, "workdir": w.workdir, "model": w.model or worker.DEFAULT_MODEL,
+        "status": w.status, "workdir": w.workdir, "model": model,
     }
 
 
