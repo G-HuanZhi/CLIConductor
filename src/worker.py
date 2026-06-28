@@ -41,7 +41,6 @@ class Worker:
 
 
 workers: dict[str, Worker] = {}
-_next_id = 1
 
 # ── broadcast hook (set by server.py so worker.py doesn't depend on WebSocket) ──
 _broadcast: callable = lambda data: None  # no-op default
@@ -159,11 +158,23 @@ async def _consumer(w: Worker):
 
 # ── lifecycle ──
 
+async def _next_worker_id() -> str:
+    """返回最小的未占用 worker ID（复用被 kill 释放的序号）"""
+    used: set[int] = set()
+    for wid in workers:
+        try:
+            used.add(int(wid.rsplit("-", 1)[-1]))
+        except (ValueError, IndexError):
+            pass
+    n = 1
+    while n in used:
+        n += 1
+    return f"worker-{n}"
+
+
 async def create_worker(name: str, workdir: str,
                         extra_args: list[str] | None = None) -> Worker:
-    global _next_id
-    worker_id = f"worker-{_next_id}"
-    _next_id += 1
+    worker_id = await _next_worker_id()
 
     process = await asyncio.create_subprocess_exec(
         *_base_args(), *(extra_args or []),
@@ -304,9 +315,7 @@ async def branch_worker(worker_id: str, name: str | None = None) -> Worker | str
     if not w.session_id:
         return "Worker has no session yet"
 
-    global _next_id
-    new_id = f"worker-{_next_id}"
-    _next_id += 1
+    new_id = await _next_worker_id()
     new_name = name or f"{w.name}-branch"
 
     extra_args = ["--resume", w.session_id, "--fork-session"]
@@ -440,13 +449,6 @@ async def restore_worker_from_session(session: dict) -> Worker | None:
                history=history.copy(), queue=asyncio.Queue())
     workers[worker_id] = w
 
-    # keep _next_id from reusing restored ids
-    global _next_id
-    try:
-        num = int(worker_id.rsplit("-", 1)[-1])
-        _next_id = max(_next_id, num + 1)
-    except (ValueError, IndexError):
-        pass
     w._stdout_task = asyncio.create_task(_read_stdout(w))
     w._consume_task = asyncio.create_task(_consumer(w))
 
