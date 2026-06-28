@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from . import session as _sess
 
@@ -33,6 +34,7 @@ class Worker:
     history: list[dict] = field(default_factory=list)
     model: str | None = None
     permission_mode: str | None = None
+    last_result: dict | None = None  # {status, result, sessionId, timestamp}
     _stdout_task: asyncio.Task | None = None
     _consume_task: asyncio.Task | None = None
     queue: asyncio.Queue | None = None
@@ -89,12 +91,19 @@ async def _read_stdout(w: Worker):
                         "content": f"{b['name']}({json.dumps(b.get('input', {}))})",
                     })
 
-        # 任务完成 → 保存 session + 通知 consumer 继续
+        # 任务完成 → 保存 session + lastResult + 通知 consumer 继续
         if t == "result":
             is_error = event.get("is_error", False)
             w.status = "error" if is_error else "done"
+            w.last_result = {
+                "status": w.status,
+                "result": event.get("result"),
+                "sessionId": w.session_id,
+                "timestamp": datetime.now().isoformat(),
+            }
             _sess.save_session(w.worker_id, w.session_id, w.history,
-                               w.model, w.permission_mode, w.name, w.workdir)
+                               w.model, w.permission_mode, w.name, w.workdir,
+                               last_result=w.last_result)
             await _broadcast({
                 "type": "worker.result",
                 "workerId": w.worker_id,
@@ -398,6 +407,7 @@ async def restore_worker_from_session(session: dict) -> Worker | None:
     model = session.get("model") or DEFAULT_MODEL
     permission_mode = session.get("permission_mode")
     history = session.get("history", [])
+    last_result = session.get("last_result")
 
     if not session_id:
         return None  # no session to resume
@@ -424,6 +434,7 @@ async def restore_worker_from_session(session: dict) -> Worker | None:
                status="idle", process=process,
                session_id=session_id, model=model,
                permission_mode=permission_mode,
+               last_result=last_result,
                history=history.copy(), queue=asyncio.Queue())
     workers[worker_id] = w
 

@@ -18,7 +18,8 @@ def _path(worker_id: str) -> Path:
 
 def save_session(worker_id: str, session_id: str | None,
                  history: list[dict], model: str | None,
-                 permission_mode: str | None, name: str, workdir: str):
+                 permission_mode: str | None, name: str, workdir: str,
+                 last_result: dict | None = None):
     """Persist a worker's session data to disk."""
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
     data = {
@@ -29,6 +30,7 @@ def save_session(worker_id: str, session_id: str | None,
         "model": model,
         "permission_mode": permission_mode,
         "history": history,
+        "last_result": last_result,
         "updated_at": __import__("datetime").datetime.now().isoformat(),
     }
     _path(worker_id).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
