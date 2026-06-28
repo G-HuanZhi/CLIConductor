@@ -3,6 +3,8 @@
 > 基于两端 spike 实战、架构推演、未来扩展场景的综合分析。  
 > 阅读本文前建议先看 `tech-stack-analysis.md`（基础评分）和 `spike-comparison-plan.md`（试验记录）。
 
+**重要更新（2026-06-28）**：PTY 终端接管已不需要。stdin stream-json 模式实现完整 observe/inject/takeover 链路，所有 cbc 命令（/model、/branch、/rename、Shift+Tab）均可通过 CLI 参数 + `--resume` 重启等价实现。PTY 不再是 Node.js 的优势项。
+
 ---
 
 ## 一、已完成的对照试验
@@ -192,9 +194,10 @@ CLIConductor 介于两者之间，需要判断：Agent HTTP API（REST 模型）
 ### Phase 1 MVP（当前）
 
 - 2 Worker，完整 observe/inject/restart 链路
+- 所有 cbc 命令通过 CLI 参数 + restart 实现
 - 简单 Dashboard HTML
 
-→ **两边都能胜任**。Python 在子进程管理上更干净（已证），Node.js 开发更快。
+→ **两边完全对等**。Python 子进程管理更干净（试验 5 已证），Node.js 调试体验更好。无决定性的差异。
 
 ### Phase 2 扩展
 
@@ -202,17 +205,19 @@ CLIConductor 介于两者之间，需要判断：Agent HTTP API（REST 模型）
 - 多 CLI 适配器（F6）
 - Worker 崩溃自动恢复（F8）
 - 会话持久化（F2）
+- 消息渠道接入（QQ/微信等）
 
-→ **分水岭**。如果上 Live2D，Node.js 的前后端同构优势开始显现。如果不做 Live2D，差距不大。
+→ 这是真正的岔路口：
+- **上 Live2D 且上 QQ/微信渠道**：Node.js 的前后端同构 + npm 渠道库生态优势显著
+- **不上 Live2D 且渠道通过 Webhook 而非程序化库接入**：Python 更优——子进程管理干净 + FastAPI 自动文档 + Pydantic 校验
 
 ### Phase 3 规模化
 
 - 消息网关（HTTP + WS + QQ/微信统一入口）
 - 全局记忆系统（F9）
-- 可能的多协议网关
 - 长期稳定运行
 
-→ **两极化**。网关层 Python 更优，前端层 Node.js 更优。谁更重要取决于你的重心。
+→ 还是网关层 Python 更优，前端+渠道层 Node.js 更优。但去掉 PTY 后，Python 的纯后端优势面扩大了。
 
 ---
 
@@ -236,15 +241,19 @@ CLIConductor 介于两者之间，需要判断：Agent HTTP API（REST 模型）
 
 最终选择取决于你对以下问题的权重分配：
 
-1. **Live2D / 复杂前端**有多确定？（同构类型 → Node.js）
-2. **CLIConductor 的网关更像 REST 还是更像 WS 事件总线**？（REST → Python / WS 事件 → Node.js）
+1. **Live2D + QQ/微信渠道**有多确定？
+   - 如果两个都上 → Node.js（同构类型 + npm 渠道库）
+   - 如果只上一个或都不上 → Python 在日常开发中有更多结构性优势
+
+2. **CLIConductor 的 Agent 接口更像 REST 还是 WS 事件总线**？
+   - 如果 Agent 通过 HTTP API 派发任务为主 → FastAPI 的校验/文档/中间件优势显著
+   - 如果 Agent 也走 WebSocket 双向流（像 OpenClaw 那样）→ Node.js 的 WS 心智模型更自然
 
 补充判断标准：
-- PTY 确认不需要——Agent 走 stdin stream-json，用户接管用 `cbc --resume <sid>` 原生终端即可
-- 如果未来 Agent 控制更多走 HTTP API（REST 风格），FastAPI 的校验/文档/中间件优势会越来越显著
-- 如果未来控制流更多走 WebSocket（双向流 + 事件驱动），Node.js 的原生模型更自然
-- OpenClaw 走通了 WS 事件总线这条路，但它的驱动因素是插件生态（npm）而非网关复杂度
+- PTY 确认不需要——所有接管功能已通过 stdin stream-json + --resume 实现
+- cbc 生态一致性（全栈 Node.js）是便利性优势，不是决定性因素
+- Python 的子进程生命周期管理更干净（试验 5 已证），对你这种多 Worker 长期运行场景是实打实的可靠性收益
 
-如果第一项权重高 → **Node.js**  
-如果第二项权重高且偏向 REST → **Python**  
-如果两项差不多 → **Node.js**（后端 Node.js 也能写，但前端 Python 写不了）
+如果第一个问题的答案是"两个都上" → **Node.js**  
+如果都不上 → **Python**（综合优势更大，尤其子进程管理和 API 层）  
+如果只上一个 → 取决于哪个对你更重要
