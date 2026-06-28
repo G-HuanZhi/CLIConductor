@@ -1,19 +1,27 @@
 # 已知问题
 
-> 最后更新：2026-06-27
+> 最后更新：2026-06-28
 
 ---
 
-## 1. cbc 特殊命令（如 /model, /help）无法通过 stdin stream-json 发送
+## 1. cbc 特殊命令（如 /model, /branch）无法通过 stdin stream-json 发送
 
-**现象**：在 Dashboard 输入 `/model deepseek-v4-pro` 等 cbc 斜杠命令，Worker 不会执行，因为当前消息格式是 `{"type":"user","message":{"role":"user","content":[{"type":"text","text":"/model ..."}]}}`，cbc 将其当作普通文本对话内容，而非 cbc 自身的命令。
+**现象**：`--input-format stream-json` 模式下，所有 stdin 内容都被当作对话消息，不会触发 cbc 的斜杠命令解析器（/model、/branch、/rename 等）。
 
-**原因**：`--input-format stream-json` 模式下，所有 stdin 内容都被当作对话消息，不会触发 cbc 的斜杠命令解析器。
+**原因**：stdin stream-json 协议只识别 `type: "user"` 消息，没有 "command" 消息类型。
 
-**解决方案（已验证）**：使用 `--resume <session_id> --model <new-model>` 重启 Worker，cbc 加载历史对话后以新模型继续。
-- 已验证流程：spawn cbc → 发消息 → kill → `--resume` + `--model` → 新模型记得旧对话
-- 实现：Python spike 新增 `POST /api/worker/:id/switch-model` 和 `switch-mode` 端点
-- 局限：需重启 cbc 进程（有启动开销），但对话历史通过 `--resume` 完整保留
-- 同样适用于 `--permission-mode`（对应 Shift+Tab 的模式切换）
+**解决方案**：用 CLI 参数 + `--resume` 重启 Worker 实现等价功能。
 
-**状态**：已解决（via restart + --resume）
+### cbc 命令 ↔ CLI 参数映射表
+
+| cbc 命令 | CLI 等效 | 实现端点 | 备注 |
+|----------|---------|---------|------|
+| `/model` | `--model <model>` | `switch-model` | ✅ 对话历史保留（via --resume） |
+| Shift+Tab | `--permission-mode <mode>` | `switch-mode` | ✅ 对话历史保留 |
+| `/branch` | `--resume <sid> --fork-session` | `branch` | ✅ 创建新 Worker，新 sessionId |
+| `/rename` | 无（cbc session 无 name 字段） | `rename` | ✅ CLIConductor 自维护名称 |
+| `/help` | `--help` | 无需实现 | 静态信息 |
+
+**局限**：所有切换都需要重启 cbc 进程（冷启动 ~3-5 秒），但对话历史通过 `--resume` 保留。
+
+**状态**：已解决
