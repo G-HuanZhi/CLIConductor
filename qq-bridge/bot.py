@@ -4,4 +4,5 @@ import nonebot
 
 nonebot.init()
 nonebot.load_plugin("plugin")
+nonebot.load_adapter("nonebot.adapters.onebot.v11")
 nonebot.run()
