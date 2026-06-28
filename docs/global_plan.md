@@ -74,7 +74,7 @@
 | Agent 任务派发 | Agent 向 Worker 发任务，获取结构化结果 |
 | 实时观察 | Dashboard 实时显示每个 Worker 的对话和事件 |
 | 插话 | 在 Dashboard 输入消息，注入到 Worker 会话 |
-| 接管 | 打开 PTY 交互终端，完全操控 Worker |
+| 接管 | 用户在原生终端运行 cbc --resume <sessionId>，完整交互 |
 | Session 本地存储 | session ID 元数据 + 对话历史 |
 
 ### Phase 2 — 扩展
@@ -115,7 +115,7 @@
 | 进程管理 | `child_process.spawn` | 锁定 |
 | CLI 连接方式 | `cbc -p --output-format stream-json --input-format stream-json -y` | 锁定 |
 | 多轮对话 | stdin 持续写入（不需要 --resume） | 锁定 |
-| PTY | `node-pty`（接管模式） | 暂定 |
+| 用户接管 | `cbc --resume <sessionId>`（原生终端） | 锁定 |
 | Dashboard | Web + WebSocket + xterm.js | 暂定 |
 | 前端 | React / 原生 HTML | 待定 |
 | 存储 | 文件系统 → SQLite | 演进 |

@@ -58,16 +58,7 @@
 
 **结论**：CLIConductor 目标 2-5 Worker，两边都够用。
 
-### 2.4 PTY 终端接管
-
-| | Python | Node.js |
-|---|---|---|
-| Windows PTY | winpty 绑定弱，需绕路 | **node-pty** — 成熟、ConPTY 原生 |
-| 接管实现 | 可能需要调 node-pty 子进程做代理 | 直接 `pty.spawn()` |
-
-**结论**：这是 **Node.js 最大的生态优势**。Python 能做但多一层胶水。
-
-### 2.5 持久化与存储
+### 2.4 持久化与存储
 
 | | Python | Node.js |
 |---|---|---|
@@ -77,7 +68,7 @@
 
 **结论**：差异不大，一个小库覆盖需求。
 
-### 2.6 测试
+### 2.5 测试
 
 | | Python | Node.js |
 |---|---|---|
@@ -87,7 +78,7 @@
 
 **结论**：vitest 日常更快，pytest fixture 适合复杂场景。
 
-### 2.7 异步调试
+### 2.6 异步调试
 
 | | Python | Node.js |
 |---|---|---|
@@ -96,7 +87,7 @@
 
 **结论**：多 Worker 并发调试 node.js **体验好得多**。
 
-### 2.8 类型系统
+### 2.7 类型系统
 
 | | Python | Node.js |
 |---|---|---|
@@ -106,7 +97,7 @@
 
 **结论**：Interface 越复杂，TS 的类型安全**价值越大**。
 
-### 2.9 打包分发
+### 2.8 打包分发
 
 | | Python | Node.js |
 |---|---|---|
@@ -232,7 +223,6 @@ CLIConductor 介于两者之间，需要判断：Agent HTTP API（REST 模型）
 | API 开发速度 | FastAPI 自动校验+文档 | — | 中（接口不多） |
 | 接口演化安全 | — | 编译时类型检查 | 中高 |
 | 实时流反压 | asyncio 天然非阻塞 | — | 中 |
-| PTY 终端接管 | — | node-pty 生态 | **高**（Phase 1 需求） |
 | 子进程管理 | cancel 干净（已验证） | 事件模型需防守 | 中高 |
 | 异步调试 | — | Chrome DevTools | 中 |
 | 类型建模 | — | Discriminated union | 中 |
@@ -246,15 +236,15 @@ CLIConductor 介于两者之间，需要判断：Agent HTTP API（REST 模型）
 
 最终选择取决于你对以下问题的权重分配：
 
-1. **PTY 接管**有多重要？（node-pty → Node.js）
-2. **Live2D / 复杂前端**有多确定？（同构类型 → Node.js）
-3. **CLIConductor 的网关更像 REST 还是更像 WS 事件总线**？（REST → Python / WS 事件 → Node.js）
+1. **Live2D / 复杂前端**有多确定？（同构类型 → Node.js）
+2. **CLIConductor 的网关更像 REST 还是更像 WS 事件总线**？（REST → Python / WS 事件 → Node.js）
 
 补充判断标准：
+- PTY 确认不需要——Agent 走 stdin stream-json，用户接管用 `cbc --resume <sid>` 原生终端即可
 - 如果未来 Agent 控制更多走 HTTP API（REST 风格），FastAPI 的校验/文档/中间件优势会越来越显著
 - 如果未来控制流更多走 WebSocket（双向流 + 事件驱动），Node.js 的原生模型更自然
 - OpenClaw 走通了 WS 事件总线这条路，但它的驱动因素是插件生态（npm）而非网关复杂度
 
-如果前两项权重高 → **Node.js**  
-如果第三项权重高且偏向 REST → **Python**  
-如果三项差不多 → **Node.js**（后端 Node.js 也能写，但前端 Python 写不了）
+如果第一项权重高 → **Node.js**  
+如果第二项权重高且偏向 REST → **Python**  
+如果两项差不多 → **Node.js**（后端 Node.js 也能写，但前端 Python 写不了）

@@ -179,17 +179,17 @@ if process.stdin is not None:
 ### 可以直接借鉴的
 
 1. **Strategy 模式** — 已验证是管理多 CLI 的正确抽象，和 CLIConductor archive 的 `AgentAdapter` 接口几乎一致
-2. **单次 spawn + Session ID** — 比长驻 PTY 更简单、更可靠，和 Phase 1 实验结论一致
+2. **单次 spawn + Session ID** — 比长驻进程更简单、更可靠，和 Phase 1 实验结论一致
 3. **stdin 关闭技巧** — 可复制用于 Node.js 的 `child_process.spawn`
 4. **事件管道** — 做 Dashboard 实时观察时参考这个模式
 
 ### 架构简化方向
 
-DionysusC 证明了**不需要长驻 PTY 进程**。由此可以简化 CLIConductor 的设计：
+DionysusC 证明了**不需要长驻交互进程**。由此可以简化 CLIConductor 的设计：
 
 - Worker 不需要是长驻进程，每次任务一个 spawn 调用
 - "介入"可以更轻量：Agent 下一轮 `--resume` 之前插入用户消息
-- PTY 只在需要完整交互终端时才启动（`cbc --resume <id>` 不带 `-p`）
+- 原生终端只在需要接管时才启动（`cbc --resume <id>` 不带 `-p`）
 
 ### 一个更简洁的 Worker 模型
 
@@ -200,7 +200,7 @@ Worker:
   - execute(task): spawn cbc -p --stream-json --resume <id> task
   - observe(): Dashboard 实时渲染事件流
   - intervene(userMessage): 在下一轮 execute 前注入用户消息
-  - takeover(): spawn cbc --resume <id> (交互模式 PTY)
+  - takeover(): 提供 session_id，用户终端 cbc --resume <id>
 ```
 
 ---

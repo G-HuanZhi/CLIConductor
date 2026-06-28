@@ -1,15 +1,11 @@
-﻿{
+{
   "name": "@CLIConductor/cli-conductor",
   "private": true,
-  "description": "主Agent + 用户双控 CLI 管理方案",
-  "scripts": {
-    "bridge": "node packages/cbc-bridge/server.js"
-  },
+  "description": "主 Agent 调度管理多个第三方 AI CLI 进程的中间层",
+  "scripts": {},
   "version": "1.0.0",
   "type": "commonjs",
   "dependencies": {
-    "node-pty": "^1.1.0",
     "ws": "^8.21.0"
   }
 }
-

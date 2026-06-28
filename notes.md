@@ -1,7 +1,9 @@
 # CLIConductor 重构研究笔记
 
-> 最后更新：2026-06-27
+> 最后更新：2026-06-28
 > 状态：方案研究进行中
+> 
+> **2026-06-28 更新**：PTY 确认不需要。Agent 日常走 stdin stream-json，用户接管用 `cbc --resume <sid>` 原生终端。所有 PTY 代码已移至 `archive/packages/cbc-bridge/`。
 
 ---
 

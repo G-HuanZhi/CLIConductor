@@ -79,6 +79,6 @@ CLIConductor/
 │   ├── public/index.html            # Dashboard
 │   ├── package.json
 │   └── tsconfig.json
-├── archive/                         # 重构前代码（PTY 方案）
+├── archive/                         # 重构前代码 + PTY 实验归档
 └── experiments/                     # stdin stream-json 验证试验
 ```

@@ -32,7 +32,7 @@
 | Agent 派发任务 | Agent 通过 API 向 Worker 发任务（文本），Worker 内部转成 cbc stdin 消息 |
 | 实时观察 | Dashboard 显示 Worker 的对话历史、当前状态、实时输出 |
 | 插话 | Dashboard 输入框 → 消息注入到 Worker 的 stdin 队列 |
-| 接管 | 通过 PTY 打开交互终端，连接 Worker 的 cbc session |
+| 接管 | 用户打开原生终端，连接 Worker 的 cbc session |
 | Session 存储 | 保存 session_id 和对话历史到本地文件 |
 
 ### 不做什么
@@ -207,9 +207,9 @@ Dashboard "接管" 按钮
   → WS 发送 { type: "worker_takeover", workerId: "worker-2" }
   → SessionManager 标记 Worker 为 "接管中"
   → Agent 暂不向该 Worker 发新任务
-  → 启动 PTY: spawn('cbc', ['--resume', sessionId])  ← 等交互模式
+  → 用户运行: cbc 'cbc', ['--resume', sessionId]  ← 等交互模式
   → 用户通过 xterm.js 直接操控
-  → "退出接管" → kill PTY → Worker 恢复 normal
+  → "退出接管" → 退出 cbc → curl POST /api/worker/:id/resume
   → Agent 可继续派发任务
 ```
 
@@ -300,7 +300,7 @@ Milestone 4: 用户插话
   验证: Dashboard 输入消息 → Worker 显示在对话中
 
 Milestone 5: 用户接管
-  ├── PTY 接管功能 (node-pty)
+  ├── 用户原生终端接管
   └── Dashboard 接管按钮
   验证: 点接管 → xterm.js 窗口 → 能操控 cbc
 
