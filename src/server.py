@@ -17,11 +17,11 @@ from . import session as sess
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup: restore workers from saved sessions.
+    """Startup: load all saved sessions (don't auto-spawn Workers).
     Shutdown: kill all child processes."""
-    restored = await _restore_workers()
-    if restored:
-        print(f"[CLIConductor] Restored {len(restored)} workers from session files")
+    sessions = sess.list_all()
+    if sessions:
+        print(f"[CLIConductor] Loaded {len(sessions)} sessions from disk")
     yield
     await worker.shutdown_all()
     print("[CLIConductor] All workers shut down")
@@ -29,29 +29,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CLIConductor", lifespan=lifespan)
 
-# ── WS client sets ──
-ws_clients: set[WebSocket] = set()     # Dashboard
-agent_clients: set[WebSocket] = set()  # Main Agent
+ws_clients: set[WebSocket] = set()
+agent_clients: set[WebSocket] = set()
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 WORKDIRS_DIR = DATA_DIR / "workdirs"
 DASHBOARD_FILE = Path(__file__).resolve().parent.parent / "index.html"
-
-# ── startup helpers ──
-
-
-async def _restore_workers() -> list[str]:
-    """Restore workers from saved session JSON files."""
-    sessions = sess.load_all_sessions()
-    restored_ids: list[str] = []
-    for s in sessions:
-        w = await worker.restore_worker_from_session(s)
-        if w:
-            restored_ids.append(w.worker_id)
-    return restored_ids
-
-
-# ── broadcast (dashboard + agent) ──
 
 
 async def broadcast(data: dict):
@@ -62,7 +45,6 @@ async def broadcast(data: dict):
         except Exception:
             dead.add(ws)
     ws_clients.difference_update(dead)
-
     dead_a = set()
     for ws in list(agent_clients):
         try:
@@ -72,8 +54,36 @@ async def broadcast(data: dict):
     agent_clients.difference_update(dead_a)
 
 
-# Install broadcaster into worker module
 worker.set_broadcaster(broadcast)
+
+
+# ── helpers ──
+
+def _session_to_api(s: sess.Session):
+    """Convert Session to API response dict."""
+    w = worker.find_worker_by_session(s.id)
+    return {
+        "id": s.id,
+        "name": s.name,
+        "cbcSessionId": s.cbc_session_id,
+        "model": s.model or worker.DEFAULT_MODEL,
+        "permissionMode": s.permission_mode,
+        "workdir": s.workdir,
+        "history": s.history,
+        "lastResult": s.last_result,
+        "createdAt": s.created_at,
+        "updatedAt": s.updated_at,
+        "workerStatus": w.status if w else None,
+        "workerId": w.worker_id if w else None,
+    }
+
+
+def _check_session_name(name: str) -> str | None:
+    """Return error if name is taken, None otherwise."""
+    for s in sess.list_all():
+        if s.name == name:
+            return f"Session name '{name}' already exists"
+    return None
 
 
 # ── Dashboard ──
@@ -99,12 +109,23 @@ async def ws_endpoint(ws: WebSocket):
 
             msg_type = msg.get("type")
             if msg_type == "user_inject":
-                worker_id = msg.get("workerId")
+                session_id = msg.get("sessionId")
                 text = msg.get("text")
-                if worker_id and text:
-                    err = await worker.send_task(worker_id, text, source="user")
-                    if err:
-                        await broadcast({"type": "error", "message": err})
+                if session_id and text:
+                    w = worker.find_worker_by_session(session_id)
+                    if w:
+                        err = await worker.send_task(w.worker_id, text, source="user")
+                        if err:
+                            await broadcast({"type": "error", "message": err})
+                    else:
+                        # auto-spawn worker for this session
+                        result = await worker.create_worker(session_id)
+                        if isinstance(result, str):
+                            await broadcast({"type": "error", "message": result})
+                        else:
+                            err = await worker.send_task(result.worker_id, text, source="user")
+                            if err:
+                                await broadcast({"type": "error", "message": err})
     except WebSocketDisconnect:
         pass
     finally:
@@ -115,15 +136,6 @@ async def ws_endpoint(ws: WebSocket):
 
 @app.websocket("/ws/agent")
 async def ws_agent_endpoint(ws: WebSocket):
-    """Dedicated WebSocket endpoint for the main Agent.
-
-    Agent receives all events (worker.spawned, worker.stream,
-    worker.result, etc.) and can send task commands:
-
-        {"type": "task", "workerId": "worker-1", "text": "do something"}
-
-    Also supports: spawn, kill, list via WS.
-    """
     await ws.accept()
     agent_clients.add(ws)
     try:
@@ -137,10 +149,17 @@ async def ws_agent_endpoint(ws: WebSocket):
             msg_type = msg.get("type")
 
             if msg_type == "task":
-                worker_id = msg.get("workerId")
+                session_id = msg.get("sessionId")
                 text = msg.get("text")
-                if worker_id and text:
-                    err = await worker.send_task(worker_id, text, source="agent")
+                if session_id and text:
+                    w = worker.find_worker_by_session(session_id)
+                    if not w:
+                        result = await worker.create_worker(session_id)
+                        if isinstance(result, str):
+                            await ws.send_json({"type": "error", "message": result})
+                        else:
+                            w = result
+                    err = await worker.send_task(w.worker_id, text, source="agent")
                     if err:
                         await ws.send_json({"type": "error", "message": err})
 
@@ -151,44 +170,36 @@ async def ws_agent_endpoint(ws: WebSocket):
                 workdir_name = msg.get("workdir") or name
                 workdir = WORKDIRS_DIR / workdir_name
                 workdir.mkdir(parents=True, exist_ok=True)
-                extra_args = ["--model", model]
-                if permission_mode:
-                    extra_args.extend(["--permission-mode", permission_mode])
-                w = await worker.create_worker(
-                    name, str(workdir), extra_args=extra_args,
-                )
-                if permission_mode:
-                    w.permission_mode = permission_mode
-                await ws.send_json({
-                    "type": "worker.spawned",
-                    "workerId": w.worker_id, "name": w.name,
-                    "status": w.status, "workdir": w.workdir,
-                    "model": model,
-                    "permissionMode": permission_mode or None,
-                })
+
+                s = sess.create(name, model=model,
+                                permission_mode=permission_mode or None,
+                                workdir=str(workdir))
+                result = await worker.create_worker(s.id)
+                if isinstance(result, str):
+                    await ws.send_json({"type": "error", "message": result})
+                else:
+                    await ws.send_json({
+                        "type": "worker.spawned",
+                        "sessionId": s.id,
+                        "workerId": result.worker_id,
+                        "name": s.name,
+                        "status": "idle",
+                        "model": s.model,
+                    })
 
             elif msg_type == "kill":
-                worker_id = msg.get("workerId")
-                if worker_id:
-                    err = await worker.kill_worker(worker_id)
-                    if not err:
-                        sess.delete_session(worker_id)
+                session_id = msg.get("sessionId") or msg.get("workerId")
+                w = worker.find_worker_by_session(session_id)
+                if w:
+                    err = await worker.kill_worker(w.worker_id)
+                    if err:
+                        await ws.send_json({"type": "error", "message": err})
 
             elif msg_type == "list":
-                wl = worker.list_workers()
+                sessions = sess.list_all()
                 await ws.send_json({
-                    "type": "worker.list",
-                    "workers": [
-                        {
-                            "workerId": w.worker_id, "name": w.name,
-                            "status": w.status, "sessionId": w.session_id,
-                            "model": w.model,
-                            "permissionMode": w.permission_mode,
-                            "lastResult": w.last_result,
-                            "history": w.history,
-                        }
-                        for w in wl
-                    ],
+                    "type": "session.list",
+                    "sessions": [_session_to_api(s) for s in sessions],
                 })
 
     except WebSocketDisconnect:
@@ -197,30 +208,55 @@ async def ws_agent_endpoint(ws: WebSocket):
         agent_clients.discard(ws)
 
 
-# ── API routes ──
+# ── Session API ──
 
-@app.post("/api/spawn")
-async def api_spawn(data: dict):
+@app.get("/api/sessions")
+async def api_list_sessions():
+    """List all sessions (includes worker status if active)."""
+    sessions = sess.list_all()
+    return {"sessions": [_session_to_api(s) for s in sessions]}
+
+
+@app.post("/api/sessions")
+async def api_create_session(data: dict):
+    """Create a new Session (no worker spawned)."""
     name = data.get("name", "default")
+    err = _check_session_name(name)
+    if err:
+        return {"error": err}
+
     model = data.get("model") or worker.DEFAULT_MODEL
-    permission_mode = data.get("permissionMode") or ""
+    permission_mode = data.get("permissionMode") or None
     workdir_name = data.get("workdir") or name
     workdir = WORKDIRS_DIR / workdir_name
     workdir.mkdir(parents=True, exist_ok=True)
 
-    extra_args = ["--model", model]
-    if permission_mode:
-        extra_args.extend(["--permission-mode", permission_mode])
+    s = sess.create(name, model=model,
+                    permission_mode=permission_mode,
+                    workdir=str(workdir))
+    return _session_to_api(s)
 
-    w = await worker.create_worker(name, str(workdir), extra_args=extra_args)
-    if permission_mode:
-        w.permission_mode = permission_mode
 
-    return {
-        "workerId": w.worker_id, "name": w.name,
-        "status": w.status, "workdir": w.workdir,
-        "model": model, "permissionMode": permission_mode or None,
-    }
+@app.get("/api/sessions/{session_id}")
+async def api_get_session(session_id: str):
+    s = sess.get(session_id)
+    if not s:
+        return {"error": "Session not found"}
+    return _session_to_api(s)
+
+
+@app.delete("/api/sessions/{session_id}")
+async def api_delete_session(session_id: str):
+    """Delete a session and its worker if running."""
+    w = worker.find_worker_by_session(session_id)
+    if w:
+        await worker.kill_worker(w.worker_id)
+    sess.delete(session_id)
+    await broadcast({
+        "type": "session.deleted",
+        "sessionId": session_id,
+    })
+    return {"sessionId": session_id, "status": "deleted"}
 
 
 @app.get("/api/models")
@@ -228,40 +264,106 @@ async def api_models():
     return {"models": worker.SUPPORTED_MODELS, "default": worker.DEFAULT_MODEL}
 
 
+# ── Spawn (create worker for a session) ──
+
+@app.post("/api/spawn")
+async def api_spawn(data: dict):
+    """Spawn a Worker for a Session.
+
+    If session_id is provided, use that Session.
+    Otherwise, create a new Session first.
+    """
+    session_id = data.get("sessionId")
+    if session_id:
+        s = sess.get(session_id)
+        if not s:
+            return {"error": f"Session {session_id} not found"}
+    else:
+        name = data.get("name", "default")
+        model = data.get("model") or worker.DEFAULT_MODEL
+        permission_mode = data.get("permissionMode") or None
+        workdir_name = data.get("workdir") or name
+        workdir = WORKDIRS_DIR / workdir_name
+        workdir.mkdir(parents=True, exist_ok=True)
+
+        err_name = _check_session_name(name)
+        if err_name:
+            return {"error": err_name}
+
+        s = sess.create(name, model=model,
+                        permission_mode=permission_mode,
+                        workdir=str(workdir))
+        session_id = s.id
+
+    result = await worker.create_worker(session_id)
+    if isinstance(result, str):
+        return {"error": result}
+
+    w = result
+    return {
+        "workerId": w.worker_id,
+        "sessionId": session_id,
+        "name": s.name,
+        "status": w.status,
+        "model": s.model or worker.DEFAULT_MODEL,
+    }
+
+
+@app.post("/api/task")
+async def api_task(data: dict):
+    """Send a task to a Worker by worker_id or session_id."""
+    worker_id = data.get("workerId")
+    session_id = data.get("sessionId")
+
+    if not worker_id and session_id:
+        w = worker.find_worker_by_session(session_id)
+        if w:
+            worker_id = w.worker_id
+
+    if not worker_id:
+        return {"error": "workerId or sessionId required"}
+
+    text = data.get("text")
+    if not text:
+        return {"error": "text is required"}
+
+    err = await worker.send_task(worker_id, text, source="agent")
+    if err:
+        return {"error": err}
+
+    w = worker.get_worker(worker_id)
+    return {
+        "workerId": worker_id,
+        "sessionId": w.session_id if w else None,
+        "status": "queued",
+    }
+
+
+@app.post("/api/kill/{worker_id}")
+async def api_kill(worker_id: str):
+    """Kill a Worker process. Does NOT delete the Session."""
+    err = await worker.kill_worker(worker_id)
+    if err:
+        return {"error": err}
+    return {"workerId": worker_id, "status": "killed"}
+
+
 @app.get("/api/list")
 async def api_list():
+    """List running workers (not sessions)."""
     return {
         "workers": [
             {
-                "workerId": w.worker_id, "name": w.name, "status": w.status,
-                "sessionId": w.session_id, "model": w.model,
-                "permissionMode": w.permission_mode, "workdir": w.workdir,
-                "lastResult": w.last_result,
-                "history": w.history,
+                "workerId": w.worker_id,
+                "sessionId": w.session_id,
+                "status": w.status,
             }
             for w in worker.list_workers()
         ]
     }
 
 
-@app.post("/api/task")
-async def api_task(data: dict):
-    worker_id = data.get("workerId")
-    text = data.get("text")
-    err = await worker.send_task(worker_id, text, source="agent")
-    if err:
-        return {"error": err}
-    return {"workerId": worker_id, "status": "queued"}
-
-
-@app.post("/api/kill/{worker_id}")
-async def api_kill(worker_id: str):
-    err = await worker.kill_worker(worker_id)
-    if err:
-        return {"error": err}
-    sess.delete_session(worker_id)
-    return {"workerId": worker_id, "status": "killed"}
-
+# ── Worker actions ──
 
 @app.post("/api/worker/{worker_id}/restart")
 async def api_restart(worker_id: str):
@@ -279,9 +381,13 @@ async def api_switch_model(worker_id: str, data: dict):
     err = await worker.respawn_worker(worker_id, ["--model", model])
     if err:
         return {"error": err}
+    # update session model
     w = worker.get_worker(worker_id)
     if w:
-        w.model = model
+        s = sess.get(w.session_id)
+        if s:
+            s.model = model
+            sess.save(s)
     return {"workerId": worker_id, "model": model, "status": "switched"}
 
 
@@ -295,7 +401,10 @@ async def api_switch_mode(worker_id: str, data: dict):
         return {"error": err}
     w = worker.get_worker(worker_id)
     if w:
-        w.permission_mode = mode
+        s = sess.get(w.session_id)
+        if s:
+            s.permission_mode = mode
+            sess.save(s)
     return {"workerId": worker_id, "permissionMode": mode, "status": "switched"}
 
 
@@ -304,21 +413,54 @@ async def api_rename(worker_id: str, data: dict):
     new_name = data.get("name")
     if not new_name:
         return {"error": "name is required"}
-    err = await worker.rename_worker(worker_id, new_name)
+
+    err = _check_session_name(new_name)
     if err:
         return {"error": err}
-    return {"workerId": worker_id, "name": new_name, "status": "renamed"}
+
+    w = worker.get_worker(worker_id)
+    if w:
+        s = sess.get(w.session_id)
+        if s:
+            old_name = s.name
+            s.name = new_name
+            sess.save(s)
+            await broadcast({
+                "type": "session.renamed",
+                "sessionId": w.session_id,
+                "oldName": old_name,
+                "newName": new_name,
+            })
+            return {"sessionId": w.session_id, "name": new_name, "status": "renamed"}
+    return {"error": "Worker not found"}
 
 
 @app.post("/api/worker/{worker_id}/branch")
 async def api_branch(worker_id: str, data: dict):
-    name = data.get("name")
-    result = await worker.branch_worker(worker_id, name)
+    w = worker.get_worker(worker_id)
+    if not w:
+        return {"error": "Worker not found"}
+
+    orig = sess.get(w.session_id)
+    if not orig or not orig.cbc_session_id:
+        return {"error": "Session not ready for branching"}
+
+    name = data.get("name") or f"{orig.name}-branch"
+    new_session = sess.create(name, model=orig.model,
+                              permission_mode=orig.permission_mode,
+                              workdir=orig.workdir)
+
+    result = await worker.branch_worker(worker_id, new_session.id)
     if isinstance(result, str):
+        sess.delete(new_session.id)
         return {"error": result}
+
     return {
-        "workerId": result.worker_id, "name": result.name, "status": "idle",
-        "parentWorkerId": worker_id,
+        "workerId": result.worker_id,
+        "sessionId": new_session.id,
+        "name": new_session.name,
+        "status": "idle",
+        "parentSessionId": w.session_id,
     }
 
 
@@ -332,29 +474,31 @@ async def api_interrupt(worker_id: str):
 
 @app.post("/api/worker/{worker_id}/takeover")
 async def api_takeover(worker_id: str):
-    """Open a new PowerShell window running interactive cbc --resume in the worker's workdir."""
     import subprocess
 
     w = worker.get_worker(worker_id)
     if not w:
         return {"error": "Worker not found"}
-    if not w.session_id:
-        return {"error": "Worker has no session yet"}
+    s = sess.get(w.session_id)
+    if not s:
+        return {"error": "Session not found"}
+    if not s.cbc_session_id:
+        return {"error": "Worker has no cbc session yet"}
 
-    # Kill the managed cbc process so the interactive session can use --resume
+    # restart worker to free session, then mark held
     err = await worker.restart_worker(worker_id)
     if err:
         return {"error": err}
 
-    # Mark as held: block all task input until restart
     w.status = "held"
     await broadcast({
         "type": "worker.status",
-        "workerId": worker_id,
+        "sessionId": w.session_id,
+        "workerId": w.worker_id,
         "status": "held",
     })
 
-    cmd = f'cd "{w.workdir}"; cbc --resume {w.session_id}'
+    cmd = f'cd "{s.workdir}"; cbc --resume {s.cbc_session_id}'
     try:
         subprocess.Popen(
             ["powershell.exe", "-NoExit", "-Command", cmd],
@@ -368,6 +512,6 @@ async def api_takeover(worker_id: str):
     return {
         "workerId": worker_id,
         "sessionId": w.session_id,
-        "workdir": w.workdir,
+        "cbcSessionId": s.cbc_session_id,
         "status": "takeover started",
     }

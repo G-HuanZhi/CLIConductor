@@ -2,60 +2,109 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>CLIConductor Dashboard</title>
+<title>CLIConductor</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3;padding:20px}
-  h1{font-size:1.5rem;margin-bottom:16px;color:#58a6ff}
-  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:16px}
-  .toolbar input{padding:6px 10px;border:1px solid #30363d;border-radius:6px;background:#161b22;color:#e6edf3;font-size:.875rem}
-  .toolbar input:focus{outline:none;border-color:#58a6ff}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:12px}
-  .card{border:1px solid #30363d;border-radius:8px;background:#161b22;padding:12px;display:flex;flex-direction:column}
-  .card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px}
-  .card-header h2{font-size:1rem;color:#e6edf3}
-  .card-header .meta{font-size:.75rem;color:#8b949e}
-  .status-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
-  .idle{background:#8b949e}.running{background:#3fb950}.done{background:#58a6ff}.error{background:#f85149}.held{background:#f0883e}
-  .btn{padding:4px 10px;border:1px solid #30363d;border-radius:6px;font-size:.75rem;cursor:pointer;background:#21262d;color:#e6edf3}
-  .btn:hover{background:#30363d}
-  .btn-danger{border-color:#f85149;color:#f85149}
-  .btn-danger:hover{background:#f8514911}
-  .btn-primary{border-color:#58a6ff;color:#58a6ff}
-  .btn-primary:hover{background:#58a6ff11}
-  .controls{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center}
-  .controls input,.controls select{padding:3px 6px;border:1px solid #30363d;border-radius:4px;background:#0d1117;color:#e6edf3;font-size:.75rem;max-width:120px}
-  .controls input:focus,.controls select:focus{outline:none;border-color:#58a6ff}
-  .log{border:1px solid #21262d;border-radius:6px;background:#0d1117;padding:8px;height:280px;overflow-y:auto;font-family:monospace;font-size:.8rem;line-height:1.5;margin-bottom:8px;flex:1}
-  .log .msg{margin:2px 0;white-space:pre-wrap;word-break:break-word}
-  .log .u{color:#7ee787}.log .th{color:#d2a8ff}.log .tx{color:#e6edf3}.log .tl{color:#ffa657}.log .err{color:#f85149}
-  .log .sys{margin:4px 0;padding:2px 6px;background:#161b22;border-radius:4px;font-size:.7rem;color:#8b949e}
-  .inject-row{display:flex;gap:6px}
-  .inject-row input{flex:1;padding:6px 10px;border:1px solid #30363d;border-radius:6px;background:#0d1117;color:#e6edf3;font-size:.8rem}
-  .inject-row input:focus{outline:none;border-color:#58a6ff}
-  .empty{color:#8b949e;font-size:.8rem;font-style:italic}
+  html,body{height:100%}
+  body{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3;display:flex;overflow:hidden}
   ::-webkit-scrollbar{width:6px}
   ::-webkit-scrollbar-track{background:transparent}
   ::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
-  .toast{position:fixed;bottom:20px;right:20px;background:#21262d;border:1px solid #30363d;border-radius:6px;padding:10px 16px;font-size:.8rem;color:#e6edf3;opacity:0;transition:opacity .3s}
+
+  /* ── Sidebar ── */
+  #sidebar{width:240px;min-width:240px;background:#161b22;border-right:1px solid #30363d;display:flex;flex-direction:column;height:100%}
+  #sidebar h1{font-size:1rem;padding:12px 14px;color:#58a6ff;border-bottom:1px solid #21262d}
+  #newSessBtn{margin:8px 10px;padding:6px 0;border:1px dashed #30363d;border-radius:6px;background:transparent;color:#8b949e;cursor:pointer;font-size:.8rem}
+  #newSessBtn:hover{border-color:#58a6ff;color:#58a6ff;background:#58a6ff08}
+  #sessionList{flex:1;overflow-y:auto;padding:4px 0}
+  .sess-item{padding:8px 14px;cursor:pointer;border-left:3px solid transparent;transition:.1s}
+  .sess-item:hover{background:#1c2128}
+  .sess-item.active{background:#1c2128;border-left-color:#58a6ff}
+  .sess-item .sess-name{font-size:.85rem;font-weight:500;display:flex;align-items:center;gap:6px}
+  .sess-item .sess-preview{font-size:.75rem;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+  .sess-item .sess-meta{font-size:.7rem;color:#484f58;margin-top:2px;display:flex;gap:6px;align-items:center}
+  .sess-item .sess-model{background:#21262d;padding:0 5px;border-radius:3px;font-size:.65rem;color:#8b949e}
+  .sess-item .sess-count{color:#484f58;font-size:.75rem}
+
+  .s-dot{display:inline-block;width:8px;height:8px;border-radius:50%}
+  .s-dot.idle{background:#8b949e}.s-dot.running{background:#3fb950}.s-dot.held{background:#f0883e}.s-dot.error{background:#f85149}
+
+  /* ── Chat area ── */
+  #chat{flex:1;display:flex;flex-direction:column;height:100%;min-width:0}
+  #topBar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #30363d;min-height:48px;flex-wrap:wrap}
+  #topBar .chat-name{font-size:.95rem;font-weight:500}
+  #topBar .chat-model{font-size:.7rem;background:#21262d;padding:2 6px;border-radius:4px;color:#8b949e}
+  #topBar .chat-status{font-size:.7rem;color:#484f58;margin-left:auto}
+  #topBar .chat-empty{color:#484f58;font-size:.8rem}
+  #settingsBtn{padding:4px 8px;border:1px solid #30363d;border-radius:4px;background:transparent;color:#8b949e;cursor:pointer;font-size:.8rem}
+  #settingsBtn:hover{border-color:#58a6ff;color:#58a6ff}
+  #settingsBtn.open{background:#58a6ff11;border-color:#58a6ff;color:#58a6ff}
+
+  /* ── Messages ── */
+  #messages{flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:2px}
+  .msg{padding:6px 12px;border-radius:8px;max-width:85%;line-height:1.5;font-size:.85rem;white-space:pre-wrap;word-break:break-word;margin:2px 0}
+  .msg.user{background:#1f6feb22;align-self:flex-end;border:1px solid #1f6feb33;color:#e6edf3}
+  .msg.assistant{background:#21262d;align-self:flex-start;border:1px solid #30363d;color:#e6edf3}
+  .msg.thinking{background:#21262d44;align-self:flex-start;border-left:3px solid #d2a8ff;font-size:.8rem;color:#d2a8ff;padding:6px 12px;cursor:pointer}
+  .msg.tool{background:#21262d44;align-self:flex-start;border-left:3px solid #ffa657;font-size:.8rem;color:#ffa657}
+  .msg.system{background:transparent;align-self:center;font-size:.75rem;color:#484f58;padding:4px 8px}
+  .msg .thinking-body{display:none;margin-top:4px;padding:6px 8px;background:#0d1117;border-radius:4px;color:#d2a8ff;font-size:.8rem}
+  .msg .thinking-body.open{display:block}
+  .msg .thinking-toggle{color:#d2a8ff88;font-size:.7rem;margin-left:4px}
+  .msg .thinking-toggle:hover{color:#d2a8ff}
+  .empty-chat{color:#484f58;font-size:.85rem;text-align:center;margin-top:40px}
+
+  /* ── Settings panel ── */
+  #settingsPanel{display:none;padding:8px 16px;border-bottom:1px solid #30363d;background:#161b22}
+  #settingsPanel.open{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  #settingsPanel select,#settingsPanel input{padding:3px 6px;border:1px solid #30363d;border-radius:4px;background:#0d1117;color:#e6edf3;font-size:.75rem;max-width:130px}
+  #settingsPanel select:focus,#settingsPanel input:focus{outline:none;border-color:#58a6ff}
+  #settingsPanel .btn{padding:3px 8px;border:1px solid #30363d;border-radius:4px;font-size:.7rem;cursor:pointer;background:#21262d;color:#e6edf3}
+  #settingsPanel .btn:hover{background:#30363d}
+  #settingsPanel .btn-p{border-color:#58a6ff;color:#58a6ff}
+  #settingsPanel .btn-p:hover{background:#58a6ff11}
+  #settingsPanel .btn-d{border-color:#f85149;color:#f85149}
+  #settingsPanel .btn-d:hover{background:#f8514911}
+  #settingsPanel .model-custom{display:none;max-width:100px}
+  #settingsPanel .sep{width:1px;height:20px;background:#30363d}
+  #settingsPanel label{font-size:.7rem;color:#8b949e}
+
+  /* ── Input ── */
+  #inputRow{display:flex;gap:8px;padding:10px 16px;border-top:1px solid #30363d;align-items:center}
+  #inputRow input{flex:1;padding:8px 12px;border:1px solid #30363d;border-radius:8px;background:#0d1117;color:#e6edf3;font-size:.85rem}
+  #inputRow input:focus{outline:none;border-color:#58a6ff}
+  #inputRow button{padding:8px 16px;border:1px solid #58a6ff;border-radius:8px;background:#58a6ff22;color:#58a6ff;cursor:pointer;font-size:.85rem;white-space:nowrap}
+  #inputRow button:hover{background:#58a6ff44}
+
+  .toast{position:fixed;bottom:20px;right:20px;background:#21262d;border:1px solid #30363d;border-radius:6px;padding:10px 16px;font-size:.8rem;color:#e6edf3;opacity:0;transition:opacity .3s;z-index:999;max-width:400px}
   .toast.show{opacity:1}
 </style>
 </head>
 <body>
 
-<h1>⚡ CLIConductor</h1>
+<div id="sidebar">
+  <h1>CLIConductor</h1>
+  <button id="newSessBtn" onclick="newSession()">+ New Session</button>
+  <div id="sessionList"></div>
+</div>
 
-<div class="toolbar" style="flex-direction:column;align-items:stretch;gap:6px">
-  <div style="display:flex;gap:8px;align-items:center">
-    <span style="font-weight:600;white-space:nowrap">+ New Worker</span>
-    <input id="newName" placeholder="name" value="worker" style="flex:1;min-width:80px">
-    <button class="btn btn-primary" onclick="spawn()" style="white-space:nowrap">+ Spawn</button>
-    <span id="workerCount" style="font-size:.8rem;color:#8b949e;white-space:nowrap">0 workers</span>
+<div id="chat">
+  <div id="topBar">
+    <span class="chat-empty" id="emptyHint">Select a session</span>
+    <span class="chat-name" id="chatName" style="display:none"></span>
+    <span class="chat-model" id="chatModel" style="display:none"></span>
+    <span id="chatStatus" class="chat-status"></span>
+    <button id="settingsBtn" onclick="toggleSettings()" style="display:none">⚙</button>
   </div>
-  <div class="controls" style="margin-bottom:0">
-    <select id="spawnModel" onchange="onSpawnModelChange()"></select>
-    <input id="spawnModelCustom" placeholder="custom model" style="display:none;max-width:140px">
-    <select id="spawnMode">
+
+  <div id="settingsPanel">
+    <label>Model</label>
+    <select id="settingModel"></select>
+    <input id="settingModelCustom" class="model-custom" placeholder="custom">
+    <button class="btn btn-p" onclick="applyModel()">Set</button>
+    <div class="sep"></div>
+    <label>Mode</label>
+    <select id="settingMode">
       <option value="">mode…</option>
       <option value="default">default</option>
       <option value="acceptEdits">acceptEdits</option>
@@ -63,412 +112,374 @@
       <option value="plan">plan</option>
       <option value="dontAsk">dontAsk</option>
     </select>
-    <input id="spawnWorkdir" placeholder="workdir (auto)" style="max-width:200px">
+    <button class="btn btn-p" onclick="applyMode()">Set</button>
+    <div class="sep"></div>
+    <button class="btn" onclick="restartWorker()">Restart</button>
+    <button class="btn" onclick="interruptWorker()">Interrupt</button>
+    <button class="btn btn-p" onclick="takeover()">Takeover</button>
+    <button class="btn btn-d" onclick="killWorker()">Kill</button>
+  </div>
+
+  <div id="messages"></div>
+
+  <div id="inputRow">
+    <input id="chatInput" placeholder="Type a message…" onkeydown="if(event.key==='Enter')send()">
+    <button onclick="send()">Send</button>
   </div>
 </div>
-
-<div id="grid" class="grid"></div>
 
 <div id="toast" class="toast"></div>
 
 <script>
-// ── Model list (populated from API) ──
+// ── State ──
 var allModels = [];
 var defaultModel = 'deepseek-v4-flash';
+var currentSessionId = null;  // ses_ uuid
+var currentWorkerId = null;
+var modelData = [];           // cache of sessions from API
 
 // ── WebSocket ──
 var ws = new WebSocket('ws://' + location.host + '/ws');
-ws.onopen = () => { fetchWorkers(); };
-ws.onmessage = function(e) {
+ws.onmessage = onWsMessage;
+
+function onWsMessage(e) {
   var d = JSON.parse(e.data);
   switch (d.type) {
-    case 'worker.spawned':   addCard(d); break;
-    case 'worker.stream':    appendEvent(d.workerId, d.event); break;
-    case 'worker.result':    onResult(d); break;
-    case 'worker.status':    setStatus(d.workerId, d.status); break;
-    case 'worker.destroyed': removeCard(d.workerId); break;
+    case 'worker.spawned':
     case 'worker.restarted':
-    case 'worker.reconfigured': setStatus(d.workerId, d.status); break;
-    case 'worker.renamed':   updateName(d.workerId, d.newName); break;
-    case 'error':            toast(d.message); break;
+      refreshSessions();
+      if (d.sessionId === currentSessionId) {
+        currentWorkerId = d.workerId;
+        updateTopBar();
+      }
+      break;
+    case 'worker.destroyed':
+      refreshSessions();
+      if (d.sessionId === currentSessionId) {
+        currentWorkerId = null;
+        updateTopBar();
+      }
+      break;
+    case 'worker.stream':
+      if (d.sessionId === currentSessionId) appendEvent(d.event);
+      break;
+    case 'worker.result':
+      if (d.sessionId === currentSessionId) appendResult(d);
+      refreshSessions();
+      break;
+    case 'worker.status':
+      if (d.sessionId === currentSessionId) updateTopBar();
+      refreshSessions();
+      break;
+    case 'worker.reconfigured':
+      refreshSessions();
+      if (d.sessionId === currentSessionId) updateTopBar();
+      break;
+    case 'session.renamed':
+    case 'session.deleted':
+      refreshSessions();
+      break;
+    case 'error':
+      toast(d.message);
+      break;
   }
-};
+}
 
-// ── Fetch current state on reconnect ──
-function fetchWorkers() {
-  fetch('/api/models').then(r => r.json()).then(data => {
-    allModels = data.models || [];
-    defaultModel = data.default || 'deepseek-v4-flash';
-    // re-populate any existing model selects
-    document.querySelectorAll('[id^="model-"]').forEach(sel => rebuildModelSelect(sel.id.replace('model-', '')));
-    rebuildSpawnModel();
-  });
-  fetch('/api/list').then(r => r.json()).then(data => {
-    clearGrid();
-    (data.workers || []).forEach(w => {
-      addCard({workerId: w.workerId, name: w.name, status: w.status,
-               sessionId: w.sessionId, model: w.model,
-               permissionMode: w.permissionMode, workdir: w.workdir,
-               lastResult: w.lastResult, history: w.history});
-    });
+// ── Session list ──
+function refreshSessions() {
+  fetch('/api/sessions').then(function(r) { return r.json(); }).then(function(data) {
+    modelData = data.sessions || [];
+    renderSessionList();
+    // re-sync current session if it exists
+    if (currentSessionId && !modelData.find(function(s) { return s.id === currentSessionId; })) {
+      currentSessionId = null;
+      currentWorkerId = null;
+      showEmpty();
+    }
+    if (currentSessionId) updateTopBar();
   });
 }
 
-// ── Worker card ──
-function addCard(d) {
-  var id = d.workerId;
-  if (document.getElementById('c-' + id)) return;
-
-  var card = document.createElement('div');
-  card.className = 'card';
-  card.id = 'c-' + id;
-
-  card.innerHTML = `
-    <div class="card-header">
-      <div>
-        <h2 id="title-${id}"><span id="dot-${id}" class="status-dot ${d.status || 'idle'}"></span>${esc(d.name)}</h2>
-        <div class="meta" id="meta-${id}">
-          ${d.workerId}
-          ${d.sessionId ? ' · session: ' + d.sessionId.slice(0,8)+'…' : ''}
-          ${d.model ? ' · ' + esc(d.model) : ''}
-          ${d.workdir ? ' · ' + esc(d.workdir) : ''}
-          ${d.lastResult ? ' · last: ' + d.lastResult.status : ''}
-        </div>
-      </div>
-      <div class="controls">
-        <button class="btn" onclick="restart('${id}')">Restart</button>
-        <button class="btn" onclick="interrupt('${id}')">Interrupt</button>
-        <button class="btn" onclick="takeover('${id}')">Takeover</button>
-        <button class="btn btn-danger" onclick="kill('${id}')">Kill</button>
-      </div>
-    </div>
-    <div class="controls">
-      <select id="model-${id}" data-current="${d.model || ''}" onchange="onModelChange('${id}')"></select>
-      <input id="model-custom-${id}" placeholder="custom model" style="display:none;max-width:140px">
-      <button class="btn btn-primary" onclick="switchModel('${id}')">Model</button>
-      <select id="mode-${id}">
-        <option value="">mode…</option>
-        <option value="default">default</option>
-        <option value="acceptEdits">acceptEdits</option>
-        <option value="bypassPermissions">bypass</option>
-        <option value="plan">plan</option>
-        <option value="dontAsk">dontAsk</option>
-      </select>
-      <button class="btn" onclick="switchMode('${id}')">Mode</button>
-      <input id="rename-${id}" placeholder="new name" value="">
-      <button class="btn" onclick="rename('${id}')">Rename</button>
-      <input id="branch-${id}" placeholder="branch name" value="">
-      <button class="btn" onclick="branch('${id}')">Branch</button>
-    </div>
-    <div class="log" id="log-${id}">
-      <div class="msg sys">Worker created (${d.workerId})</div>
-    </div>
-    <div class="inject-row">
-      <input id="inject-${id}" placeholder="Type a message to inject…">
-      <button class="btn btn-primary" onclick="inject('${id}')">Send</button>
-    </div>
-  `;
-
-  document.getElementById('grid').appendChild(card);
-  rebuildModelSelect(id);
-  if (d.history) replayHistory(id, d.history);
-  updateCount();
-}
-
-function removeCard(id) {
-  var el = document.getElementById('c-' + id);
-  if (el) el.remove();
-  updateCount();
-}
-
-function clearGrid() {
-  document.getElementById('grid').innerHTML = '';
-  updateCount();
-}
-
-function updateCount() {
-  var n = document.getElementById('grid').children.length;
-  document.getElementById('workerCount').textContent = n + ' worker' + (n !== 1 ? 's' : '');
-}
-
-function updateName(id, newName) {
-  var el = document.getElementById('title-' + id);
-  if (el) el.innerHTML = '<span id="dot-'+id+'" class="status-dot idle"></span>' + esc(newName);
-}
-
-// ── Replay history into log (used on page refresh) ──
-function replayHistory(id, history) {
-  var log = document.getElementById('log-' + id);
-  if (!log || !history) return;
-  log.innerHTML = '';
-  history.forEach(function(h) {
+function renderSessionList() {
+  var el = document.getElementById('sessionList');
+  el.innerHTML = '';
+  modelData.forEach(function(s) {
     var div = document.createElement('div');
-    div.className = 'msg';
-    if (h.role === 'user') { div.className += ' u'; div.textContent = h.content; }
-    else if (h.role === 'thinking') { div.className += ' th'; div.textContent = '💭 ' + h.content; }
-    else if (h.role === 'assistant') { div.className += ' tx'; div.textContent = h.content; }
-    else if (h.role === 'tool') { div.className += ' tl'; div.textContent = '🔧 ' + h.content; }
-    else { div.className += ' sys'; div.textContent = h.content || ''; }
-    log.appendChild(div);
+    div.className = 'sess-item' + (s.id === currentSessionId ? ' active' : '');
+    div.onclick = function() { selectSession(s.id); };
+
+    var lastMsg = '';
+    var h = s.history || [];
+    if (h.length > 0) {
+      var last = h[h.length - 1];
+      lastMsg = last.content || '';
+      if (lastMsg.length > 40) lastMsg = lastMsg.slice(0, 40) + '…';
+    }
+
+    div.innerHTML =
+      '<div class="sess-name"><span class="s-dot ' + (s.workerStatus || 'idle') + '"></span>' + esc(s.name) + '</div>' +
+      (lastMsg ? '<div class="sess-preview">' + esc(lastMsg) + '</div>' : '') +
+      '<div class="sess-meta"><span class="sess-model">' + esc(s.model || defaultModel) + '</span>' +
+      '<span>' + (s.history || []).length + ' msgs</span></div>';
+    el.appendChild(div);
   });
-  log.scrollTop = log.scrollHeight;
 }
 
-// ── Model select helpers ──
-function rebuildModelSelect(id) {
-  var sel = document.getElementById('model-' + id);
-  if (!sel) return;
-  var current = sel.getAttribute('data-current') || '';
-  sel.innerHTML = '';
-  // blank option
-  var blank = document.createElement('option');
-  blank.value = ''; blank.textContent = '— model —';
-  sel.appendChild(blank);
-  // all known models
-  allModels.forEach(function(m) {
-    var opt = document.createElement('option');
-    opt.value = m;
-    opt.textContent = m;
-    if (m === current || m === defaultModel && !current) opt.selected = true;
-    sel.appendChild(opt);
+function selectSession(id) {
+  currentSessionId = id;
+  var s = modelData.find(function(x) { return x.id === id; });
+  if (!s) return;
+
+  // find worker if exists
+  currentWorkerId = s.workerId || null;
+
+  renderSessionList();
+  updateTopBar();
+  renderMessages(s.history || []);
+  document.getElementById('settingsBtn').style.display = '';
+}
+
+// ── Top bar ──
+function updateTopBar() {
+  var s = modelData.find(function(x) { return x.id === currentSessionId; });
+  if (!s) { showEmpty(); return; }
+  document.getElementById('emptyHint').style.display = 'none';
+  document.getElementById('chatName').style.display = '';
+  document.getElementById('chatModel').style.display = '';
+  document.getElementById('chatName').textContent = s.name || currentSessionId.slice(0,12);
+  document.getElementById('chatModel').textContent = s.model || defaultModel;
+  var status = s.workerStatus || 'idle';
+  document.getElementById('chatStatus').textContent = status + (currentWorkerId ? ' (' + currentWorkerId + ')' : ' (no worker)');
+  // sync settings panel
+  syncSettingsPanel(s);
+}
+
+function showEmpty() {
+  document.getElementById('emptyHint').style.display = '';
+  document.getElementById('chatName').style.display = 'none';
+  document.getElementById('chatModel').style.display = 'none';
+  document.getElementById('chatStatus').textContent = '';
+  document.getElementById('settingsBtn').style.display = 'none';
+  document.getElementById('settingsPanel').className = '';
+  document.getElementById('messages').innerHTML = '<div class="empty-chat">Select a session to start</div>';
+}
+
+// ── Messages ──
+function renderMessages(history) {
+  var el = document.getElementById('messages');
+  el.innerHTML = '';
+  if (!history || history.length === 0) {
+    el.innerHTML = '<div class="empty-chat">No messages yet. Start a conversation.</div>';
+    return;
+  }
+  history.forEach(function(h) {
+    addMessage(h.role, h.content);
   });
-  // custom option
-  var custom = document.createElement('option');
-  custom.value = '__custom__';
-  custom.textContent = '✎ custom…';
-  sel.appendChild(custom);
-  // show custom input if needed
-  if (current && allModels.indexOf(current) === -1) {
-    sel.value = '__custom__';
-    var inp = document.getElementById('model-custom-' + id);
-    if (inp) { inp.value = current; inp.style.display = 'inline-block'; }
+  el.scrollTop = el.scrollHeight;
+}
+
+function addMessage(role, content) {
+  var el = document.getElementById('messages');
+  var div = document.createElement('div');
+  if (role === 'user') {
+    div.className = 'msg user';
+    div.textContent = content;
+  } else if (role === 'assistant') {
+    // check if there's a preceding thinking block
+    div.className = 'msg assistant';
+    // strip tool calls from display
+    var display = content.replace(/🔧.*(\n|$)/g, '').trim();
+    div.textContent = display || '(tool call only)';
+  } else if (role === 'thinking') {
+    div.className = 'msg thinking';
+    div.innerHTML = '💭 <span class="thinking-toggle">show thinking</span><div class="thinking-body">' + esc(content) + '</div>';
+    div.onclick = function() {
+      var body = div.querySelector('.thinking-body');
+      var toggle = div.querySelector('.thinking-toggle');
+      body.classList.toggle('open');
+      toggle.textContent = body.classList.contains('open') ? 'hide thinking' : 'show thinking';
+    };
+  } else if (role === 'tool') {
+    div.className = 'msg tool';
+    div.textContent = '🔧 ' + content;
+  } else {
+    div.className = 'msg system';
+    div.textContent = content || '';
+  }
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+function appendEvent(event) {
+  var t = event.type;
+  if (t === 'system' && event.subtype === 'init') return;
+  if (t === 'result') return;
+
+  if (t === 'assistant') {
+    var content = (event.message && event.message.content) || [];
+    content.forEach(function(b) {
+      if (b.type === 'text') addMessage('assistant', b.text);
+      else if (b.type === 'thinking') addMessage('thinking', b.thinking);
+      else if (b.type === 'tool_use') addMessage('tool', b.name + '(' + JSON.stringify(b.input || {}) + ')');
+    });
   }
 }
 
-function onModelChange(id) {
-  var sel = document.getElementById('model-' + id);
-  var inp = document.getElementById('model-custom-' + id);
-  if (!sel || !inp) return;
-  inp.style.display = sel.value === '__custom__' ? 'inline-block' : 'none';
-  if (sel.value !== '__custom__') inp.value = '';
+function appendResult(d) {
+  var status = d.status === 'error' ? 'error' : 'done';
+  addMessage('system', '[' + status.toUpperCase() + '] Task completed');
 }
 
-function getModelValue(id) {
-  var sel = document.getElementById('model-' + id);
-  if (!sel) return '';
+// ── Settings panel ──
+function toggleSettings() {
+  var panel = document.getElementById('settingsPanel');
+  var btn = document.getElementById('settingsBtn');
+  var isOpen = panel.classList.toggle('open');
+  btn.classList.toggle('open', isOpen);
+}
+
+function syncSettingsPanel(s) {
+  var sel = document.getElementById('settingModel');
+  if (sel.getAttribute('data-loaded') !== '1') return; // first call, skip
+  sel.value = allModels.indexOf(s.model || defaultModel) >= 0 ? (s.model || defaultModel) : '';
+  document.getElementById('settingMode').value = s.permissionMode || '';
+}
+
+function getSettingModel() {
+  var sel = document.getElementById('settingModel');
   if (sel.value === '__custom__') {
-    var inp = document.getElementById('model-custom-' + id);
-    return inp ? inp.value.trim() : '';
-  }
-  return sel.value;
-}
-
-// ── Spawn model select ──
-function rebuildSpawnModel() {
-  var sel = document.getElementById('spawnModel');
-  if (!sel) return;
-  sel.innerHTML = '';
-  // default option
-  var def = document.createElement('option');
-  def.value = ''; def.textContent = 'default (' + defaultModel + ')';
-  sel.appendChild(def);
-  // all models
-  allModels.forEach(function(m) {
-    var opt = document.createElement('option');
-    opt.value = m; opt.textContent = m;
-    if (m === defaultModel) opt.selected = true;
-    sel.appendChild(opt);
-  });
-  // custom
-  var c = document.createElement('option');
-  c.value = '__custom__'; c.textContent = '✎ custom…';
-  sel.appendChild(c);
-}
-
-function onSpawnModelChange() {
-  var sel = document.getElementById('spawnModel');
-  var inp = document.getElementById('spawnModelCustom');
-  if (!sel || !inp) return;
-  inp.style.display = sel.value === '__custom__' ? 'inline-block' : 'none';
-  if (sel.value !== '__custom__') inp.value = '';
-}
-
-function getSpawnModel() {
-  var sel = document.getElementById('spawnModel');
-  if (!sel) return defaultModel;
-  if (sel.value === '__custom__') {
-    var inp = document.getElementById('spawnModelCustom');
-    return inp && inp.value.trim() ? inp.value.trim() : defaultModel;
+    var inp = document.getElementById('settingModelCustom');
+    return inp.value.trim() || defaultModel;
   }
   return sel.value || defaultModel;
 }
 
-// ── Event rendering ──
-function appendEvent(id, event) {
-  var log = document.getElementById('log-' + id);
-  if (!log) return;
-  var t = event.type;
-  var div;
-
-  if (t === 'system' && event.subtype === 'init') {
-    div = document.createElement('div');
-    div.className = 'msg sys';
-    div.textContent = `[INIT] session: ${event.session_id}  model: ${event.model}`;
-  } else if (t === 'assistant') {
-    var content = (event.message && event.message.content) || [];
-    for (var i = 0; i < content.length; i++) {
-      var b = content[i];
-      div = document.createElement('div');
-      if (b.type === 'text') {
-        div.className = 'msg tx';
-        div.textContent = b.text;
-      } else if (b.type === 'thinking') {
-        div.className = 'msg th';
-        div.textContent = '💭 ' + b.thinking;
-      } else if (b.type === 'tool_use') {
-        div.className = 'msg tl';
-        div.textContent = '🔧 ' + b.name + '(' + JSON.stringify(b.input || {}) + ')';
-      } else {
-        continue;
-      }
-      log.appendChild(div);
-    }
-    return;
-  } else if (t === 'result') {
-    return; // handled by onResult
-  } else {
-    return;
-  }
-
-  if (div) log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-}
-
-// ── Status updates ──
-function onResult(d) {
-  setStatus(d.workerId, d.status);
-  var log = document.getElementById('log-' + d.workerId);
-  if (!log) return;
-  var cls = d.status === 'error' ? 'err' : 'tx';
-  var div = document.createElement('div');
-  div.className = 'msg ' + cls;
-  div.textContent = '[' + d.status.toUpperCase() + '] ' + JSON.stringify(d.result || '');
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-  // update meta with session id
-  var meta = document.getElementById('meta-' + d.workerId);
-  if (meta && d.sessionId) {
-    meta.textContent = meta.textContent.replace(/session: [^·]+/, 'session: ' + d.sessionId.slice(0,8)+'…');
-    if (!meta.textContent.includes('session:')) meta.textContent += ' · session: ' + d.sessionId.slice(0,8)+'…';
-  }
-}
-
-function setStatus(id, s) {
-  var dot = document.getElementById('dot-' + id);
-  if (dot) { dot.className = 'status-dot ' + s; dot.title = s; }
-}
-
-// ── API calls ──
-function spawn() {
-  var name = document.getElementById('newName').value || 'worker';
-  var model = getSpawnModel();
-  var mode = document.getElementById('spawnMode').value;
-  var workdir = document.getElementById('spawnWorkdir').value.trim() || undefined;
-  var body = {name: name, model: model};
-  if (mode) body.permissionMode = mode;
-  if (workdir) body.workdir = workdir;
-  fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-}
-
-function inject(id) {
-  var input = document.getElementById('inject-' + id);
-  var text = input.value.trim();
-  if (!text) return;
-  // show user message locally
-  var log = document.getElementById('log-' + id);
-  if (log) {
-    var div = document.createElement('div');
-    div.className = 'msg u';
-    div.textContent = text;
-    log.appendChild(div);
-    log.scrollTop = log.scrollHeight;
-  }
-  ws.send(JSON.stringify({type:'user_inject', workerId:id, text:text}));
-  input.value = '';
-}
-
-function kill(id) {
-  if (!confirm('Kill ' + id + '?')) return;
-  fetch('/api/kill/' + id, {method:'POST'});
-}
-
-function restart(id) {
-  fetch('/api/worker/' + id + '/restart', {method:'POST'}).then(r => r.json()).then(d => {
-    if (d.error) toast(d.error);
+function applyModel() {
+  if (!currentWorkerId) return toast('No worker running');
+  var model = getSettingModel();
+  fetch('/api/worker/' + currentWorkerId + '/switch-model', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:model})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) toast(d.error); else refreshSessions();
   });
 }
 
-function interrupt(id) {
-  fetch('/api/worker/' + id + '/interrupt', {method:'POST'}).then(r => r.json()).then(d => {
-    if (d.error) toast(d.error);
-  });
-}
-
-function switchModel(id) {
-  var model = getModelValue(id);
-  if (!model) return toast('Select or enter a model');
-  fetch('/api/worker/' + id + '/switch-model', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model:model})}).then(r => r.json()).then(d => {
-    if (d.error) toast(d.error);
-  });
-}
-
-function switchMode(id) {
-  var mode = document.getElementById('mode-' + id).value;
+function applyMode() {
+  if (!currentWorkerId) return toast('No worker running');
+  var mode = document.getElementById('settingMode').value;
   if (!mode) return toast('Select a mode');
-  fetch('/api/worker/' + id + '/switch-mode', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({permissionMode:mode})}).then(r => r.json()).then(d => {
+  fetch('/api/worker/' + currentWorkerId + '/switch-mode', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({permissionMode:mode})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) toast(d.error); else refreshSessions();
+  });
+}
+
+function restartWorker() {
+  if (!currentWorkerId) return toast('No worker running');
+  fetch('/api/worker/' + currentWorkerId + '/restart', {method:'POST'}).then(function(r) { return r.json(); }).then(function(d) {
     if (d.error) toast(d.error);
   });
 }
 
-function rename(id) {
-  var name = document.getElementById('rename-' + id).value.trim();
-  if (!name) return toast('Enter a name');
-  fetch('/api/worker/' + id + '/rename', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name})}).then(r => r.json()).then(d => {
-    if (d.error) toast(d.error); else document.getElementById('rename-'+id).value = '';
+function interruptWorker() {
+  if (!currentWorkerId) return toast('No worker running');
+  fetch('/api/worker/' + currentWorkerId + '/interrupt', {method:'POST'}).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) toast(d.error);
   });
 }
 
-function branch(id) {
-  var name = document.getElementById('branch-' + id).value.trim() || undefined;
-  fetch('/api/worker/' + id + '/branch', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name})}).then(r => r.json()).then(d => {
-    if (d.error) toast(d.error); else document.getElementById('branch-'+id).value = '';
-  });
-}
-
-function takeover(id) {
-  fetch('/api/worker/' + id + '/takeover', {method:'POST'}).then(function(r) { return r.json(); }).then(function(d) {
+function takeover() {
+  if (!currentWorkerId) return toast('No worker running');
+  fetch('/api/worker/' + currentWorkerId + '/takeover', {method:'POST'}).then(function(r) { return r.json(); }).then(function(d) {
     if (d.error) return toast(d.error);
-    var cmd = 'cbc --resume ' + d.sessionId;
-    navigator.clipboard.writeText(cmd).then(function() {
-      toast('PowerShell opened. Session copied:\n' + cmd);
+    navigator.clipboard.writeText('cbc --resume ' + d.cbcSessionId).then(function() {
+      toast('PowerShell opened. Session copied to clipboard.');
     }).catch(function() {
-      toast('PowerShell opened for session:\n' + cmd);
+      toast('PowerShell opened for takeover.');
     });
   });
+}
+
+function killWorker() {
+  if (!currentWorkerId) return toast('No worker running');
+  if (!confirm('Kill worker ' + currentWorkerId + '?')) return;
+  fetch('/api/kill/' + currentWorkerId, {method:'POST'}).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) toast(d.error);
+  });
+}
+
+// ── Send message ──
+function send() {
+  var input = document.getElementById('chatInput');
+  var text = input.value.trim();
+  if (!text || !currentSessionId) return;
+  input.value = '';
+
+  // show user message locally
+  addMessage('user', text);
+
+  // send via WS
+  ws.send(JSON.stringify({type:'user_inject', sessionId:currentSessionId, text:text}));
+}
+
+// ── New Session ──
+function newSession() {
+  var name = 'session-' + (modelData.length + 1);
+  // check name uniqueness
+  var n = 1;
+  while (modelData.find(function(s) { return s.name === name; })) {
+    name = 'session-' + (modelData.length + n);
+    n++;
+  }
+
+  fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name})})
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) return toast(d.error);
+      // the WS event will refresh the list
+    });
+}
+
+// ── Init ──
+function init() {
+  // load models
+  fetch('/api/models').then(function(r) { return r.json(); }).then(function(data) {
+    allModels = data.models || [];
+    defaultModel = data.default || 'deepseek-v4-flash';
+    buildModelSelect();
+  });
+  refreshSessions();
+}
+
+function buildModelSelect() {
+  var sel = document.getElementById('settingModel');
+  sel.innerHTML = '';
+  var blank = document.createElement('option'); blank.value = ''; blank.textContent = '— model —'; sel.appendChild(blank);
+  allModels.forEach(function(m) {
+    var opt = document.createElement('option'); opt.value = m; opt.textContent = m; sel.appendChild(opt);
+  });
+  var cust = document.createElement('option'); cust.value = '__custom__'; cust.textContent = '✎ custom…'; sel.appendChild(cust);
+  sel.onchange = function() {
+    document.getElementById('settingModelCustom').style.display = sel.value === '__custom__' ? 'inline-block' : 'none';
+  };
+  sel.setAttribute('data-loaded', '1');
+}
+
+function esc(s) {
+  var d = document.createElement('div'); d.textContent = s; return d.innerHTML;
 }
 
 function toast(msg) {
   var el = document.getElementById('toast');
   el.textContent = msg;
   el.className = 'toast show';
-  setTimeout(() => el.className = 'toast', 3000);
+  setTimeout(function() { el.className = 'toast'; }, 3000);
 }
 
-function esc(s) {
-  var d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
+init();
 </script>
 </body>
 </html>

@@ -1,60 +1,132 @@
-"""Session persistence — save/load worker sessions as JSON files.
+"""Session store — persistent, UUID-keyed, independent of Worker lifecycle.
 
-Future: migrate to SQLite by replacing the three public functions below
-with a SessionStore abstraction.
+Each session is stored as data/sessions/<id>.json.
+The ID format is ses_<16-hex-chars> (e.g. ses_a1b2c3d4e5f67890).
 """
 
 from __future__ import annotations
 
 import json
+import secrets
+from dataclasses import dataclass, field, asdict
+from datetime import datetime
 from pathlib import Path
 
 SESSION_DIR = Path(__file__).resolve().parent.parent / "data" / "sessions"
 
 
-def _path(worker_id: str) -> Path:
-    return SESSION_DIR / f"{worker_id}.json"
+def _path(session_id: str) -> Path:
+    return SESSION_DIR / f"{session_id}.json"
 
 
-def save_session(worker_id: str, session_id: str | None,
-                 history: list[dict], model: str | None,
-                 permission_mode: str | None, name: str, workdir: str,
-                 last_result: dict | None = None):
-    """Persist a worker's session data to disk."""
+def _new_id() -> str:
+    return "ses_" + secrets.token_hex(8)
+
+
+@dataclass
+class Session:
+    id: str
+    name: str
+    cbc_session_id: str | None = None
+    model: str | None = None
+    permission_mode: str | None = None
+    workdir: str = ""
+    history: list[dict] = field(default_factory=list)
+    last_result: dict | None = None
+    created_at: str = ""
+    updated_at: str = ""
+
+    def __post_init__(self):
+        if not self.created_at:
+            self.created_at = datetime.now().isoformat()
+        if not self.updated_at:
+            self.updated_at = self.created_at
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "cbc_session_id": self.cbc_session_id,
+            "model": self.model,
+            "permission_mode": self.permission_mode,
+            "workdir": self.workdir,
+            "history": self.history,
+            "last_result": self.last_result,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+# ── in-memory cache ──
+_cache: dict[str, Session] = {}
+
+
+# ── CRUD ──
+
+def create(name: str, model: str | None = None,
+           permission_mode: str | None = None,
+           workdir: str = "") -> Session:
+    s = Session(
+        id=_new_id(),
+        name=name,
+        model=model,
+        permission_mode=permission_mode,
+        workdir=workdir,
+    )
+    save(s)
+    _cache[s.id] = s
+    return s
+
+
+def get(session_id: str) -> Session | None:
+    if session_id in _cache:
+        return _cache[session_id]
+    path = _path(session_id)
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        s = Session(**data)
+        _cache[session_id] = s
+        return s
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def save(s: Session):
+    s.updated_at = datetime.now().isoformat()
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
-    data = {
-        "worker_id": worker_id,
-        "name": name,
-        "workdir": workdir,
-        "session_id": session_id,
-        "model": model,
-        "permission_mode": permission_mode,
-        "history": history,
-        "last_result": last_result,
-        "updated_at": __import__("datetime").datetime.now().isoformat(),
-    }
-    _path(worker_id).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    _path(s.id).write_text(json.dumps(s.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+    _cache[s.id] = s
 
 
-def load_all_sessions() -> list[dict]:
-    """Load all saved sessions from disk.
+def delete(session_id: str):
+    path = _path(session_id)
+    if path.exists():
+        path.unlink()
+    _cache.pop(session_id, None)
 
-    Returns list of dicts, each with keys:
-      worker_id, name, workdir, session_id, model, permission_mode, history
-    """
+
+def list_all() -> list[Session]:
     if not SESSION_DIR.exists():
         return []
-    sessions = []
+    sessions: list[Session] = []
     for f in sorted(SESSION_DIR.iterdir()):
         if f.suffix == ".json":
             try:
-                sessions.append(json.loads(f.read_text(encoding="utf-8")))
+                data = json.loads(f.read_text(encoding="utf-8"))
+                s = Session(**data)
+                _cache[s.id] = s
+                sessions.append(s)
             except (json.JSONDecodeError, OSError):
                 pass
     return sessions
 
 
-def delete_session(worker_id: str):
-    path = _path(worker_id)
-    if path.exists():
-        path.unlink()
+def list_active() -> list[Session]:
+    """Return sessions that have an in-memory cache entry (were loaded this session)."""
+    return list(_cache.values())
+
+
+def clear_cache():
+    _cache.clear()

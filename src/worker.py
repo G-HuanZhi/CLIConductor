@@ -1,18 +1,20 @@
-"""Worker — lifecycle management for cbc child processes."""
+"""Worker — runtime cbc process management.
+
+Worker is ephemeral: kill it, the Worker is gone.
+All persistent data lives in Session (session.py).
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from . import session as _sess
 
 CBC_PATH = r"D:\node_npm\node_global\cbc.cmd"
 DEFAULT_MODEL = "deepseek-v4-flash"
 
-# Supported models (from `cbc --help` --model flag, manual list)
 SUPPORTED_MODELS = [
     "glm-5.2", "glm-5.1", "glm-5.0", "glm-5.0-turbo", "glm-5v-turbo", "glm-4.7",
     "minimax-m3", "minimax-m2.7",
@@ -26,15 +28,9 @@ SUPPORTED_MODELS = [
 @dataclass
 class Worker:
     worker_id: str
-    name: str
-    workdir: str
-    status: str = "idle"  # idle | running | done | error
+    session_id: str           # Session UUID (ses_<hex>)
+    status: str = "idle"      # idle | running | held | error
     process: asyncio.subprocess.Process | None = None
-    session_id: str | None = None
-    history: list[dict] = field(default_factory=list)
-    model: str | None = None
-    permission_mode: str | None = None
-    last_result: dict | None = None  # {status, result, sessionId, timestamp}
     _stdout_task: asyncio.Task | None = None
     _consume_task: asyncio.Task | None = None
     queue: asyncio.Queue | None = None
@@ -42,8 +38,7 @@ class Worker:
 
 workers: dict[str, Worker] = {}
 
-# ── broadcast hook (set by server.py so worker.py doesn't depend on WebSocket) ──
-_broadcast: callable = lambda data: None  # no-op default
+_broadcast: callable = lambda data: None
 
 
 def set_broadcaster(fn: callable):
@@ -51,15 +46,33 @@ def set_broadcaster(fn: callable):
     _broadcast = fn
 
 
-# ── base spawn args ──
+# ── helpers ──
 
 def _base_args() -> list[str]:
     return [CBC_PATH, "-p", "--output-format", "stream-json",
             "--input-format", "stream-json", "-y"]
 
 
+async def _next_worker_id() -> str:
+    used: set[int] = set()
+    for wid in workers:
+        try:
+            used.add(int(wid.rsplit("-", 1)[-1]))
+        except (ValueError, IndexError):
+            pass
+    n = 1
+    while n in used:
+        n += 1
+    return f"worker-{n}"
+
+
+def _session(w: Worker) -> _sess.Session | None:
+    return _sess.get(w.session_id)
+
+
+# ── stdout reader ──
+
 async def _read_stdout(w: Worker):
-    """逐行读取 cbc stdout → 解析事件 → 广播"""
     async for line in w.process.stdout:
         line_str = line.decode("utf-8", errors="replace").rstrip("\n")
         if not line_str:
@@ -71,72 +84,82 @@ async def _read_stdout(w: Worker):
 
         t = event.get("type")
 
-        # 提取 session_id + model
+        # 提取 cbc_session_id + model 并写入 Session
         if t == "system" and event.get("subtype") == "init":
-            w.session_id = event.get("session_id")
-            if event.get("model") and not w.model:
-                w.model = event.get("model")
+            s = _session(w)
+            if s:
+                cbc_sid = event.get("session_id")
+                if cbc_sid:
+                    s.cbc_session_id = cbc_sid
+                if event.get("model") and not s.model:
+                    s.model = event.get("model")
+                _sess.save(s)
 
-        # 收集对话历史
+        # 收集对话历史 → 写入 Session
         if t == "assistant":
-            for b in event.get("message", {}).get("content", []) or []:
-                if b.get("type") == "text":
-                    w.history.append({"role": "assistant", "content": b["text"]})
-                elif b.get("type") == "thinking":
-                    w.history.append({"role": "thinking", "content": b["thinking"]})
-                elif b.get("type") == "tool_use":
-                    w.history.append({
-                        "role": "tool",
-                        "content": f"{b['name']}({json.dumps(b.get('input', {}))})",
-                    })
+            s = _session(w)
+            if s:
+                for b in event.get("message", {}).get("content", []) or []:
+                    if b.get("type") == "text":
+                        s.history.append({"role": "assistant", "content": b["text"]})
+                    elif b.get("type") == "thinking":
+                        s.history.append({"role": "thinking", "content": b["thinking"]})
+                    elif b.get("type") == "tool_use":
+                        s.history.append({
+                            "role": "tool",
+                            "content": f"{b['name']}({json.dumps(b.get('input', {}))})",
+                        })
 
-        # 任务完成 → 保存 session + lastResult + 通知 consumer 继续
+        # 任务完成 → 保存 Session + last_result
         if t == "result":
+            s = _session(w)
             is_error = event.get("is_error", False)
             w.status = "error" if is_error else "done"
-            w.last_result = {
-                "status": w.status,
-                "result": event.get("result"),
-                "sessionId": w.session_id,
-                "timestamp": datetime.now().isoformat(),
-            }
-            _sess.save_session(w.worker_id, w.session_id, w.history,
-                               w.model, w.permission_mode, w.name, w.workdir,
-                               last_result=w.last_result)
+            if s:
+                s.last_result = {
+                    "status": w.status,
+                    "result": event.get("result"),
+                    "cbc_session_id": s.cbc_session_id,
+                    "timestamp": __import__("datetime").datetime.now().isoformat(),
+                }
+                _sess.save(s)
+
             await _broadcast({
                 "type": "worker.result",
                 "workerId": w.worker_id,
+                "sessionId": w.session_id,
                 "status": w.status,
                 "result": event.get("result"),
-                "sessionId": w.session_id,
-                "history": w.history,
             })
-            # 重置状态为 idle，等待下一条队列消息
             w.status = "idle"
             continue
 
         await _broadcast({
             "type": "worker.stream",
             "workerId": w.worker_id,
+            "sessionId": w.session_id,
             "event": event,
         })
 
 
+# ── consumer ──
+
 async def _consumer(w: Worker):
-    """从队列取消息 → 写入 stdin，一次一条"""
     while True:
         item = await w.queue.get()
         if item is None:
-            break  # shutdown signal
+            break
 
         text = item["text"]
-        source = item.get("source", "agent")  # agent | user
+        source = item.get("source", "agent")
 
         if w.process is None or w.process.returncode is not None:
             continue
 
         w.status = "running"
-        w.history.append({"role": "user", "content": text})
+        s = _session(w)
+        if s:
+            s.history.append({"role": "user", "content": text})
 
         msg = json.dumps({
             "type": "user",
@@ -151,6 +174,7 @@ async def _consumer(w: Worker):
         await _broadcast({
             "type": "worker.status",
             "workerId": w.worker_id,
+            "sessionId": w.session_id,
             "status": "running",
             "source": source,
         })
@@ -158,60 +182,68 @@ async def _consumer(w: Worker):
 
 # ── lifecycle ──
 
-async def _next_worker_id() -> str:
-    """返回最小的未占用 worker ID（复用被 kill 释放的序号）"""
-    used: set[int] = set()
-    for wid in workers:
-        try:
-            used.add(int(wid.rsplit("-", 1)[-1]))
-        except (ValueError, IndexError):
-            pass
-    n = 1
-    while n in used:
-        n += 1
-    return f"worker-{n}"
+async def create_worker(session_id: str) -> Worker | str:
+    """Spawn a cbc process for the given Session UUID.
 
+    Returns Worker on success, error string on failure.
+    """
+    s = _sess.get(session_id)
+    if not s:
+        return f"Session {session_id} not found"
 
-async def create_worker(name: str, workdir: str,
-                        extra_args: list[str] | None = None) -> Worker:
     worker_id = await _next_worker_id()
 
-    process = await asyncio.create_subprocess_exec(
-        *_base_args(), *(extra_args or []),
-        stdout=asyncio.subprocess.PIPE,
-        stdin=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-        cwd=workdir,
-    )
+    extra_args = ["--model", s.model or DEFAULT_MODEL]
+    if s.permission_mode:
+        extra_args.extend(["--permission-mode", s.permission_mode])
 
-    w = Worker(worker_id=worker_id, name=name, workdir=workdir,
+    spawn_args = _base_args() + extra_args
+    if s.cbc_session_id:
+        spawn_args += ["--resume", s.cbc_session_id]
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *spawn_args,
+            stdout=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=s.workdir or None,
+        )
+    except FileNotFoundError:
+        return "cbc not found"
+    except OSError as e:
+        return str(e)
+
+    w = Worker(worker_id=worker_id, session_id=session_id,
                status="idle", process=process, queue=asyncio.Queue())
     workers[worker_id] = w
-
     w._stdout_task = asyncio.create_task(_read_stdout(w))
     w._consume_task = asyncio.create_task(_consumer(w))
 
     await _broadcast({
         "type": "worker.spawned",
         "workerId": worker_id,
-        "name": name,
+        "sessionId": session_id,
+        "name": s.name,
         "status": "idle",
-        "workdir": workdir,
+        "model": s.model or DEFAULT_MODEL,
     })
+
+    # 持久化 session（记录 workdir 等）
+    _sess.save(s)
     return w
 
 
 async def kill_worker(worker_id: str) -> str | None:
+    """Kill the Worker process. Does NOT touch the Session."""
     w = workers.get(worker_id)
     if not w:
         return "Worker not found"
 
-    # stop consumer
     if w._consume_task:
         w._consume_task.cancel()
     if w._stdout_task:
         w._stdout_task.cancel()
-
     if w.process:
         try:
             w.process.kill()
@@ -219,42 +251,56 @@ async def kill_worker(worker_id: str) -> str | None:
             pass
 
     workers.pop(worker_id, None)
-    await _broadcast({"type": "worker.destroyed", "workerId": worker_id})
+    await _broadcast({
+        "type": "worker.destroyed",
+        "workerId": worker_id,
+        "sessionId": w.session_id,
+    })
     return None
 
 
-async def _spawn_process(extra_args: list[str] | None = None,
-                         session_id: str | None = None,
-                         workdir: str | None = None) -> asyncio.subprocess.Process:
+async def _spawn_process(session_id: str,
+                         extra_args: list[str] | None = None
+                         ) -> asyncio.subprocess.Process | str:
+    s = _sess.get(session_id)
+    if not s:
+        return f"Session {session_id} not found"
+
     args = _base_args()
-    if session_id:
-        args.extend(["--resume", session_id])
+    if s.cbc_session_id:
+        args.extend(["--resume", s.cbc_session_id])
+    if s.model:
+        args.extend(["--model", s.model])
+    if s.permission_mode:
+        args.extend(["--permission-mode", s.permission_mode])
     if extra_args:
+        # extra_args 可能包含覆盖 --model, --permission-mode
         args.extend(extra_args)
-    return await asyncio.create_subprocess_exec(
-        *args,
-        stdout=asyncio.subprocess.PIPE,
-        stdin=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-        cwd=workdir,
-    )
+
+    try:
+        return await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=s.workdir or None,
+        )
+    except (FileNotFoundError, OSError) as e:
+        return str(e)
 
 
 async def _restart_tasks(w: Worker):
-    """停旧任务，起新 consumer + stdout reader"""
     if w._stdout_task:
         w._stdout_task.cancel()
     if w._consume_task:
         w._consume_task.cancel()
-
-    # 新进程需要新 queue（旧 queue 的消息已无效）
     w.queue = asyncio.Queue()
     w._stdout_task = asyncio.create_task(_read_stdout(w))
     w._consume_task = asyncio.create_task(_consumer(w))
 
 
 async def restart_worker(worker_id: str) -> str | None:
-    """不改变配置，单纯重启 cbc 进程"""
+    """Restart the cbc process for a Worker. Preserves session."""
     w = workers.get(worker_id)
     if not w:
         return "Worker not found"
@@ -265,121 +311,117 @@ async def restart_worker(worker_id: str) -> str | None:
         except ProcessLookupError:
             pass
 
-    w.process = await _spawn_process(session_id=w.session_id, workdir=w.workdir)
+    proc = await _spawn_process(w.session_id)
+    if isinstance(proc, str):
+        return proc
+    w.process = proc
     w.status = "idle"
     await _restart_tasks(w)
 
+    s = _session(w)
     await _broadcast({
         "type": "worker.restarted",
         "workerId": worker_id,
-        "name": w.name,
-        "status": "idle",
         "sessionId": w.session_id,
+        "name": s.name if s else worker_id,
+        "status": "idle",
     })
     return None
 
 
 async def respawn_worker(worker_id: str, extra_args: list[str] | None = None) -> str | None:
-    """kill + --resume + 新参数，保留对话历史（用于 /model, /mode 切换）"""
+    """Kill + re-spawn with extra args (model/mode switch)."""
     w = workers.get(worker_id)
     if not w:
         return "Worker not found"
 
-    session_id = w.session_id
     if w.process:
         try:
             w.process.kill()
         except ProcessLookupError:
             pass
 
-    w.process = await _spawn_process(extra_args=extra_args,
-                                     session_id=session_id,
-                                     workdir=w.workdir)
+    proc = await _spawn_process(w.session_id, extra_args)
+    if isinstance(proc, str):
+        return proc
+    w.process = proc
     w.status = "idle"
     await _restart_tasks(w)
 
     await _broadcast({
         "type": "worker.reconfigured",
         "workerId": worker_id,
-        "name": w.name,
+        "sessionId": w.session_id,
         "status": "idle",
-        "sessionId": session_id,
     })
     return None
 
 
-async def branch_worker(worker_id: str, name: str | None = None) -> Worker | str:
+async def branch_worker(worker_id: str, new_session_id: str) -> Worker | str:
+    """Fork a new Worker from an existing one's session.
+
+    new_session_id must already exist (created by session.create()).
+    """
     w = workers.get(worker_id)
     if not w:
         return "Worker not found"
-    if not w.session_id:
-        return "Worker has no session yet"
+
+    s = _sess.get(new_session_id)
+    if not s:
+        return "New session not found"
+
+    # inherit model/mode from original session
+    orig = _sess.get(w.session_id)
+    if orig:
+        if not s.model:
+            s.model = orig.model
+        if not s.permission_mode:
+            s.permission_mode = orig.permission_mode
+
+    extra_args = ["--model", s.model or DEFAULT_MODEL,
+                  "--resume", s.cbc_session_id or "",
+                  "--fork-session"]
+    if s.permission_mode:
+        extra_args.extend(["--permission-mode", s.permission_mode])
 
     new_id = await _next_worker_id()
-    new_name = name or f"{w.name}-branch"
-
-    extra_args = ["--resume", w.session_id, "--fork-session"]
-    if w.model:
-        extra_args.extend(["--model", w.model])
-    if w.permission_mode:
-        extra_args.extend(["--permission-mode", w.permission_mode])
-
     process = await asyncio.create_subprocess_exec(
         *_base_args(), *extra_args,
         stdout=asyncio.subprocess.PIPE,
         stdin=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
-        cwd=w.workdir,
+        cwd=s.workdir or None,
     )
 
-    new_w = Worker(worker_id=new_id, name=new_name, workdir=w.workdir,
-                   status="idle", process=process,
-                   model=w.model, permission_mode=w.permission_mode,
-                   queue=asyncio.Queue())
+    new_w = Worker(worker_id=new_id, session_id=new_session_id,
+                   status="idle", process=process, queue=asyncio.Queue())
     workers[new_id] = new_w
     new_w._stdout_task = asyncio.create_task(_read_stdout(new_w))
     new_w._consume_task = asyncio.create_task(_consumer(new_w))
 
+    _sess.save(s)
+
     await _broadcast({
         "type": "worker.spawned",
         "workerId": new_id,
-        "name": new_name,
+        "sessionId": new_session_id,
+        "name": s.name,
         "status": "idle",
         "parentWorkerId": worker_id,
-        "parentSessionId": w.session_id,
-        "workdir": w.workdir,
     })
     return new_w
 
 
-async def rename_worker(worker_id: str, new_name: str) -> str | None:
-    w = workers.get(worker_id)
-    if not w:
-        return "Worker not found"
-    old_name = w.name
-    w.name = new_name
-    await _broadcast({
-        "type": "worker.renamed",
-        "workerId": worker_id,
-        "oldName": old_name,
-        "newName": new_name,
-    })
-    return None
-
-
 async def interrupt_worker(worker_id: str) -> str | None:
-    """中断 Worker 当前任务：kill 当前 cbc 进程 + --resume 重启，保留历史"""
     w = workers.get(worker_id)
     if not w:
         return "Worker not found"
     if w.status != "running":
         return "Worker is not running"
-
     return await restart_worker(worker_id)
 
 
 async def send_task(worker_id: str, text: str, source: str = "agent") -> str | None:
-    """向 Worker 队列推一条消息"""
     w = workers.get(worker_id)
     if not w:
         return "Worker not found"
@@ -402,81 +444,23 @@ def list_workers() -> list[Worker]:
     return list(workers.values())
 
 
-# ── restore & shutdown (for server lifecycle) ──
-
-
-async def restore_worker_from_session(session: dict) -> Worker | None:
-    """Restore a worker from saved session data.
-
-    *session* dict keys: worker_id, name, workdir, session_id,
-    model, permission_mode, history.
-    """
-    worker_id = session.get("worker_id")
-    name = session.get("name", "restored")
-    workdir = session.get("workdir", "")
-    session_id = session.get("session_id")
-    model = session.get("model") or DEFAULT_MODEL
-    permission_mode = session.get("permission_mode")
-    history = session.get("history", [])
-    last_result = session.get("last_result")
-
-    if not session_id:
-        return None  # no session to resume
-
-    extra_args = ["--model", model]
-    if permission_mode:
-        extra_args.extend(["--permission-mode", permission_mode])
-
-    try:
-        process = await asyncio.create_subprocess_exec(
-            *_base_args(), *(extra_args or []),
-            "--resume", session_id,
-            stdout=asyncio.subprocess.PIPE,
-            stdin=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            cwd=workdir or None,
-        )
-    except FileNotFoundError:
-        return None
-    except OSError:
-        return None
-
-    w = Worker(worker_id=worker_id, name=name, workdir=workdir,
-               status="idle", process=process,
-               session_id=session_id, model=model,
-               permission_mode=permission_mode,
-               last_result=last_result,
-               history=history.copy(), queue=asyncio.Queue())
-    workers[worker_id] = w
-
-    w._stdout_task = asyncio.create_task(_read_stdout(w))
-    w._consume_task = asyncio.create_task(_consumer(w))
-
-    await _broadcast({
-        "type": "worker.restored",
-        "workerId": worker_id,
-        "name": name,
-        "status": "idle",
-        "sessionId": session_id,
-        "model": model,
-        "workdir": workdir,
-    })
-    return w
+def find_worker_by_session(session_id: str) -> Worker | None:
+    for w in workers.values():
+        if w.session_id == session_id:
+            return w
+    return None
 
 
 async def shutdown_all():
-    """Kill all child processes and cancel tasks."""
     ids = list(workers.keys())
     for wid in ids:
         w = workers.get(wid)
         if not w:
             continue
-        # cancel consumer first
         if w._consume_task:
             w._consume_task.cancel()
         if w._stdout_task:
             w._stdout_task.cancel()
-        # kill process
         if w.process:
             try:
                 w.process.kill()
