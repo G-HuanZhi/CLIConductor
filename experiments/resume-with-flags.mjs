@@ -75,9 +75,9 @@ async function main() {
     },
   });
 
-  console.log("\n=== Phase 1: Setup with glm-5.2 ===");
+  console.log("\n=== Phase 1: Setup with glm-4.7 ===");
   const r1 = await runCbc(
-    ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "-y", "--session-id", "test-switch-001", "--model", "glm-5.2"],
+    ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "-y", "--session-id", "test-switch-001", "--model", "glm-4.7"],
     [msg("remember this: my favorite color is blue, answer with 'ok'")],
     "setup"
   );
@@ -85,9 +85,9 @@ async function main() {
 
   await sleep(2000);
 
-  console.log("\n=== Phase 2: Resume with deepseek-v4-pro, ask recall question ===");
+  console.log("\n=== Phase 2: Resume with deepseek-v4-flash, ask recall question ===");
   const r2 = await runCbc(
-    ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "-y", "--resume", "test-switch-001", "--model", "deepseek-v4-pro"],
+    ["-p", "--output-format", "stream-json", "--input-format", "stream-json", "-y", "--resume", "test-switch-001", "--model", "deepseek-v4-flash"],
     [msg("what is my favorite color? answer in one short sentence")],
     "resume"
   );
