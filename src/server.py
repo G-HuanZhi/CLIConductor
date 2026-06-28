@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from . import worker
 from . import session as sess
@@ -86,7 +86,13 @@ def _check_session_name(name: str) -> str | None:
     return None
 
 
-# ── Dashboard ──
+# ── Dashboard & favicon ──
+
+@app.get("/favicon.ico")
+async def favicon():
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#58a6ff"/><text x="16" y="22" font-size="18" text-anchor="middle" fill="#fff" font-family="monospace" font-weight="bold">C</text></svg>'
+    return Response(content=svg, media_type="image/svg+xml")
+
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
