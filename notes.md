@@ -4,6 +4,8 @@
 > 状态：方案研究进行中
 > 
 > **2026-06-28 更新**：PTY 确认不需要。Agent 日常走 stdin stream-json，用户接管用 `cbc --resume <sid>` 原生终端。所有 PTY 代码已移至 `archive/packages/cbc-bridge/`。
+> 
+> **命令来源辨别**：项目已具备基础能力——`send_task()` 含 `source` 参数（`"agent"` / `"user"`），两个独立 WS 通道（`/ws` 走 user、`/ws/agent` 走 agent），consumer 广播事件时标记来源。为后续权限分离预留了扩展点。
 
 ---
 
