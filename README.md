@@ -71,33 +71,26 @@ python main.py
 ## 架构
 
 ```
-                       你（人类）
-                          │
-            ┌─────────────┼─────────────┐
-            ▼             ▼             ▼
-      HTTP API      Dashboard       信息网关（未来）
-      (程序接口)     (WS 实时流)     (QQ/微信等)
-            │             │
-            └──────┬──────┘
-                   │
-         ┌─────────▼─────────┐
-         │  CLIConductor      │
-         │  (FastAPI 服务)     │
-         │                     │
-         │  Session Manager   │
-         │  ├─ Worker-1       │── cbc (stream-json 长驻)
-         │  ├─ Worker-2       │── cbc (stream-json 长驻)
-         │  └─ Worker-N       │── ...
-         │                     │
-         │  Event Bus         │─── WS 广播
-         │  Session Store     │─── JSON 持久化
-         └─────────┬─────────┘
-                   │
-         ┌─────────▼─────────┐
-         │     主 Agent       │
-         │  (CodeBuddy 等)    │
-         │  /ws/agent 通道    │
-         └───────────────────┘
+        主 Agent                   你（人类）
+    (CodeBuddy 等)              (Dashboard / CLI)
+          │                          │
+    /ws/agent 通道              /ws + HTTP
+    （事件流 + 命令）          （观察 + 注入 + 接管）
+          │                          │
+          └──────────┬───────────────┘
+                     │
+            ┌────────▼────────┐
+            │  CLIConductor    │
+            │  (FastAPI 服务)   │
+            │                   │
+            │  Session Manager │
+            │  ├─ Worker-1     │── cbc (stream-json 长驻)
+            │  ├─ Worker-2     │── cbc (stream-json 长驻)
+            │  └─ Worker-N     │── ...
+            │                   │
+            │  Event Bus       │─── WS 广播
+            │  Session Store   │─── JSON 持久化
+            └──────────────────┘
 ```
 
 ## 目录结构
