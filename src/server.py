@@ -289,6 +289,10 @@ async def api_spawn(data: dict):
         s = sess.get(session_id)
         if not s:
             return {"error": f"Session {session_id} not found"}
+        # 杀掉已有的 worker（避免多个 worker 跑同一 session）
+        existing = worker.find_worker_by_session(session_id)
+        if existing:
+            await worker.kill_worker(existing.worker_id)
         # apply settings from request if provided
         if data.get("model"):
             s.model = data["model"]
