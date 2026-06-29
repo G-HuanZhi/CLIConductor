@@ -116,16 +116,17 @@
     <div class="sep"></div>
     <label for="settingThinking">Think</label>
     <input type="checkbox" id="settingThinking" onchange="applyThinking()">
-    <label for="settingEffort">Effort</label>
-    <select id="settingEffort" onchange="applyEffort()">
-      <option value="">--</option>
-      <option value="minimal">minimal</option>
-      <option value="low">low</option>
-      <option value="medium">medium</option>
-      <option value="high">high</option>
-      <option value="xhigh">xhigh</option>
-      <option value="max">max</option>
-    </select>
+    <span id="effortGroup" style="display:none">
+      <label for="settingEffort">Effort</label>
+      <select id="settingEffort" onchange="applyEffort()">
+        <option value="minimal">minimal</option>
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+        <option value="xhigh">xhigh</option>
+        <option value="max">max</option>
+      </select>
+    </span>
     <div class="sep"></div>
     <button class="btn" onclick="restartWorker()">Restart</button>
     <button class="btn" onclick="interruptWorker()">Interrupt</button>
@@ -387,6 +388,7 @@ function syncSettingsPanel(s) {
   document.getElementById('settingMode').value = s.permissionMode || '';
   document.getElementById('settingThinking').checked = s.alwaysThinkingEnabled || false;
   document.getElementById('settingEffort').value = s.effort || '';
+  document.getElementById('effortGroup').style.display = (s.alwaysThinkingEnabled) ? '' : 'none';
 }
 
 function getSettingModel() {
@@ -424,6 +426,7 @@ function applyMode() {
 function applyThinking() {
   if (!currentWorkerId) return;
   var thinking = document.getElementById('settingThinking').checked;
+  document.getElementById('effortGroup').style.display = thinking ? '' : 'none';
   fetch('/api/worker/' + currentWorkerId + '/switch-thinking', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body:JSON.stringify({alwaysThinkingEnabled:thinking})
