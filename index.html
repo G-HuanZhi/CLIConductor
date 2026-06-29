@@ -548,8 +548,9 @@ function newSession() {
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (d.error) return toast(d.error);
-      refreshSessions();
+      modelData.push(d);
       selectSession(d.id);
+      refreshSessions();
     });
 }
 
