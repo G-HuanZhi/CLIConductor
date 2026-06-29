@@ -332,14 +332,40 @@ async def api_spawn(data: dict):
 
 @app.post("/api/task")
 async def api_task(data: dict):
-    """Send a task to a Worker by worker_id or session_id."""
+    """Send a task to a Worker by worker_id or session_id.
+
+    Auto-spawns a worker (with --resume if session has cbc_session_id)
+    if the session exists but has no live worker — consistent with the
+    WS /ws and /ws/agent endpoints. Worker death is common (server restart,
+    cbc crash), so we recover transparently instead of erroring.
+    """
     worker_id = data.get("workerId")
     session_id = data.get("sessionId")
 
+    # Resolve worker_id from session_id
     if not worker_id and session_id:
         w = worker.find_worker_by_session(session_id)
         if w:
             worker_id = w.worker_id
+
+    # No worker found — try to auto-spawn for this session
+    if not worker_id and session_id:
+        s = sess.get(session_id)
+        if not s:
+            return {"error": f"Session {session_id} not found"}
+        result = await worker.create_worker(session_id)
+        if isinstance(result, str):
+            return {"error": f"Worker auto-spawn failed: {result}"}
+        worker_id = result.worker_id
+        await broadcast({
+            "type": "worker.spawned",
+            "workerId": worker_id,
+            "sessionId": session_id,
+            "name": s.name,
+            "status": "idle",
+            "model": s.model or worker.DEFAULT_MODEL,
+            "reason": "auto-spawned by /api/task",
+        })
 
     if not worker_id:
         return {"error": "workerId or sessionId required"}
@@ -350,12 +376,25 @@ async def api_task(data: dict):
 
     err = await worker.send_task(worker_id, text, source="agent")
     if err:
-        return {"error": err}
+        # Worker died between resolve and send (race). Kill the corpse,
+        # auto-spawn+resume a fresh one, retry the task once.
+        if session_id and err in ("Worker not found", "Worker process dead"):
+            old = worker.find_worker_by_session(session_id)
+            if old:
+                await worker.kill_worker(old.worker_id)
+            s = sess.get(session_id)
+            if s:
+                result = await worker.create_worker(session_id)
+                if not isinstance(result, str):
+                    worker_id = result.worker_id
+                    err = await worker.send_task(worker_id, text, source="agent")
+        if err:
+            return {"error": err}
 
     w = worker.get_worker(worker_id)
     return {
         "workerId": worker_id,
-        "sessionId": w.session_id if w else None,
+        "sessionId": w.session_id if w else session_id,
         "status": "queued",
     }
 
