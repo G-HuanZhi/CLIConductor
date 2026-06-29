@@ -101,6 +101,14 @@ async def _poll_result(session_id: str, qq_user_id: str):
                     evt.set()
                 return
 
+            # worker 还在但状态是 error（cbc 崩了但 worker 对象没清）—— 同样早停
+            if data.get("workerStatus") == "error":
+                print(f"[QQ Bridge] Session {session_id} worker 状态 error，停止轮询")
+                evt = _pending.get(session_id)
+                if evt:
+                    evt.set()
+                return
+
             lr = data.get("lastResult") or {}
 
             new_ts = lr.get("timestamp", "") if lr else ""

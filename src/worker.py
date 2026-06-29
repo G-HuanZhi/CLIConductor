@@ -189,6 +189,24 @@ async def _consumer(w: Worker):
         source = item.get("source", "agent")
 
         if w.process is None or w.process.returncode is not None:
+            # 进程已死，别静默丢任务——记到 last_result 并广播，
+            # 让 polling 的 bot / dashboard 能看到失败原因而不是等满 120s
+            s = _session(w)
+            if s:
+                s.last_result = {
+                    "status": "error",
+                    "result": f"Worker process dead (returncode={w.process.returncode if w.process else 'none'})",
+                    "cbc_session_id": s.cbc_session_id,
+                    "timestamp": __import__("datetime").datetime.now().isoformat(),
+                }
+                _sess.save(s)
+            await _bcast({
+                "type": "worker.result",
+                "workerId": w.worker_id,
+                "sessionId": w.session_id,
+                "status": "error",
+                "result": "Worker process dead",
+            })
             continue
 
         w.status = "running"
