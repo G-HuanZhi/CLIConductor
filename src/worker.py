@@ -175,6 +175,9 @@ async def _read_stdout(w: Worker):
         "sessionId": w.session_id,
         "returncode": code,
     })
+    # 从 workers dict 移除尸体——否则 find_worker_by_session 会返回这个死 worker，
+    # 后续 send_task 才报 'process dead'，晚了一步
+    workers.pop(w.worker_id, None)
 
 
 # ── consumer ──
@@ -242,10 +245,18 @@ async def create_worker(session_id: str) -> Worker | str:
     """Spawn a cbc process for the given Session UUID.
 
     Returns Worker on success, error string on failure.
+
+    一个 session 同时只能有一个活 worker：如果已有旧 worker（哪怕状态是
+    error），先杀掉移除，避免 find_worker_by_session 返回错的那个。
     """
     s = _sess.get(session_id)
     if not s:
         return f"Session {session_id} not found"
+
+    # 杀掉同 session 的旧 worker（cbc 崩过留了 error 尸体 / 重复 spawn）
+    old = find_worker_by_session(session_id)
+    if old:
+        await kill_worker(old.worker_id)
 
     worker_id = await _next_worker_id()
 

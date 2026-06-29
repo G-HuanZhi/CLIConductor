@@ -133,9 +133,12 @@ async def _ensure_session(qq_user_id: str) -> str | None:
     if session and session.cli_session_id:
         data = await _get(f"/api/sessions/{session.cli_session_id}")
         if "error" not in data:
+            # 总是用 server 当前的 workerId 覆盖缓存——worker 可能被重启过，
+            # 缓存里的 worker_id 会指向死掉的 worker
+            session.worker_id = data.get("workerId")
             # session 还在磁盘上，但 worker 可能没了（main.py 重启 / worker 崩过）
             # 不补 spawn 的话后面 /api/task 会直接报错，polling 还会空转 120s
-            if not data.get("workerId"):
+            if not session.worker_id:
                 result = await _post("/api/spawn", {"sessionId": session.cli_session_id})
                 if "error" not in result:
                     session.worker_id = result.get("workerId")
