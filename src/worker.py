@@ -343,6 +343,13 @@ async def kill_worker(worker_id: str) -> str | None:
             os.kill(w.takeover_pid, __import__("signal").SIGTERM)
         except (ProcessLookupError, OSError):
             pass
+        try:
+            __import__("subprocess").run(
+                ["taskkill", "/PID", str(w.takeover_pid), "/F", "/T"],
+                capture_output=True, timeout=5,
+            )
+        except Exception:
+            pass
 
     workers.pop(worker_id, None)
     await _bcast({
@@ -406,11 +413,19 @@ async def restart_worker(worker_id: str) -> str | None:
     # always clear held status
     w.status = "idle"
 
-    # kill takeover PowerShell terminal if one was opened
+    # kill takeover terminal if one was opened
+    # os.kill(SIGTERM) 在 Windows 上杀不了终端进程，用 taskkill /F /T 杀进程树
     if w.takeover_pid:
         try:
             os.kill(w.takeover_pid, __import__("signal").SIGTERM)
         except (ProcessLookupError, OSError):
+            pass
+        try:
+            __import__("subprocess").run(
+                ["taskkill", "/PID", str(w.takeover_pid), "/F", "/T"],
+                capture_output=True, timeout=5,
+            )
+        except Exception:
             pass
         w.takeover_pid = None
 
