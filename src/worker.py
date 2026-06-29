@@ -36,6 +36,7 @@ class Worker:
     _consume_task: asyncio.Task | None = None
     queue: asyncio.Queue | None = None
     _replaying: bool = False  # true during cbc --resume event replay
+    takeover_pid: int | None = None  # PID of takeover PowerShell terminal
 
 
 workers: dict[str, Worker] = {}
@@ -337,6 +338,12 @@ async def kill_worker(worker_id: str) -> str | None:
         except ProcessLookupError:
             pass
 
+    if w.takeover_pid:
+        try:
+            os.kill(w.takeover_pid, __import__("signal").SIGTERM)
+        except (ProcessLookupError, OSError):
+            pass
+
     workers.pop(worker_id, None)
     await _bcast({
         "type": "worker.destroyed",
@@ -398,6 +405,14 @@ async def restart_worker(worker_id: str) -> str | None:
 
     # always clear held status
     w.status = "idle"
+
+    # kill takeover PowerShell terminal if one was opened
+    if w.takeover_pid:
+        try:
+            os.kill(w.takeover_pid, __import__("signal").SIGTERM)
+        except (ProcessLookupError, OSError):
+            pass
+        w.takeover_pid = None
 
     # kill existing process regardless of state
     if w.process:

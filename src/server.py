@@ -619,10 +619,11 @@ async def api_takeover(worker_id: str):
 
     cmd = f'cd "{s.workdir}"; cbc --resume {s.cbc_session_id}'
     try:
-        subprocess.Popen(
+        proc = subprocess.Popen(
             ["powershell.exe", "-NoExit", "-Command", cmd],
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
+        w.takeover_pid = proc.pid
     except FileNotFoundError:
         return {"error": "powershell.exe not found"}
     except OSError as e:
@@ -632,5 +633,6 @@ async def api_takeover(worker_id: str):
         "workerId": worker_id,
         "sessionId": w.session_id,
         "cbcSessionId": s.cbc_session_id,
+        "takeoverPid": w.takeover_pid,
         "status": "takeover started",
     }
