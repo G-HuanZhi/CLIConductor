@@ -424,9 +424,14 @@ function applyMode() {
 }
 
 function applyThinking() {
-  if (!currentWorkerId) return;
   var thinking = document.getElementById('settingThinking').checked;
   document.getElementById('effortGroup').style.display = thinking ? '' : 'none';
+  if (!currentWorkerId) {
+    // 还没 spawn worker：只更新本地 modelData，spawn 时会带 alwaysThinkingEnabled
+    var s = modelData.find(function(x) { return x.id === currentSessionId; });
+    if (s) s.alwaysThinkingEnabled = thinking;
+    return;
+  }
   fetch('/api/worker/' + currentWorkerId + '/switch-thinking', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body:JSON.stringify({alwaysThinkingEnabled:thinking})
@@ -436,8 +441,12 @@ function applyThinking() {
 }
 
 function applyEffort() {
-  if (!currentWorkerId) return;
   var effort = document.getElementById('settingEffort').value;
+  if (!currentWorkerId) {
+    var s = modelData.find(function(x) { return x.id === currentSessionId; });
+    if (s) s.effort = effort;
+    return;
+  }
   fetch('/api/worker/' + currentWorkerId + '/switch-thinking', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body:JSON.stringify({effort:effort})
