@@ -93,6 +93,14 @@ async def _poll_result(session_id: str, qq_user_id: str):
             if "error" in data:
                 continue
 
+            # worker 没了（server 重启 / worker 崩了）—— 不可能再有新结果，早停
+            if not data.get("workerId"):
+                print(f"[QQ Bridge] Session {session_id} worker 已消失，停止轮询")
+                evt = _pending.get(session_id)
+                if evt:
+                    evt.set()
+                return
+
             lr = data.get("lastResult") or {}
 
             new_ts = lr.get("timestamp", "") if lr else ""
@@ -117,6 +125,14 @@ async def _ensure_session(qq_user_id: str) -> str | None:
     if session and session.cli_session_id:
         data = await _get(f"/api/sessions/{session.cli_session_id}")
         if "error" not in data:
+            # session 还在磁盘上，但 worker 可能没了（main.py 重启 / worker 崩过）
+            # 不补 spawn 的话后面 /api/task 会直接报错，polling 还会空转 120s
+            if not data.get("workerId"):
+                result = await _post("/api/spawn", {"sessionId": session.cli_session_id})
+                if "error" not in result:
+                    session.worker_id = result.get("workerId")
+                else:
+                    print(f"[QQ Bridge] 重新 spawn worker 失败: {result['error']}")
             return session.cli_session_id
 
     # 先查已有的 session（避免重复创建）
@@ -181,6 +197,9 @@ async def _send_and_wait(text: str, qq_user_id: str) -> str:
     })
     if "error" in result:
         del _pending[session_id]
+        task = _poll_tasks.pop(session_id, None)
+        if task:
+            task.cancel()
         return f"[CLIConductor] 错误: {result['error']}"
 
     try:
