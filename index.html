@@ -114,6 +114,17 @@
     </select>
     <button class="btn btn-p" onclick="applyMode()">Set</button>
     <div class="sep"></div>
+    <label for="settingThinking">Think</label>
+    <input type="checkbox" id="settingThinking" onchange="applyThinking()">
+    <label for="settingEffort">Effort</label>
+    <select id="settingEffort" onchange="applyEffort()">
+      <option value="">--</option>
+      <option value="low">low</option>
+      <option value="medium">medium</option>
+      <option value="high">high</option>
+      <option value="xhigh">xhigh</option>
+    </select>
+    <div class="sep"></div>
     <button class="btn" onclick="restartWorker()">Restart</button>
     <button class="btn" onclick="interruptWorker()">Interrupt</button>
     <button class="btn btn-p" onclick="takeover()">Takeover</button>
@@ -372,6 +383,8 @@ function syncSettingsPanel(s) {
   if (sel.getAttribute('data-loaded') !== '1') return; // first call, skip
   sel.value = allModels.indexOf(s.model || defaultModel) >= 0 ? (s.model || defaultModel) : '';
   document.getElementById('settingMode').value = s.permissionMode || '';
+  document.getElementById('settingThinking').checked = s.alwaysThinkingEnabled || false;
+  document.getElementById('settingEffort').value = s.effort || '';
 }
 
 function getSettingModel() {
@@ -406,6 +419,28 @@ function applyMode() {
   });
 }
 
+function applyThinking() {
+  if (!currentWorkerId) return;
+  var thinking = document.getElementById('settingThinking').checked;
+  fetch('/api/worker/' + currentWorkerId + '/switch-thinking', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({alwaysThinkingEnabled:thinking})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) toast(d.error); else refreshSessions();
+  });
+}
+
+function applyEffort() {
+  if (!currentWorkerId) return;
+  var effort = document.getElementById('settingEffort').value;
+  fetch('/api/worker/' + currentWorkerId + '/switch-thinking', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({effort:effort})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.error) toast(d.error); else refreshSessions();
+  });
+}
+
 function restartWorker() {
   if (currentWorkerId) {
     fetch('/api/worker/' + currentWorkerId + '/restart', {method:'POST'}).then(function(r) { return r.json(); }).then(function(d) {
@@ -417,6 +452,8 @@ function restartWorker() {
     var mode = document.getElementById('settingMode').value;
     var body = {sessionId: currentSessionId, model: model};
     if (mode) body.permissionMode = mode;
+    body.alwaysThinkingEnabled = document.getElementById('settingThinking').checked;
+    body.effort = document.getElementById('settingEffort').value;
     fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
       .then(function(r) { return r.json(); }).then(function(d) {
         if (d.error) toast('Spawn failed: ' + d.error);
@@ -472,6 +509,8 @@ function send() {
     var mode = document.getElementById('settingMode').value;
     var body = {sessionId: currentSessionId, model: model};
     if (mode) body.permissionMode = mode;
+    body.alwaysThinkingEnabled = document.getElementById('settingThinking').checked;
+    body.effort = document.getElementById('settingEffort').value;
     fetch('/api/spawn', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body)
