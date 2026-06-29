@@ -157,6 +157,7 @@ function onWsMessage(e) {
       refreshSessions();
       break;
     case 'worker.destroyed':
+    case 'worker.crashed':
       _setLocalWorker(d.sessionId, null, null);
       if (d.sessionId === currentSessionId) {
         currentWorkerId = null;

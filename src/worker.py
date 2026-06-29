@@ -157,11 +157,15 @@ async def _read_stdout(w: Worker):
         })
 
     # stdout EOF — 进程退出了
-    if w.process and w.process.returncode is not None:
-        print(f"[Worker {w.worker_id}] cbc 进程异常退出，返回码 {w.process.returncode}")
-    else:
-        print(f"[Worker {w.worker_id}] cbc 进程退出")
     w.status = "error"
+    code = w.process.returncode if w.process else "unknown"
+    print(f"[Worker {w.worker_id}] cbc 进程退出，返回码 {code}")
+    await _bcast({
+        "type": "worker.crashed",
+        "workerId": w.worker_id,
+        "sessionId": w.session_id,
+        "returncode": code,
+    })
 
 
 # ── consumer ──
