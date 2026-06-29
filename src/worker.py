@@ -188,10 +188,16 @@ async def _consumer(w: Worker):
         text = item["text"]
         source = item.get("source", "agent")
 
+        # 先把用户消息记进 history 并落盘——不管进程死活都该记，
+        # 否则 worker 崩溃 / server 重启会丢用户消息
+        s = _session(w)
+        if s:
+            s.history.append({"role": "user", "content": text})
+            _sess.save(s)
+
         if w.process is None or w.process.returncode is not None:
             # 进程已死，别静默丢任务——记到 last_result 并广播，
             # 让 polling 的 bot / dashboard 能看到失败原因而不是等满 120s
-            s = _session(w)
             if s:
                 s.last_result = {
                     "status": "error",
@@ -210,9 +216,6 @@ async def _consumer(w: Worker):
             continue
 
         w.status = "running"
-        s = _session(w)
-        if s:
-            s.history.append({"role": "user", "content": text})
 
         msg = json.dumps({
             "type": "user",
