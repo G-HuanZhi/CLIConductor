@@ -30,8 +30,8 @@
   .s-dot.idle{background:#58a6ff}.s-dot.running{background:#3fb950}.s-dot.held{background:#f0883e}.s-dot.error{background:#f85149}.s-dot.offline{background:#8b949e}
 
   /* ── Chat area ── */
-  #chat{flex:1;display:flex;flex-direction:column;height:100%;min-width:0}
-  #topBar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #30363d;min-height:48px;flex-wrap:wrap}
+  #chat{flex:1;display:flex;flex-direction:column;height:100%;min-width:0;overflow:hidden}
+  #topBar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #30363d;min-height:48px;flex-wrap:wrap;flex-shrink:0}
   #topBar .chat-name{font-size:.95rem;font-weight:500}
   #topBar .chat-model{font-size:.7rem;background:#21262d;padding:2 6px;border-radius:4px;color:#8b949e}
   #topBar .chat-status{font-size:.7rem;color:#484f58;margin-left:auto}
@@ -70,7 +70,7 @@
   #settingsPanel label{font-size:.7rem;color:#8b949e}
 
   /* ── Input ── */
-  #inputRow{display:flex;gap:8px;padding:10px 16px;border-top:1px solid #30363d;align-items:center}
+  #inputRow{display:flex;gap:8px;padding:10px 16px;border-top:1px solid #30363d;align-items:center;flex-shrink:0}
   #inputRow input{flex:1;padding:8px 12px;border:1px solid #30363d;border-radius:8px;background:#0d1117;color:#e6edf3;font-size:.85rem}
   #inputRow input:focus{outline:none;border-color:#58a6ff}
   #inputRow button{padding:8px 16px;border:1px solid #58a6ff;border-radius:8px;background:#58a6ff22;color:#58a6ff;cursor:pointer;font-size:.85rem;white-space:nowrap;position:relative;z-index:1}
