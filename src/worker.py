@@ -416,17 +416,23 @@ async def restart_worker(worker_id: str) -> str | None:
     # kill takeover terminal if one was opened
     # os.kill(SIGTERM) 在 Windows 上杀不了终端进程，用 taskkill /F /T 杀进程树
     if w.takeover_pid:
+        print(f"[Worker {w.worker_id}] 杀 takeover 终端 PID={w.takeover_pid}")
         try:
             os.kill(w.takeover_pid, __import__("signal").SIGTERM)
-        except (ProcessLookupError, OSError):
-            pass
+        except Exception as e:
+            print(f"[Worker {w.worker_id}] os.kill 失败: {e}")
         try:
-            __import__("subprocess").run(
+            sp = __import__("subprocess")
+            result = sp.run(
                 ["taskkill", "/PID", str(w.takeover_pid), "/F", "/T"],
-                capture_output=True, timeout=5,
+                capture_output=True, text=True, timeout=10,
             )
-        except Exception:
-            pass
+            if result.returncode == 0:
+                print(f"[Worker {w.worker_id}] taskkill OK: {result.stdout.strip()}")
+            else:
+                print(f"[Worker {w.worker_id}] taskkill rc={result.returncode}: {result.stderr.strip()}")
+        except Exception as e:
+            print(f"[Worker {w.worker_id}] taskkill 异常: {e}")
         w.takeover_pid = None
 
     # kill existing process regardless of state

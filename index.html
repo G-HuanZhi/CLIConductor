@@ -70,10 +70,10 @@
   #settingsPanel label{font-size:.7rem;color:#8b949e}
 
   /* ── Input ── */
-  #inputRow{display:flex;gap:8px;padding:10px 16px;border-top:1px solid #30363d;align-items:center;flex-shrink:0}
+  #inputRow{display:flex;gap:8px;padding:10px 16px;border-top:1px solid #30363d;align-items:center;flex-shrink:0;position:relative;z-index:10;background:#0d1117}
   #inputRow input{flex:1;padding:8px 12px;border:1px solid #30363d;border-radius:8px;background:#0d1117;color:#e6edf3;font-size:.85rem}
   #inputRow input:focus{outline:none;border-color:#58a6ff}
-  #inputRow button{padding:8px 16px;border:1px solid #58a6ff;border-radius:8px;background:#58a6ff22;color:#58a6ff;cursor:pointer;font-size:.85rem;white-space:nowrap;position:relative;z-index:1}
+  #inputRow button{padding:8px 16px;border:1px solid #58a6ff;border-radius:8px;background:#58a6ff22;color:#58a6ff;cursor:pointer;font-size:.85rem;white-space:nowrap;position:relative;z-index:11}
   #inputRow button:hover{background:#58a6ff44}
 
   .toast{position:fixed;bottom:20px;right:20px;background:#21262d;border:1px solid #30363d;border-radius:6px;padding:10px 16px;font-size:.8rem;color:#e6edf3;opacity:0;transition:opacity .3s;z-index:999;max-width:400px}
