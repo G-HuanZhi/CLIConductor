@@ -426,15 +426,22 @@ function applyMode() {
 function applyThinking() {
   var thinking = document.getElementById('settingThinking').checked;
   document.getElementById('effortGroup').style.display = thinking ? '' : 'none';
+  // 勾选 thinking 时自动选默认 effort=medium，避免空 effort 导致异常
+  if (thinking) {
+    var eff = document.getElementById('settingEffort');
+    if (!eff.value || eff.value === 'minimal') eff.value = 'medium';
+  }
   if (!currentWorkerId) {
-    // 还没 spawn worker：只更新本地 modelData，spawn 时会带 alwaysThinkingEnabled
+    // 还没 spawn worker：只更新本地 modelData，spawn 时会带 alwaysThinkingEnabled+effort
     var s = modelData.find(function(x) { return x.id === currentSessionId; });
     if (s) s.alwaysThinkingEnabled = thinking;
     return;
   }
+  // 带 thinking 和当前 effort 一起发给 server（effort 可能刚被设成了 medium）
+  var effort = document.getElementById('settingEffort').value;
   fetch('/api/worker/' + currentWorkerId + '/switch-thinking', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({alwaysThinkingEnabled:thinking})
+    body:JSON.stringify({alwaysThinkingEnabled:thinking, effort:effort})
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.error) toast(d.error); else refreshSessions();
   });
