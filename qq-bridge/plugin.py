@@ -110,10 +110,13 @@ async def _ensure_session(qq_user_id: str) -> str | None:
     if "sessions" in existing:
         for sess_data in existing["sessions"]:
             if sess_data.get("name", "").startswith(f"qq-{qq_user_id[-6:]}"):
+                lr = sess_data.get("lastResult") or {}
                 bridge = BridgeSession(
                     qq_user_id=qq_user_id,
                     cli_session_id=sess_data["id"],
                     worker_id=sess_data.get("workerId"),
+                    last_result_ts=lr.get("timestamp", ""),
+                    last_history_len=len(sess_data.get("history", [])),
                 )
                 _sessions[qq_user_id] = bridge
                 # 如果没有 worker，spawn 一个

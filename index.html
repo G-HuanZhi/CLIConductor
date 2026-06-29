@@ -526,6 +526,7 @@ function init() {
     buildModelSelect();
   });
   refreshSessions();
+  setInterval(refreshSessions, 5000);  // auto-sync every 5s as fallback
 }
 
 function buildModelSelect() {
