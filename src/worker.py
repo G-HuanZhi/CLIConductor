@@ -137,6 +137,15 @@ async def _read_stdout(w: Worker):
                     "cbc_session_id": s.cbc_session_id,
                     "timestamp": __import__("datetime").datetime.now().isoformat(),
                 }
+                # cbc 有时只在 result 事件里给出最终文本（不在 assistant 事件里），
+                # 这种情况下 history 会缺最后一条 assistant 消息，导致 dashboard 和
+                # QQ bridge 都拿不到回复。这里补一下，避免重复。
+                result_text = event.get("result")
+                if isinstance(result_text, str) and result_text.strip():
+                    last = s.history[-1] if s.history else None
+                    if not (last and last.get("role") == "assistant"
+                            and last.get("content") == result_text):
+                        s.history.append({"role": "assistant", "content": result_text})
                 _sess.save(s)
 
             await _bcast({

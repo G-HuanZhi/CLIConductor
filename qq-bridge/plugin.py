@@ -195,6 +195,15 @@ async def _send_and_wait(text: str, qq_user_id: str) -> str:
     if "error" in data:
         return "[CLIConductor] 无法获取响应"
 
+    # 优先用 lastResult.result —— cbc 有时只在 result 事件里给最终文本，
+    # 不会写进 history 的 assistant 消息，搜 history 会拿到上一轮的旧回复。
+    lr = data.get("lastResult") or {}
+    result_text = lr.get("result", "") if lr else ""
+    if isinstance(result_text, str) and result_text.strip():
+        lines = [l for l in result_text.split("\n") if not l.startswith("🔧")]
+        return "\n".join(lines).strip() or "(tool call only)"
+
+    # 兜底：从 history 找最后一条 assistant 消息
     history = data.get("history", [])
     bridge = _sessions.get(qq_user_id)
     if bridge:
