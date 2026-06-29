@@ -156,6 +156,13 @@ async def _read_stdout(w: Worker):
             "event": event,
         })
 
+    # stdout EOF — 进程退出了
+    if w.process and w.process.returncode is not None:
+        print(f"[Worker {w.worker_id}] cbc 进程异常退出，返回码 {w.process.returncode}")
+    else:
+        print(f"[Worker {w.worker_id}] cbc 进程退出")
+    w.status = "error"
+
 
 # ── consumer ──
 
