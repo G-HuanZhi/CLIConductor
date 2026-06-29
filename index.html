@@ -461,7 +461,9 @@ function restartWorker() {
     body.effort = document.getElementById('settingEffort').value;
     fetch('/api/spawn', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})
       .then(function(r) { return r.json(); }).then(function(d) {
-        if (d.error) toast('Spawn failed: ' + d.error);
+        if (d.error) return toast('Spawn failed: ' + d.error);
+        currentWorkerId = d.workerId;
+        updateTopBar();
       });
   }
 }
@@ -488,7 +490,10 @@ function takeover() {
 function killWorker() {
   if (!currentWorkerId) return toast('No worker running');
   if (!confirm('Kill worker ' + currentWorkerId + '?')) return;
-  fetch('/api/kill/' + currentWorkerId, {method:'POST'}).then(function(r) { return r.json(); }).then(function(d) {
+  var deadId = currentWorkerId;
+  currentWorkerId = null;
+  updateTopBar();
+  fetch('/api/kill/' + deadId, {method:'POST'}).then(function(r) { return r.json(); }).then(function(d) {
     if (d.error) toast(d.error);
   });
 }
