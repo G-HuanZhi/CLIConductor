@@ -260,5 +260,7 @@ async def _startup():
 
 @driver.on_shutdown
 async def _shutdown():
-    for task in _poll_tasks.values():
+    for task in list(_poll_tasks.values()):
         task.cancel()
+    if _poll_tasks:
+        await asyncio.gather(*_poll_tasks.values(), return_exceptions=True)
