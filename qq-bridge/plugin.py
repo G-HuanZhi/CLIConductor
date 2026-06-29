@@ -105,14 +105,35 @@ async def _ensure_session(qq_user_id: str) -> str | None:
         if "error" not in data:
             return session.cli_session_id
 
+    # 先查已有的 session（避免重复创建）
+    existing = await _get("/api/sessions")
+    if "sessions" in existing:
+        for sess_data in existing["sessions"]:
+            if sess_data.get("name", "").startswith(f"qq-{qq_user_id[-6:]}"):
+                bridge = BridgeSession(
+                    qq_user_id=qq_user_id,
+                    cli_session_id=sess_data["id"],
+                    worker_id=sess_data.get("workerId"),
+                )
+                _sessions[qq_user_id] = bridge
+                # 如果没有 worker，spawn 一个
+                if not bridge.worker_id:
+                    result = await _post("/api/spawn", {"sessionId": bridge.cli_session_id})
+                    if "error" not in result:
+                        bridge.worker_id = result.get("workerId")
+                return bridge.cli_session_id
+
+    # 新建 session
     name = f"qq-{qq_user_id[-6:]}"
     s = await _post("/api/sessions", {"name": name})
     if "error" in s:
+        print(f"[QQ Bridge] 创建 Session 失败: {s['error']}")
         return None
     cli_session_id = s["id"]
 
     result = await _post("/api/spawn", {"sessionId": cli_session_id})
     if "error" in result:
+        print(f"[QQ Bridge] Spawn Worker 失败: {result['error']}")
         return None
 
     bridge = BridgeSession(
