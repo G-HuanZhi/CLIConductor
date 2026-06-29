@@ -52,13 +52,23 @@ _http = httpx.AsyncClient(timeout=30)
 
 
 async def _get(path: str) -> dict:
-    r = await _http.get(f"{CLICONDUCTOR_URL}{path}")
-    return r.json()
+    try:
+        r = await _http.get(f"{CLICONDUCTOR_URL}{path}")
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        print(f"[QQ Bridge] GET {path} 失败: {e}")
+        return {"error": str(e)}
 
 
 async def _post(path: str, data: dict = None) -> dict:
-    r = await _http.post(f"{CLICONDUCTOR_URL}{path}", json=data or {})
-    return r.json()
+    try:
+        r = await _http.post(f"{CLICONDUCTOR_URL}{path}", json=data or {})
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        print(f"[QQ Bridge] POST {path} 失败: {e}")
+        return {"error": str(e)}
 
 
 # ── 轮询结果 ──
@@ -106,6 +116,7 @@ async def _ensure_session(qq_user_id: str) -> str | None:
             return session.cli_session_id
 
     # 先查已有的 session（避免重复创建）
+    print(f"[QQ Bridge] 查询已有 session…")
     existing = await _get("/api/sessions")
     if "sessions" in existing:
         for sess_data in existing["sessions"]:
