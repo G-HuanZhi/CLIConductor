@@ -48,26 +48,30 @@ class BridgeSession:
 
 # ── HTTP 调用 ──
 
-_http = httpx.AsyncClient(timeout=30)
-
 
 async def _get(path: str) -> dict:
+    url = f"{CLICONDUCTOR_URL}{path}"
+    print(f"[QQ Bridge] GET {url}")
     try:
-        r = await _http.get(f"{CLICONDUCTOR_URL}{path}")
-        r.raise_for_status()
-        return r.json()
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            return r.json()
     except Exception as e:
-        print(f"[QQ Bridge] GET {path} 失败: {e}")
+        print(f"[QQ Bridge] GET 失败: {type(e).__name__}: {e}")
         return {"error": str(e)}
 
 
 async def _post(path: str, data: dict = None) -> dict:
+    url = f"{CLICONDUCTOR_URL}{path}"
+    print(f"[QQ Bridge] POST {url}")
     try:
-        r = await _http.post(f"{CLICONDUCTOR_URL}{path}", json=data or {})
-        r.raise_for_status()
-        return r.json()
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(url, json=data or {})
+            r.raise_for_status()
+            return r.json()
     except Exception as e:
-        print(f"[QQ Bridge] POST {path} 失败: {e}")
+        print(f"[QQ Bridge] POST 失败: {type(e).__name__}: {e}")
         return {"error": str(e)}
 
 
@@ -116,7 +120,6 @@ async def _ensure_session(qq_user_id: str) -> str | None:
             return session.cli_session_id
 
     # 先查已有的 session（避免重复创建）
-    print(f"[QQ Bridge] 查询已有 session…")
     existing = await _get("/api/sessions")
     if "sessions" in existing:
         for sess_data in existing["sessions"]:
@@ -259,4 +262,3 @@ async def _startup():
 async def _shutdown():
     for task in _poll_tasks.values():
         task.cancel()
-    await _http.aclose()
