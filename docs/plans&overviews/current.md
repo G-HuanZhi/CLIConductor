@@ -23,10 +23,14 @@
 | WebSocket 双向通信（`/ws` + `/ws/agent` 双通道） | ✅ |
 | 命令来源辨別（`source` 参数 + 独立 WS 通道） | ✅ |
 | 优雅关闭（lifespan handler，kill 所有子进程） | ✅ |
-| cbc --resume 重放去重（_replaying 标志） | ✅ |
+| cbc --resume 重放去重（_replaying 标志，replay 期间不动 history 不广播） | ✅ |
 | Dashboard 无 Worker 自动 spawn | ✅ |
 | 状态灯即时更新（本地 modelData + 异步服务端同步） | ✅ |
 | Favicon | ✅ |
+| 进程树清理（_kill_process_tree 统一 4 处杀进程路径，taskkill /F /T 无孤儿） | ✅ |
+| 请求日志（[HH:MM:SS] METHOD /path → 200 + CLICONDUCTOR_LOG_SKIP） | ✅ |
+| 历史持久化 ground truth（s.history 磁盘可靠，replay 不重建） | ✅ |
+| Worker history 单元测试（7 个，mock process 不依赖真实 cbc） | ✅ |
 
 ---
 
