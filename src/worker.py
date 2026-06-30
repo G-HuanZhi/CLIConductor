@@ -64,11 +64,14 @@ def _base_args() -> list[str]:
             "--input-format", "stream-json", "-y"]
 
 
-def _get_env(s: _sess.Session) -> dict | None:
-    """Build env dict for cbc subprocess. Sets MAX_THINKING_TOKENS if thinking enabled."""
-    if s.always_thinking_enabled and s.max_thinking_tokens > 0:
-        return {**os.environ, "MAX_THINKING_TOKENS": str(s.max_thinking_tokens)}
-    return None
+
+def _thinking_args(s: _sess.Session) -> list[str]:
+    """Return CLI args to explicitly control thinking mode.
+    cbc's alwaysThinkingEnabled setting defaults to true (since v2.66.0),
+    so when thinking is OFF we must override it via --settings."""
+    if not s.always_thinking_enabled:
+        return ["--settings", '{"alwaysThinkingEnabled": false}']
+    return []
 
 
 def _effort_args(s: _sess.Session) -> list[str]:
@@ -286,6 +289,7 @@ async def create_worker(session_id: str) -> Worker | str:
     if s.permission_mode:
         extra_args.extend(["--permission-mode", s.permission_mode])
     extra_args.extend(_effort_args(s))
+    extra_args.extend(_thinking_args(s))
 
     spawn_args = _base_args() + extra_args
     if s.cbc_session_id:
@@ -298,7 +302,6 @@ async def create_worker(session_id: str) -> Worker | str:
             stdin=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=s.workdir or None,
-            env=_get_env(s),
         )
     except FileNotFoundError:
         return f"cbc not found at: {CBC_PATH}"
@@ -413,6 +416,7 @@ async def _spawn_process(session_id: str,
     if s.permission_mode:
         args.extend(["--permission-mode", s.permission_mode])
     args.extend(_effort_args(s))
+    args.extend(_thinking_args(s))
     if extra_args:
         # extra_args 可能包含覆盖 --model, --permission-mode
         args.extend(extra_args)
@@ -424,7 +428,6 @@ async def _spawn_process(session_id: str,
             stdin=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             cwd=s.workdir or None,
-            env=_get_env(s),
         )
     except FileNotFoundError:
         return f"cbc not found at: {CBC_PATH}"
@@ -552,6 +555,7 @@ async def branch_worker(worker_id: str, new_session_id: str) -> Worker | str:
     if s.permission_mode:
         extra_args.extend(["--permission-mode", s.permission_mode])
     extra_args.extend(_effort_args(s))
+    extra_args.extend(_thinking_args(s))
 
     new_id = await _next_worker_id()
     process = await asyncio.create_subprocess_exec(
@@ -560,7 +564,6 @@ async def branch_worker(worker_id: str, new_session_id: str) -> Worker | str:
         stdin=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
         cwd=s.workdir or None,
-        env=_get_env(s),
     )
 
     new_w = Worker(worker_id=new_id, session_id=new_session_id,
