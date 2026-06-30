@@ -485,8 +485,64 @@ async def api_restart(worker_id: str):
     return {"workerId": worker_id, "status": "restarted"}
 
 
+@app.post("/api/worker/{worker_id}/settings")
+async def api_worker_settings(worker_id: str, data: dict):
+    """Apply model/mode/thinking settings to a session and respawn the worker once.
+
+    This endpoint consolidates the deprecated switch-model, switch-mode, and
+    switch-thinking endpoints.  Accepted fields:
+
+        model                  — model name (str or None)
+        permissionMode         — permission mode (str or None)
+        alwaysThinkingEnabled  — enable thinking (bool)
+        effort                 — effort level (minimal/low/medium/high/xhigh/max)
+    """
+    w = worker.get_worker(worker_id)
+    if not w:
+        return {"error": "Worker not found"}
+    s = sess.get(w.session_id)
+    if not s:
+        return {"error": "Session not found"}
+
+    # update session fields first …
+    if "model" in data:
+        s.model = data["model"]
+    if "permissionMode" in data:
+        s.permission_mode = data["permissionMode"] or None
+    if "alwaysThinkingEnabled" in data:
+        s.always_thinking_enabled = data["alwaysThinkingEnabled"]
+    if "effort" in data:
+        s.effort = data["effort"]
+    sess.save(s)
+
+    # … then build extra args from the updated session and respawn once
+    extra_args: list[str] = []
+    if "model" in data:
+        extra_args.extend(["--model", data["model"]])
+    if "permissionMode" in data:
+        extra_args.extend(["--permission-mode", data["permissionMode"] or ""])
+    extra_args.extend(worker._effort_args(s))
+
+    err = await worker.respawn_worker(worker_id, extra_args if extra_args else None)
+    if err:
+        return {"error": err}
+
+    return {
+        "workerId": worker_id,
+        "sessionId": s.id,
+        "model": s.model,
+        "permissionMode": s.permission_mode,
+        "alwaysThinkingEnabled": s.always_thinking_enabled,
+        "effort": s.effort,
+        "status": "settings applied",
+    }
+
+
+# ─── Deprecated endpoints (kept for backward compatibility) ───
+
 @app.post("/api/worker/{worker_id}/switch-model")
 async def api_switch_model(worker_id: str, data: dict):
+    """Deprecated — use POST /api/worker/{worker_id}/settings instead."""
     model = data.get("model")
     if not model:
         return {"error": "model is required"}
@@ -505,6 +561,7 @@ async def api_switch_model(worker_id: str, data: dict):
 
 @app.post("/api/worker/{worker_id}/switch-mode")
 async def api_switch_mode(worker_id: str, data: dict):
+    """Deprecated — use POST /api/worker/{worker_id}/settings instead."""
     mode = data.get("permissionMode")
     if not mode:
         return {"error": "permissionMode is required"}
@@ -522,14 +579,13 @@ async def api_switch_mode(worker_id: str, data: dict):
 
 @app.post("/api/worker/{worker_id}/switch-thinking")
 async def api_switch_thinking(worker_id: str, data: dict):
-    """Toggle thinking mode and/or effort. Respawns the worker so env vars take effect."""
+    """Deprecated — use POST /api/worker/{worker_id}/settings instead."""
     w = worker.get_worker(worker_id)
     if not w:
         return {"error": "Worker not found"}
     s = sess.get(w.session_id)
     if not s:
         return {"error": "Session not found"}
-    # update session fields before respawn（_spawn_process 直接读 s.always_thinking_enabled/s.effort）
     if "alwaysThinkingEnabled" in data:
         s.always_thinking_enabled = data["alwaysThinkingEnabled"]
     if "effort" in data:

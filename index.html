@@ -24,12 +24,11 @@
 
   <div id="settingsPanel">
     <label>Model</label>
-    <select id="settingModel"></select>
+    <select id="settingModel" onchange="updateSetButtonVisibility()"></select>
     <input id="settingModelCustom" class="model-custom" placeholder="custom">
-    <button class="btn btn-p" onclick="applyModel()">Set</button>
     <div class="sep"></div>
     <label>Mode</label>
-    <select id="settingMode">
+    <select id="settingMode" onchange="updateSetButtonVisibility()">
       <option value="">mode…</option>
       <option value="default">default</option>
       <option value="acceptEdits">acceptEdits</option>
@@ -37,13 +36,12 @@
       <option value="plan">plan</option>
       <option value="dontAsk">dontAsk</option>
     </select>
-    <button class="btn btn-p" onclick="applyMode()">Set</button>
     <div class="sep"></div>
     <label for="settingThinking">Think</label>
-    <input type="checkbox" id="settingThinking" onchange="applyThinking()">
+    <input type="checkbox" id="settingThinking" onchange="onThinkingToggle()">
     <span id="effortGroup" style="display:none">
       <label for="settingEffort">Effort</label>
-      <select id="settingEffort" onchange="applyEffort()">
+      <select id="settingEffort" onchange="updateSetButtonVisibility()">
         <option value="minimal">minimal</option>
         <option value="low">low</option>
         <option value="medium">medium</option>
@@ -52,6 +50,8 @@
         <option value="max">max</option>
       </select>
     </span>
+    <div class="sep"></div>
+    <button id="applySettingsBtn" class="btn btn-p" style="display:none" onclick="applySettings()">Apply Settings</button>
     <div class="sep"></div>
     <button class="btn" onclick="restartWorker()">Restart</button>
     <button class="btn" onclick="interruptWorker()">Interrupt</button>

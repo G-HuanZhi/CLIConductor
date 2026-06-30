@@ -6,6 +6,7 @@ let defaultModel = 'deepseek-v4-flash';
 let currentSessionId = null;
 let currentWorkerId = null;
 let modelData = [];
+let lastSyncedSettings = null;
 // ── WebSocket ──
 const ws = new WebSocket('ws://' + location.host + '/ws');
 ws.onopen = refreshSessions;
@@ -145,6 +146,10 @@ function selectSession(id) {
     renderMessages(s.history || []);
     const settingsBtn = document.getElementById('settingsBtn');
     settingsBtn.style.display = '';
+    // sync panel if it's already open
+    if (document.getElementById('settingsPanel').classList.contains('open')) {
+        syncPanelFromServer();
+    }
 }
 // ── Top bar ──
 function updateTopBar() {
@@ -162,7 +167,6 @@ function updateTopBar() {
     const status = s.workerStatus || 'offline';
     (document.getElementById('chatStatus')).textContent =
         status + (currentWorkerId ? ' (' + currentWorkerId + ')' : ' (no worker)');
-    syncSettingsPanel(s);
 }
 function showEmpty() {
     (document.getElementById('emptyHint')).style.display = '';
@@ -256,23 +260,49 @@ function toggleSettings() {
     const btn = document.getElementById('settingsBtn');
     const isOpen = panel.classList.toggle('open');
     btn.classList.toggle('open', isOpen);
+    if (isOpen) {
+        syncPanelFromServer();
+    }
 }
-function syncSettingsPanel(s) {
+/** Sync the settings panel fields to the current session's server-side values.
+ *  Called when the panel opens or the session switches. */
+function syncPanelFromServer() {
+    const s = modelData.find((x) => x.id === currentSessionId);
+    if (!s)
+        return;
     const sel = document.getElementById('settingModel');
     if (sel.getAttribute('data-loaded') !== '1')
         return;
-    sel.value =
-        allModels.indexOf(s.model || defaultModel) >= 0
-            ? s.model || defaultModel
-            : '';
+    const model = s.model || defaultModel;
+    sel.value = allModels.indexOf(model) >= 0 ? model : '';
     document.getElementById('settingMode').value =
         s.permissionMode || '';
     document.getElementById('settingThinking').checked =
         s.alwaysThinkingEnabled || false;
     document.getElementById('settingEffort').value =
-        s.effort || '';
+        s.effort || 'medium';
     (document.getElementById('effortGroup')).style.display =
         s.alwaysThinkingEnabled ? '' : 'none';
+    // record the baseline so we can detect pending changes
+    lastSyncedSettings = {
+        model: getSettingModel(),
+        permissionMode: document.getElementById('settingMode').value,
+        alwaysThinkingEnabled: document.getElementById('settingThinking').checked,
+        effort: document.getElementById('settingEffort').value,
+    };
+    updateSetButtonVisibility();
+}
+/** Returns true when any panel field differs from lastSyncedSettings. */
+function hasPendingChanges() {
+    if (!lastSyncedSettings)
+        return false;
+    return (getSettingModel() !== lastSyncedSettings.model ||
+        document.getElementById('settingMode').value !==
+            lastSyncedSettings.permissionMode ||
+        document.getElementById('settingThinking').checked !==
+            lastSyncedSettings.alwaysThinkingEnabled ||
+        document.getElementById('settingEffort').value !==
+            lastSyncedSettings.effort);
 }
 function getSettingModel() {
     const sel = document.getElementById('settingModel');
@@ -282,49 +312,15 @@ function getSettingModel() {
     }
     return sel.value || defaultModel;
 }
-function applyModel() {
-    if (!currentWorkerId) {
-        toast('No worker running');
-        return;
-    }
-    const model = getSettingModel();
-    fetch('/api/worker/' + currentWorkerId + '/switch-model', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: model }),
-    })
-        .then((r) => r.json())
-        .then((d) => {
-        if (d.error)
-            toast(d.error);
-        else
-            refreshSessions();
-    });
+/** Show/hide the Apply Settings button based on whether settings differ from
+ *  the last synced state. */
+function updateSetButtonVisibility() {
+    const btn = document.getElementById('applySettingsBtn');
+    btn.style.display = hasPendingChanges() ? '' : 'none';
 }
-function applyMode() {
-    if (!currentWorkerId) {
-        toast('No worker running');
-        return;
-    }
-    const mode = document.getElementById('settingMode').value;
-    if (!mode) {
-        toast('Select a mode');
-        return;
-    }
-    fetch('/api/worker/' + currentWorkerId + '/switch-mode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permissionMode: mode }),
-    })
-        .then((r) => r.json())
-        .then((d) => {
-        if (d.error)
-            toast(d.error);
-        else
-            refreshSessions();
-    });
-}
-function applyThinking() {
+/** Called when the Think checkbox is toggled: show/hide Effort + auto-select
+ *  medium, then update the Set button.  No API call is made. */
+function onThinkingToggle() {
     const thinking = document.getElementById('settingThinking').checked;
     (document.getElementById('effortGroup')).style.display = thinking ? '' : 'none';
     if (thinking) {
@@ -332,29 +328,23 @@ function applyThinking() {
         if (!eff.value || eff.value === 'minimal')
             eff.value = 'medium';
     }
+    updateSetButtonVisibility();
+}
+/** Apply all pending model/mode/thinking/effort changes via a single API call.
+ *  Handles both the "no worker" (PATCH session) and "worker exists" cases. */
+function applySettings() {
+    if (!currentSessionId)
+        return;
+    const thinking = document.getElementById('settingThinking').checked;
     const effort = document.getElementById('settingEffort').value;
-    const s = modelData.find((x) => x.id === currentSessionId);
-    const originalThinking = s ? s.alwaysThinkingEnabled : false;
-    const originalEffort = s ? s.effort : '';
-    if (s) {
-        s.alwaysThinkingEnabled = thinking;
-        s.effort = thinking ? effort : s.effort;
-    }
-    function revert() {
-        document.getElementById('settingThinking').checked = originalThinking;
-        (document.getElementById('effortGroup')).style.display = originalThinking ? '' : 'none';
-        if (s) {
-            s.alwaysThinkingEnabled = originalThinking;
-            s.effort = originalEffort;
-        }
-    }
     if (!currentWorkerId) {
-        if (!currentSessionId)
-            return;
+        // no worker: persist settings to session via PATCH
         fetch('/api/sessions/' + currentSessionId, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                model: getSettingModel(),
+                permissionMode: document.getElementById('settingMode').value || undefined,
                 alwaysThinkingEnabled: thinking,
                 effort: effort,
             }),
@@ -363,15 +353,19 @@ function applyThinking() {
             .then((d) => {
             if (d.error) {
                 toast(d.error);
-                revert();
+                return;
             }
+            markSettingsApplied();
         });
         return;
     }
-    fetch('/api/worker/' + currentWorkerId + '/switch-thinking', {
+    // worker exists: consolidated endpoint
+    fetch('/api/worker/' + currentWorkerId + '/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+            model: getSettingModel(),
+            permissionMode: document.getElementById('settingMode').value || undefined,
             alwaysThinkingEnabled: thinking,
             effort: effort,
         }),
@@ -380,57 +374,27 @@ function applyThinking() {
         .then((d) => {
         if (d.error) {
             toast(d.error);
-            revert();
-        }
-    });
-}
-function applyEffort() {
-    const effort = document.getElementById('settingEffort').value;
-    const s = modelData.find((x) => x.id === currentSessionId);
-    const originalEffort = s ? s.effort : '';
-    if (s)
-        s.effort = effort;
-    if (!currentWorkerId) {
-        if (!currentSessionId)
             return;
-        fetch('/api/sessions/' + currentSessionId, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ effort: effort }),
-        })
-            .then((r) => r.json())
-            .then((d) => {
-            if (d.error) {
-                toast(d.error);
-                if (s)
-                    s.effort = originalEffort;
-                document.getElementById('settingEffort').value =
-                    originalEffort;
-            }
-        });
-        return;
-    }
-    fetch('/api/worker/' + currentWorkerId + '/switch-thinking', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ effort: effort }),
-    })
-        .then((r) => r.json())
-        .then((d) => {
-        if (d.error)
-            toast(d.error);
-        else
-            refreshSessions();
+        }
+        markSettingsApplied();
     });
 }
+/** Called after successful settings apply — update baseline and hide button. */
+function markSettingsApplied() {
+    lastSyncedSettings = {
+        model: getSettingModel(),
+        permissionMode: document.getElementById('settingMode').value,
+        alwaysThinkingEnabled: document.getElementById('settingThinking').checked,
+        effort: document.getElementById('settingEffort').value,
+    };
+    updateSetButtonVisibility();
+}
+// ── Worker actions (restart / interrupt / takeover / kill) ──
 function restartWorker() {
     if (currentWorkerId) {
-        fetch('/api/worker/' + currentWorkerId + '/restart', { method: 'POST' })
-            .then((r) => r.json())
-            .then((d) => {
-            if (d.error)
-                toast(d.error);
-        });
+        // Always restart with current panel settings (user intent).
+        // applySettings handles both "no-change respawn" and "apply pending changes".
+        applySettings();
     }
     else {
         const model = getSettingModel();
@@ -552,6 +516,31 @@ function send() {
                 return;
             }
             currentWorkerId = d.workerId ?? null;
+            doSend();
+        });
+        return;
+    }
+    // worker exists: if panel has unapplied changes, apply them first, then send
+    if (hasPendingChanges()) {
+        const thinking = document.getElementById('settingThinking').checked;
+        const effort = document.getElementById('settingEffort').value;
+        fetch('/api/worker/' + currentWorkerId + '/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: getSettingModel(),
+                permissionMode: document.getElementById('settingMode').value || undefined,
+                alwaysThinkingEnabled: thinking,
+                effort: effort,
+            }),
+        })
+            .then((r) => r.json())
+            .then((d) => {
+            if (d.error) {
+                toast(d.error);
+                return;
+            }
+            markSettingsApplied();
             doSend();
         });
         return;
