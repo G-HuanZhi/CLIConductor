@@ -181,12 +181,16 @@ async def _read_stdout(w: Worker):
             w.status = "idle"
             continue
 
-        await _bcast({
-            "type": "worker.stream",
-            "workerId": w.worker_id,
-            "sessionId": w.session_id,
-            "event": event,
-        })
+        # replay 期间不广播 stream 事件——这些是 cbc --resume 重放的旧事件，
+        # 广播会让 dashboard 显示旧历史滚动，QQ bridge 也会误处理。
+        # cbc 内部状态恢复即可，外部不需要感知。
+        if not w._replaying:
+            await _bcast({
+                "type": "worker.stream",
+                "workerId": w.worker_id,
+                "sessionId": w.session_id,
+                "event": event,
+            })
 
     # stdout EOF — 进程退出了
     w.status = "error"
@@ -213,6 +217,10 @@ async def _consumer(w: Worker):
 
         text = item["text"]
         source = item.get("source", "agent")
+
+        # 用户发新消息 → replay 阶段结束。即使 cbc 还在重放旧事件，
+        # 后续 assistant 事件必须正常 append 到 history（否则回复丢失）。
+        w._replaying = False
 
         # 先把用户消息记进 history 并落盘——不管进程死活都该记，
         # 否则 worker 崩溃 / server 重启会丢用户消息
@@ -583,6 +591,10 @@ async def branch_worker(worker_id: str, new_session_id: str) -> Worker | str:
 
     new_w = Worker(worker_id=new_id, session_id=new_session_id,
                    status="idle", process=process, queue=asyncio.Queue())
+    # 注意：branch 不设 _replaying（与 create_worker/restart_worker 不同）。
+    # branch 的新 session history 为空，需要从 cbc --resume --fork-session
+    # 的重放中填入历史，所以走正常 append 路径。主路径的 session 已有
+    # 完整 history（磁盘 ground truth），replay 期间跳过 append 避免重复。
     workers[new_id] = new_w
     new_w._stdout_task = asyncio.create_task(_read_stdout(new_w))
     new_w._consume_task = asyncio.create_task(_consumer(new_w))
