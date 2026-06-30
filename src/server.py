@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import worker
 from . import session as sess
+
+# ── logging helpers ──
+
+def _log(msg: str):
+    """Print with HH:MM:SS prefix."""
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
 
 # ── lifespan ──
 
@@ -22,10 +30,10 @@ async def lifespan(app: FastAPI):
     Shutdown: kill all child processes."""
     sessions = sess.list_all()
     if sessions:
-        print(f"[CLIConductor] Loaded {len(sessions)} sessions from disk")
+        _log(f"[CLIConductor] Loaded {len(sessions)} sessions from disk")
     yield
     await worker.shutdown_all()
-    print("[CLIConductor] All workers shut down")
+    _log("[CLIConductor] All workers shut down")
 
 
 app = FastAPI(title="CLIConductor", lifespan=lifespan)
@@ -56,6 +64,14 @@ async def broadcast(data: dict):
 
 
 worker.set_broadcaster(broadcast)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log every API request with method and path."""
+    _log(f"{request.method} {request.url.path}")
+    response = await call_next(request)
+    return response
 
 
 # ── helpers ──
