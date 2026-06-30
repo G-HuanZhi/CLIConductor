@@ -127,6 +127,14 @@ def list_all() -> list[Session]:
         if f.suffix == ".json":
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
+                # 不要覆盖已缓存的 Session：worker 可能在 _read_stdout 里
+                # 已经往内存 history append 了内容但还没 save，这里从磁盘
+                # 重新加载会丢掉那部分（dashboard 每 5s 轮询 /api/sessions
+                # 就会触发本函数）。已缓存时直接用内存版本。
+                sid = data.get("id")
+                if sid and sid in _cache:
+                    sessions.append(_cache[sid])
+                    continue
                 s = Session(**data)
                 _cache[s.id] = s
                 sessions.append(s)
