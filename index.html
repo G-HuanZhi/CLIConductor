@@ -73,7 +73,7 @@
   #inputRow{display:flex;gap:8px;padding:10px 16px;border-top:1px solid #30363d;align-items:center;flex-shrink:0;position:relative;z-index:10;background:#0d1117}
   #inputRow input{flex:1;padding:8px 12px;border:1px solid #30363d;border-radius:8px;background:#0d1117;color:#e6edf3;font-size:.85rem}
   #inputRow input:focus{outline:none;border-color:#58a6ff}
-  #inputRow button{padding:8px 16px;border:1px solid #58a6ff;border-radius:8px;background:#58a6ff22;color:#58a6ff;cursor:pointer;font-size:.85rem;white-space:nowrap;position:relative;z-index:11}
+  #inputRow button{padding:8px 16px;border:1px solid #58a6ff;border-radius:8px;background:#58a6ff22;color:#58a6ff;cursor:pointer;font-size:.85rem;white-space:nowrap;position:relative;z-index:11;flex-shrink:0;user-select:none;-webkit-user-select:none}
   #inputRow button:hover{background:#58a6ff44}
 
   .toast{position:fixed;bottom:20px;right:20px;background:#21262d;border:1px solid #30363d;border-radius:6px;padding:10px 16px;font-size:.8rem;color:#e6edf3;opacity:0;transition:opacity .3s;z-index:999;max-width:400px}
@@ -193,6 +193,7 @@ function onWsMessage(e) {
       break;
     case 'session.created':
     case 'session.renamed':
+    case 'session.updated':
     case 'session.deleted':
       refreshSessions();
       break;
@@ -431,24 +432,50 @@ function applyThinking() {
     if (!eff.value || eff.value === 'minimal') eff.value = 'medium';
   }
   var effort = document.getElementById('settingEffort').value;
-  // 先更新本地 modelData——不论有没有 worker，避免 refreshSessions 异步跑完前
+
+  // 先更新本地 modelData——避免 refreshSessions 异步跑完前
   // syncSettingsPanel 从旧 modelData 回写给 checkbox 取消勾选
   var s = modelData.find(function(x) { return x.id === currentSessionId; });
+  var originalThinking = s ? s.alwaysThinkingEnabled : false;
+  var originalEffort = s ? s.effort : '';
   if (s) {
     s.alwaysThinkingEnabled = thinking;
     s.effort = thinking ? effort : s.effort;
   }
-  if (!currentWorkerId) return;
+
+  function revert() {
+    document.getElementById('settingThinking').checked = originalThinking;
+    document.getElementById('effortGroup').style.display = originalThinking ? '' : 'none';
+    if (s) {
+      s.alwaysThinkingEnabled = originalThinking;
+      s.effort = originalEffort;
+    }
+  }
+
+  // 没有 worker 时不能直接改 worker 配置，必须先把设置持久化到 session，
+  // 否则 5 秒一次的 refreshSessions 会把 checkbox 状态回写掉。
+  if (!currentWorkerId) {
+    if (!currentSessionId) return;
+    fetch('/api/sessions/' + currentSessionId, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({alwaysThinkingEnabled: thinking, effort: effort})
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.error) {
+        toast(d.error);
+        revert();
+      }
+    });
+    return;
+  }
+
   fetch('/api/worker/' + currentWorkerId + '/switch-thinking', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body:JSON.stringify({alwaysThinkingEnabled:thinking, effort:effort})
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.error) {
       toast(d.error);
-      // server 失败时回退
-      document.getElementById('settingThinking').checked = !thinking;
-      document.getElementById('effortGroup').style.display = (!thinking) ? '' : 'none';
-      if (s) s.alwaysThinkingEnabled = !thinking;
+      revert();
     }
     // 成功时不调 refreshSessions——WS worker.restarted 广播会带着最新数据同步
   });
@@ -456,11 +483,26 @@ function applyThinking() {
 
 function applyEffort() {
   var effort = document.getElementById('settingEffort').value;
+  var s = modelData.find(function(x) { return x.id === currentSessionId; });
+  var originalEffort = s ? s.effort : '';
+  if (s) s.effort = effort;
+
   if (!currentWorkerId) {
-    var s = modelData.find(function(x) { return x.id === currentSessionId; });
-    if (s) s.effort = effort;
+    if (!currentSessionId) return;
+    fetch('/api/sessions/' + currentSessionId, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({effort: effort})
+    }).then(function(r) { return r.json(); }).then(function(d) {
+      if (d.error) {
+        toast(d.error);
+        if (s) s.effort = originalEffort;
+        document.getElementById('settingEffort').value = originalEffort;
+      }
+    });
     return;
   }
+
   fetch('/api/worker/' + currentWorkerId + '/switch-thinking', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body:JSON.stringify({effort:effort})

@@ -271,6 +271,30 @@ async def api_get_session(session_id: str):
     return _session_to_api(s)
 
 
+@app.patch("/api/sessions/{session_id}")
+async def api_update_session(session_id: str, data: dict):
+    """Update session-level settings (model/mode/thinking/effort) without spawning a worker."""
+    s = sess.get(session_id)
+    if not s:
+        return {"error": "Session not found"}
+    if "model" in data:
+        s.model = data["model"]
+    if "permissionMode" in data:
+        s.permission_mode = data["permissionMode"] or None
+    if "alwaysThinkingEnabled" in data:
+        s.always_thinking_enabled = data["alwaysThinkingEnabled"]
+    if "effort" in data:
+        s.effort = data["effort"]
+    if "maxThinkingTokens" in data:
+        s.max_thinking_tokens = data["maxThinkingTokens"]
+    sess.save(s)
+    await broadcast({
+        "type": "session.updated",
+        "sessionId": s.id,
+    })
+    return _session_to_api(s)
+
+
 @app.delete("/api/sessions/{session_id}")
 async def api_delete_session(session_id: str):
     """Delete a session and its worker if running."""
