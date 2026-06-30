@@ -78,15 +78,16 @@ worker.set_broadcaster(broadcast)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log every API request with method and path.
+    """Log every API request with method, path, and status code.
 
     Set CLICONDUCTOR_LOG_SKIP=comma,separated,path,prefixes to skip specific
     endpoints from being logged.
     """
     path = request.url.path
-    if not any(path.startswith(p) for p in _LOG_SKIP):
-        _log(f"{request.method}  {path}")
     response = await call_next(request)
+    if not any(path.startswith(p) for p in _LOG_SKIP):
+        status = response.status_code
+        _log(f"{request.method}  {path}  → {status}")
     return response
 
 
