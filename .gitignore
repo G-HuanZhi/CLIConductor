@@ -24,7 +24,7 @@ data/
 # Personal notes
 privatenote.md
 devNote.md
-
+testoutcome.md
 # spike residues (may be locked by running processes)
 spike-node/
 spike-python/
