@@ -64,11 +64,12 @@ def _base_args() -> list[str]:
             "--input-format", "stream-json", "-y"]
 
 
-def _get_env(s: _sess.Session) -> dict | None:
-    """Build env dict for cbc subprocess. Sets MAX_THINKING_TOKENS if thinking enabled."""
-    if s.always_thinking_enabled and s.max_thinking_tokens > 0:
-        return {**os.environ, "MAX_THINKING_TOKENS": str(s.max_thinking_tokens)}
-    return None
+def _get_env(s: _sess.Session) -> dict:
+    """Build env dict for cbc subprocess.
+    Always sets MAX_THINKING_TOKENS to explicitly control thinking mode:
+    enabled → s.max_thinking_tokens; disabled → 0."""
+    val = str(s.max_thinking_tokens) if s.always_thinking_enabled else "0"
+    return {**os.environ, "MAX_THINKING_TOKENS": val}
 
 
 def _effort_args(s: _sess.Session) -> list[str]:
