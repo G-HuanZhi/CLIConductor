@@ -72,8 +72,8 @@ def _get_env(s: _sess.Session) -> dict | None:
 
 
 def _effort_args(s: _sess.Session) -> list[str]:
-    """Return --effort <level> args if configured, else empty list."""
-    if s.effort:
+    """Return --effort <level> args if thinking is enabled and effort is configured."""
+    if s.always_thinking_enabled and s.effort:
         return ["--effort", s.effort]
     return []
 

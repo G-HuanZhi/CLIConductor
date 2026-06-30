@@ -738,6 +738,7 @@ function buildModelSelect(): void {
   sel.onchange = function () {
     (document.getElementById('settingModelCustom')!).style.display =
       sel.value === '__custom__' ? 'inline-block' : 'none';
+    updateSetButtonVisibility();
   };
   sel.setAttribute('data-loaded', '1');
 }
