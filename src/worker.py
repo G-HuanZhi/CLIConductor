@@ -374,6 +374,35 @@ def _kill_takeover_terminal(w: Worker) -> bool:
     return True
 
 
+def _kill_process_tree(w: Worker) -> None:
+    """杀掉 worker 的 cbc 进程及其整棵子进程树。
+
+    cbc.cmd 会 spawn node.exe 作为子进程。`w.process.kill()` 只杀 cbc.cmd
+    本身（等价于 TerminateProcess），node.exe 变孤儿继续运行。
+    必须用 `taskkill /F /T /PID` 一次性强杀整棵树。
+
+    与 _kill_takeover_terminal 的区别：本函数杀的是 worker 自己的 cbc
+    子进程；_kill_takeover_terminal 杀的是 takeover 模式打开的 PowerShell
+    终端。两者独立，都需要调用。
+    """
+    if not w.process:
+        return
+    pid = w.process.pid
+    try:
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            capture_output=True, timeout=5,
+        )
+    except Exception:
+        # taskkill 失败（进程可能已退出）——回退到 .kill()，至少把 cbc.cmd 杀掉
+        try:
+            w.process.kill()
+        except ProcessLookupError:
+            pass
+        except Exception:
+            pass
+
+
 async def kill_worker(worker_id: str) -> str | None:
     """Kill the Worker process. Does NOT touch the Session."""
     w = workers.get(worker_id)
@@ -384,12 +413,7 @@ async def kill_worker(worker_id: str) -> str | None:
         w._consume_task.cancel()
     if w._stdout_task:
         w._stdout_task.cancel()
-    if w.process:
-        try:
-            w.process.kill()
-        except ProcessLookupError:
-            pass
-
+    _kill_process_tree(w)
     _kill_takeover_terminal(w)
 
     workers.pop(worker_id, None)
@@ -458,15 +482,9 @@ async def restart_worker(worker_id: str) -> str | None:
     # 不能 os.kill 先杀树根——会让孩子变孤儿，taskkill /T 就杀不到了）
     _kill_takeover_terminal(w)
 
-    # kill existing process regardless of state
-    if w.process:
-        try:
-            w.process.kill()
-        except ProcessLookupError:
-            pass
-        except Exception:
-            pass
-        w.process = None
+    # kill existing cbc process tree（taskkill /F /T，避免 node.exe 孤儿）
+    _kill_process_tree(w)
+    w.process = None
 
     # cancel stale tasks
     if w._consume_task:
@@ -501,11 +519,8 @@ async def respawn_worker(worker_id: str, extra_args: list[str] | None = None) ->
     if not w:
         return "Worker not found"
 
-    if w.process:
-        try:
-            w.process.kill()
-        except ProcessLookupError:
-            pass
+    _kill_takeover_terminal(w)
+    _kill_process_tree(w)
 
     proc = await _spawn_process(w.session_id, extra_args)
     if isinstance(proc, str):
@@ -625,6 +640,11 @@ def find_worker_by_session(session_id: str) -> Worker | None:
 
 
 async def shutdown_all():
+    """关闭所有 worker 的 cbc 进程树 + takeover 终端。
+
+    必须用 _kill_process_tree / _kill_takeover_terminal（内部走 taskkill /F /T），
+    不能只调 w.process.kill()——后者只杀 cbc.cmd，留下 node.exe 孤儿。
+    """
     ids = list(workers.keys())
     for wid in ids:
         w = workers.get(wid)
@@ -634,9 +654,6 @@ async def shutdown_all():
             w._consume_task.cancel()
         if w._stdout_task:
             w._stdout_task.cancel()
-        if w.process:
-            try:
-                w.process.kill()
-            except ProcessLookupError:
-                pass
+        _kill_process_tree(w)
+        _kill_takeover_terminal(w)
     workers.clear()
