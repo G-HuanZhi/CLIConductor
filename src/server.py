@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -14,11 +15,20 @@ from fastapi.staticfiles import StaticFiles
 from . import worker
 from . import session as sess
 
-# ── logging helpers ──
+# ── logging ──
 
 def _log(msg: str):
     """Print with HH:MM:SS prefix."""
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+
+# Comma-separated path prefixes to skip in request logging.
+# e.g. CLICONDUCTOR_LOG_SKIP=/api/sessions,/ws
+_LOG_SKIP = [
+    p.strip()
+    for p in os.environ.get("CLICONDUCTOR_LOG_SKIP", "").split(",")
+    if p.strip()
+]
 
 
 # ── lifespan ──
@@ -68,8 +78,14 @@ worker.set_broadcaster(broadcast)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    """Log every API request with method and path."""
-    _log(f"{request.method} {request.url.path}")
+    """Log every API request with method and path.
+
+    Set CLICONDUCTOR_LOG_SKIP=comma,separated,path,prefixes to skip specific
+    endpoints from being logged.
+    """
+    path = request.url.path
+    if not any(path.startswith(p) for p in _LOG_SKIP):
+        _log(f"{request.method}  {path}")
     response = await call_next(request)
     return response
 
