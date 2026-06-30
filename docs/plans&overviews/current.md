@@ -1,6 +1,6 @@
 # Phase 1 — 当前开发计划
 
-> 最后更新：2026-06-28
+> 最后更新：2026-07-01
 > 目标：Meta-Agent 操控多个 Worker + 人类随时观察/插话/接管
 
 ---
@@ -26,6 +26,11 @@
 | cbc --resume 重放去重（_replaying 标志） | ✅ |
 | Dashboard 无 Worker 自动 spawn | ✅ |
 | 状态灯即时更新（本地 modelData + 异步服务端同步） | ✅ |
+| 设置面板重构（单 Apply 按钮，差异显隐，Send-before-Set） | ✅ |
+| 设置端点 `/api/worker/{id}/settings`（统一 model/mode/think/effort） | ✅ |
+| 请求日志 `[HH:MM:SS] METHOD /path → 200` + `CLICONDUCTOR_LOG_SKIP` | ✅ |
+| 对话历史重建（cbc --resume 缓冲回放，不破坏原历史） | ✅ |
+| 进程树清理（`taskkill /F /T` 退出无孤儿 node.exe） | ✅ |
 | Favicon | ✅ |
 
 ---
