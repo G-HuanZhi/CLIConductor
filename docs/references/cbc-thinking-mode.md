@@ -22,10 +22,6 @@ cbc（CodeBuddy Code）的思考模式由两个独立机制控制：
 
 文件：`src/worker.py`
 
-### `_get_env(s: Session) -> dict | None`
-- 当 `s.always_thinking_enabled` 为 `true` 且 `s.max_thinking_tokens > 0` 时，设置 `MAX_THINKING_TOKENS` 环境变量为 `s.max_thinking_tokens`
-- 否则返回 `None`（不设置该环境变量）
-
 ### `_thinking_args(s: Session) -> list[str]`
 - 当 `s.always_thinking_enabled` 为 `false` 时，追加 `--settings '{"alwaysThinkingEnabled": false}'` 命令行参数，**显式关闭思考**
 - 当为 `true` 时不追加，依赖 cbc 默认行为（思考开启）
@@ -50,7 +46,6 @@ cbc.cmd -p --output-format stream-json --input-format stream-json -y --model <mo
 勾选 Think 后：
 ```bash
 cbc.cmd -p --output-format stream-json --input-format stream-json -y --model <model> --effort medium
-# + 环境变量 MAX_THINKING_TOKENS=16000
 ```
 
 ## 文档来源
