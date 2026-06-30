@@ -16,46 +16,47 @@
 
 | 功能 | 说明 |
 |------|------|
-| Worker 生命周期 | spawn / list / kill / restart / branch |
+| Worker 生命周期 | spawn / list / kill / restart / branch / interrupt |
 | Session 独立管理 | Session（UUID 持久化）与 Worker（运行时进程）分离，kill 不删 Session |
+| 设置面板 | 一次性提交 model/mode/think/effort，自动 spawn |
+| 对话历史重建 | cbc --resume 回放后自动重建 CLIConductor history，缓冲期不丢失原数据 |
 | cbc 集成 | stdin stream-json 长驻进程，多轮对话 |
 | 任务队列 | 每个 Worker 独立 asyncio.Queue，一次一条写入 stdin |
-| 模型/模式切换 | switch-model / switch-mode，kill + --resume 保留历史 |
 | Session 持久化 | `data/sessions/ses_<uuid>.json`，每次 result 保存 |
 | 重启恢复 Session | 启动时自动加载所有 Session（不自动 spawn Worker，按需 spawn）|
-| 中断任务 | interrupt 端点：kill + --resume 重启 |
 | Dashboard | 左栏 Session 列表 + 聊天式消息区（用户右、助手左、thinking 可折叠）|
 | 用户注入 | Dashboard 输入 → WS → Worker 队列 |
-| 接管模式 | 后端打开 PowerShell 运行交互式 `cbc --resume`，Worker 进入 held 态 |
-| 优雅关闭 | lifespan handler：退出时 kill 所有子进程 |
-| 默认模型 | `deepseek-v4-flash`，Session 级别可配置 |
+| 接管模式 | 后端打开 PowerShell 运行交互式 `cbc --resume` |
+| 优雅关闭 + 进程树清理 | 退出时 `taskkill /F /T` 杀整棵进程树，不残留孤儿 node.exe |
+| 请求日志 | `[HH:MM:SS] METHOD /path → 200`，环境变量 `CLICONDUCTOR_LOG_SKIP` 可过滤特定路径 |
 | Meta-Agent 通道 | `/ws/agent` 端点，Agent 实时接收事件 + 派发任务 |
-| 命令来源辨別 | `send_task()` 含 `source` 参数（agent/user），两套独立 WS 通道 |
-| cbc 重放去重 | `--resume` 重放事件不重复追加到 history |
-| 状态灯即时更新 | WS 事件 → 本地 modelData 立即更新 → 异步 API 同步 |
+| 命令来源辨别 | `send_task()` 含 `source` 参数（agent/user），两套独立 WS 通道 |
 
 ### API 总览
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/` | Dashboard（单页 HTML） |
+| GET | `/` | Dashboard HTML |
 | GET | `/favicon.ico` | SVG favicon |
 | WS | `/ws` | Dashboard WebSocket（观察 + user_inject） |
-| WS | `/ws/agent` | Meta-Agent WebSocket（事件流 + task/spawn/kill/list）|
+| WS | `/ws/agent` | Meta-Agent WebSocket（事件流 + 命令）|
 | GET | `/api/models` | 支持模型列表 + 默认模型 |
 | GET | `/api/sessions` | 列出所有 Session（含 history、workerStatus）|
-| POST | `/api/sessions` | 创建 Session（不 spawn Worker）|
+| POST | `/api/sessions` | 创建 Session |
 | GET | `/api/sessions/{id}` | 获取单个 Session 详情 |
+| PATCH | `/api/sessions/{id}` | 更新 Session 设置（无 worker 时） |
 | DELETE | `/api/sessions/{id}` | 删除 Session + kill Worker |
-| POST | `/api/spawn` | 为 Session 创建 Worker（可指定 model/mode）|
+| POST | `/api/spawn` | 为 Session 创建 Worker（可指定 setting）|
 | POST | `/api/task` | 发任务（workerId 或 sessionId）|
 | GET | `/api/list` | 列出运行中的 Worker |
 | POST | `/api/kill/{worker_id}` | 销毁 Worker（不删 Session）|
+| POST | `/api/worker/{id}/settings` | 一次性提交 model/mode/think/effort |
 | POST | `/api/worker/{id}/restart` | 重启 cbc 进程 |
 | POST | `/api/worker/{id}/interrupt` | 中断当前任务 |
-| POST | `/api/worker/{id}/takeover` | 打开交互式 PowerShell + held |
-| POST | `/api/worker/{id}/switch-model` | 切换模型 |
-| POST | `/api/worker/{id}/switch-mode` | 切换权限模式 |
+| POST | `/api/worker/{id}/takeover` | 打开交互式 PowerShell |
+| POST | `/api/worker/{id}/switch-model` | （已弃用）由 settings 替代 |
+| POST | `/api/worker/{id}/switch-mode` | （已弃用）由 settings 替代 |
+| POST | `/api/worker/{id}/switch-thinking` | （已弃用）由 settings 替代 |
 | POST | `/api/worker/{id}/rename` | 重命名 Session |
 | POST | `/api/worker/{id}/branch` | 从当前 Session 分支 |
 
@@ -105,25 +106,39 @@ python main.py
 
 ```
 CLIConductor/
-├── main.py                  入口（from src.server import app）
+├── main.py                  入口
 ├── src/
 │   ├── __init__.py
-│   ├── server.py            FastAPI 路由 + WS
-│   ├── worker.py            Worker 数据类 + 生命周期管理
+│   ├── server.py            FastAPI 路由 + WS + 日志中间件
+│   ├── worker.py            Worker 管理 + replay 重建
 │   └── session.py           Session 存储（UUID key）
-├── index.html               Dashboard 单页（两栏：session 列表 + 聊天区）
+├── index.html               Dashboard（单页）
+├── static/                  CSS + JS（从 ts/ 编译）
+│   ├── css/styles.css
+│   └── js/app.js
 ├── data/
-│   ├── sessions/            Session JSON 文件（ses_<uuid>.json）
+│   ├── sessions/            Session JSON 文件
 │   └── workdirs/            Worker 工作目录
-├── requirements.txt         fastapi, uvicorn, websockets
+├── requirements.txt
 ├── docs/
 │   ├── plans&overviews/
-│   │   ├── global.md        全局规划（目标/架构/路线图/命名约定）
-│   │   ├── current.md       当前 Phase 1 计划
-│   │   └── myTODO.md        个人 TODO
+│   │   ├── global.md
+│   │   ├── current.md
+│   │   └── myTODO.md
 │   └── references/
-│       └── dionysusc-reference.md
-└── devNote.md               协作笔记
+│       ├── dionysusc-reference.md
+│       └── cbc-thinking-mode.md
+└── TODO.md
+```
+
+## 日志控制
+
+```
+# 请求日志示例
+[17:30:05] POST  /api/worker/worker-1/settings  → 200
+
+# 跳过特定路径（环境变量）
+CLICONDUCTOR_LOG_SKIP=/api/sessions,/ws  python main.py
 ```
 
 ## 关键设计
@@ -131,7 +146,7 @@ CLIConductor/
 ### Worker 与 Session 分离
 
 - **Worker** — 运行时 cbc 进程，持有 session_id 引用。kill 后 Worker 消失。
-- **Session** — 持久化数据（UUID `ses_<16hex>`），含 history、model、cbc_session_id。独立于 Worker 生命周期。
+- **Session** — 持久化数据（UUID `ses_<16hex>`），独立的 Worker 生命周期。
 
 ### cbc 集成模式（长驻进程）
 
@@ -146,22 +161,19 @@ Agent 任务 ──→ asyncio.Queue (FIFO) ──→ consumer ──→ cbc.std
 用户注入 ──→                                         result → 取下一条
 ```
 
-### 特殊命令处理
+### 设置面板
 
-cbc 的 /model、/branch 等无法通过 stdin stream-json 发送。方案：kill + `--resume <cbc_session_id>` + CLI 参数重启。
-
-| 命令 | 实现方式 |
-|------|---------|
-| `/model` | `--model <model>` + respawn |
-| Shift+Tab | `--permission-mode <mode>` + respawn |
-| `/branch` | `--resume <sid> --fork-session` + spawn |
-| `/rename` | CLIConductor 自维护 Session name 字段 |
+```
+打开面板 → 同步服务器状态
+修改 model/mode/think/effort → 状态差异时出现 Apply 按钮
+Send / Restart → 自动合并未提交的设置
+```
 
 ### 命名约定
 
 | 术语 | 定义 |
 |------|------|
-| **Meta-Agent** | 具有与 Worker 交互权限和能力的上层 AI Agent（如 CodeBuddy Code）。通过 `/ws/agent` 通道操作。 |
+| **Meta-Agent** | 具有与 Worker 交互权限的上层 AI Agent（如 CodeBuddy）。通过 `/ws/agent` 通道操作。 |
 | **Worker** | 一个运行中的 cbc 子进程。进程终止后不删除 Session。 |
-| **Session** | 持久化会话。UUID 管理，含 cbc_session_id、history、last_result 等。 |
+| **Session** | 持久话会话。UUID 管理，含 cbc_session_id、history、last_result 等。 |
 | **Human** | 人类用户。通过 Dashboard 观察/注入/接管。来源标记为 `"user"`。 |
