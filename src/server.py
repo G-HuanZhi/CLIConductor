@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from . import worker
 from . import session as sess
@@ -660,3 +661,9 @@ async def api_takeover(worker_id: str):
         "takeoverPid": w.takeover_pid,
         "status": "takeover started",
     }
+
+# ── Static files (CSS, JS) ──
+import os
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
