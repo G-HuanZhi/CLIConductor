@@ -486,19 +486,21 @@ async def restart_worker(worker_id: str) -> str | None:
     # always clear held status
     w.status = "idle"
 
-    # kill takeover terminal if one was opened（必须用 _kill_takeover_terminal，
-    # 不能 os.kill 先杀树根——会让孩子变孤儿，taskkill /T 就杀不到了）
+    # cancel stale tasks FIRST — before killing the process.
+    # _read_stdout detects EOF on process death and calls workers.pop(),
+    # which would remove the worker being restarted.  Cancelling first
+    # means _read_stdout never sees the EOF.
+    if w._consume_task:
+        w._consume_task.cancel()
+    if w._stdout_task:
+        w._stdout_task.cancel()
+
+    # kill takeover terminal if one was opened
     _kill_takeover_terminal(w)
 
     # kill existing cbc process tree（taskkill /F /T，避免 node.exe 孤儿）
     _kill_process_tree(w)
     w.process = None
-
-    # cancel stale tasks
-    if w._consume_task:
-        w._consume_task.cancel()
-    if w._stdout_task:
-        w._stdout_task.cancel()
 
     proc = await _spawn_process(w.session_id)
     if isinstance(proc, str):
@@ -526,6 +528,14 @@ async def respawn_worker(worker_id: str, extra_args: list[str] | None = None) ->
     w = workers.get(worker_id)
     if not w:
         return "Worker not found"
+
+    # cancel stale tasks FIRST — same race as restart_worker:
+    # if we kill before cancelling, _read_stdout sees EOF and
+    # pops the worker from workers dict during spawn.
+    if w._consume_task:
+        w._consume_task.cancel()
+    if w._stdout_task:
+        w._stdout_task.cancel()
 
     _kill_takeover_terminal(w)
     _kill_process_tree(w)
