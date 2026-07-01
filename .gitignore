@@ -31,3 +31,4 @@ spike-python/
 .codebuddy/
 myTODO.md
 prompt.md
+/.playwright-cli/
