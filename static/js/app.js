@@ -679,5 +679,9 @@ function toast(msg) {
         el.className = 'toast';
     }, 3000);
 }
+window.addEventListener('unhandledrejection', function (e) {
+    toast('Request failed');
+    e.preventDefault();
+});
 init();
 //# sourceMappingURL=app.js.map

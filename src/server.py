@@ -653,6 +653,8 @@ async def api_takeover(worker_id: str):
         return {"error": "Session not found"}
     if not s.cbc_session_id:
         return {"error": "Worker has no cbc session yet"}
+    if w.status == "held":
+        return {"error": "Worker already in takeover mode"}
 
     # check adapter supports takeover
     adapter_cmd = w.adapter.takeover_command(s)

@@ -795,4 +795,9 @@ function toast(msg: string): void {
   }, 3000);
 }
 
+window.addEventListener('unhandledrejection', (e: PromiseRejectionEvent) => {
+  toast('Request failed');
+  e.preventDefault();
+});
+
 init();
