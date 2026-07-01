@@ -23,6 +23,7 @@ from unittest.mock import MagicMock, AsyncMock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import worker, session as _sess
+from src.adapters import CbcAdapter
 
 
 # ── fixtures ──
@@ -100,10 +101,11 @@ def _setup_session(history: list[dict] = None, cbc_session_id: str = "cbc-123"):
 
 
 def _setup_worker(session_id: str, replaying: bool = False):
-    """Create a Worker with a mock process (no real cbc)."""
+    """Create a Worker with a mock process (no real CLI)."""
     w = worker.Worker(
         worker_id="worker-test",
         session_id=session_id,
+        adapter=CbcAdapter(),
         status="idle",
         process=MagicMock(),
         queue=asyncio.Queue(),

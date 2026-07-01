@@ -14,25 +14,20 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from . import session as _sess
+from .adapters import get_adapter, CliAdapter
 
-CBC_PATH = os.environ.get("CLICONDUCTOR_CBC_PATH",
-                           r"D:\node_npm\node_global\cbc.cmd")
-DEFAULT_MODEL = "deepseek-v4-flash"
+_DEFAULT_ADAPTER = get_adapter("cbc")
 
-SUPPORTED_MODELS = [
-    "glm-5.2", "glm-5.1", "glm-5.0", "glm-5.0-turbo", "glm-5v-turbo", "glm-4.7",
-    "minimax-m3", "minimax-m2.7",
-    "kimi-k2.7", "kimi-k2.6", "kimi-k2.5",
-    "hy3-preview",
-    "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v3-2-volc",
-    "custom-local:deepseek-v4-pro",
-]
+# Backward-compatible shortcuts (server.py references these)
+DEFAULT_MODEL = _DEFAULT_ADAPTER.default_model
+SUPPORTED_MODELS = _DEFAULT_ADAPTER.supported_models
 
 
 @dataclass
 class Worker:
     worker_id: str
     session_id: str           # Session UUID (ses_<hex>)
+    adapter: CliAdapter       # CLI tool adapter instance
     status: str = "idle"      # idle | running | held | error
     process: asyncio.subprocess.Process | None = None
     _stdout_task: asyncio.Task | None = None
@@ -59,28 +54,14 @@ async def _bcast(data: dict):
             await r
 
 
-# ── helpers ──
+# ── helpers (public API for server.py) ──
 
-def _base_args() -> list[str]:
-    return [CBC_PATH, "-p", "--output-format", "stream-json",
-            "--input-format", "stream-json", "-y"]
-
-
-
-def _thinking_args(s: _sess.Session) -> list[str]:
-    """Return CLI args to explicitly control thinking mode.
-    cbc's alwaysThinkingEnabled setting defaults to true (since v2.66.0),
-    so when thinking is OFF we must override it via --settings."""
-    if not s.always_thinking_enabled:
-        return ["--settings", '{"alwaysThinkingEnabled": false}']
-    return []
+def effort_args(s: _sess.Session) -> list[str]:
+    """Return default adapter's effort CLI args (exposed for server.py)."""
+    return _DEFAULT_ADAPTER.effort_args(s)
 
 
-def _effort_args(s: _sess.Session) -> list[str]:
-    """Return --effort <level> args if thinking is enabled and effort is configured."""
-    if s.always_thinking_enabled and s.effort:
-        return ["--effort", s.effort]
-    return []
+# ── helpers (internal) ──
 
 
 async def _next_worker_id() -> str:
@@ -275,7 +256,7 @@ async def _consumer(w: Worker):
 # ── lifecycle ──
 
 async def create_worker(session_id: str) -> Worker | str:
-    """Spawn a cbc process for the given Session UUID.
+    """Spawn a CLI process for the given Session UUID.
 
     Returns Worker on success, error string on failure.
 
@@ -286,19 +267,21 @@ async def create_worker(session_id: str) -> Worker | str:
     if not s:
         return f"Session {session_id} not found"
 
-    # 杀掉同 session 的旧 worker（cbc 崩过留了 error 尸体 / 重复 spawn）
+    # 杀掉同 session 的旧 worker（崩过留了 error 尸体 / 重复 spawn）
     old = find_worker_by_session(session_id)
     if old:
         await kill_worker(old.worker_id)
 
+    adapter = get_adapter(s.adapter)
     worker_id = await _next_worker_id()
 
-    proc = await _spawn_process(session_id)
+    proc = await _spawn_process(session_id, adapter=adapter)
     if isinstance(proc, str):
         return proc
 
-    resuming = bool(s.cbc_session_id)
+    resuming = bool(s.cbc_session_id) and adapter.supports_resume
     w = Worker(worker_id=worker_id, session_id=session_id,
+               adapter=adapter,
                status="idle", process=proc, queue=asyncio.Queue(),
                _replaying=resuming)
     workers[worker_id] = w
@@ -311,7 +294,7 @@ async def create_worker(session_id: str) -> Worker | str:
         "sessionId": session_id,
         "name": s.name,
         "status": "idle",
-        "model": s.model or DEFAULT_MODEL,
+        "model": s.model or adapter.default_model,
     })
 
     # 持久化 session（记录 workdir 等）
@@ -416,23 +399,14 @@ async def kill_worker(worker_id: str) -> str | None:
 
 
 async def _spawn_process(session_id: str,
+                         adapter: CliAdapter,
                          extra_args: list[str] | None = None
                          ) -> asyncio.subprocess.Process | str:
     s = _sess.get(session_id)
     if not s:
         return f"Session {session_id} not found"
 
-    args = _base_args()
-    args.extend(["--model", s.model or DEFAULT_MODEL])
-    if s.permission_mode:
-        args.extend(["--permission-mode", s.permission_mode])
-    args.extend(_effort_args(s))
-    args.extend(_thinking_args(s))
-    if s.cbc_session_id:
-        args.extend(["--resume", s.cbc_session_id])
-    if extra_args:
-        # extra_args 可能包含覆盖 --model, --permission-mode
-        args.extend(extra_args)
+    args = adapter.build_spawn_args(s, extra_args)
 
     try:
         return await asyncio.create_subprocess_exec(
@@ -443,9 +417,9 @@ async def _spawn_process(session_id: str,
             cwd=s.workdir or None,
         )
     except FileNotFoundError:
-        return f"cbc not found at: {CBC_PATH}"
+        return f"CLI executable not found (adapter={adapter.name})"
     except OSError as e:
-        return f"OS error spawning cbc: {e}"
+        return f"OS error spawning {adapter.name}: {e}"
 
 
 async def _restart_tasks(w: Worker):
@@ -483,14 +457,14 @@ async def restart_worker(worker_id: str) -> str | None:
     _kill_process_tree(w)
     w.process = None
 
-    proc = await _spawn_process(w.session_id)
+    proc = await _spawn_process(w.session_id, adapter=w.adapter)
     if isinstance(proc, str):
         return f"Spawn failed ({w.session_id}): {proc}"
     w.process = proc
     w.status = "idle"
     # if session has cbc_session_id, --resume was used → enter replay mode
     s = _sess.get(w.session_id)
-    w._replaying = bool(s and s.cbc_session_id)
+    w._replaying = bool(s and s.cbc_session_id) and w.adapter.supports_resume
     await _restart_tasks(w)
 
     s = _session(w)
@@ -521,7 +495,7 @@ async def respawn_worker(worker_id: str, extra_args: list[str] | None = None) ->
     _kill_takeover_terminal(w)
     _kill_process_tree(w)
 
-    proc = await _spawn_process(w.session_id, extra_args)
+    proc = await _spawn_process(w.session_id, adapter=w.adapter, extra_args=extra_args)
     if isinstance(proc, str):
         return proc
     w.process = proc
@@ -563,20 +537,18 @@ async def branch_worker(worker_id: str, new_session_id: str) -> Worker | str:
         if not s.max_thinking_tokens:
             s.max_thinking_tokens = orig.max_thinking_tokens
 
-    # branch requires --fork-session; --resume is handled by _spawn_process
-    # when cbc_session_id is set, otherwise we pass it explicitly
-    extra_args: list[str] = []
-    if s.cbc_session_id:
-        extra_args = ["--fork-session"]
-    else:
-        extra_args = ["--resume", "", "--fork-session"]
+    # branch needs --fork-session from adapter
+    extra_args = w.adapter.fork_args(s)
+    if not w.adapter.supports_fork or not extra_args:
+        return f"Adapter '{w.adapter.name}' does not support fork"
 
     new_id = await _next_worker_id()
-    proc = await _spawn_process(new_session_id, extra_args=extra_args)
+    proc = await _spawn_process(new_session_id, adapter=w.adapter, extra_args=extra_args)
     if isinstance(proc, str):
         return proc
 
     new_w = Worker(worker_id=new_id, session_id=new_session_id,
+                   adapter=w.adapter,
                    status="idle", process=proc, queue=asyncio.Queue())
     # 注意：branch 不设 _replaying（与 create_worker/restart_worker 不同）。
     # branch 的新 session history 为空，需要从 cbc --resume --fork-session

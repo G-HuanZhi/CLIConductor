@@ -61,7 +61,10 @@ class CbcAdapter:
             return ["--resume", s.cbc_session_id]
         return []
 
-    def fork_args(self) -> list[str]:
+    def fork_args(self, s: Session | None = None) -> list[str]:
+        """返回 fork 参数。若 session 没有 cbc_session_id，需要显式 --resume。"""
+        if s and not s.cbc_session_id:
+            return ["--resume", "", "--fork-session"]
         return ["--fork-session"]
 
     def build_spawn_args(self, s: Session,
