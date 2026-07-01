@@ -28,6 +28,7 @@ class Session:
     id: str
     name: str
     cbc_session_id: str | None = None
+    adapter: str = "cbc"   # CLI adapter name, default "cbc" (backward compatible)
     model: str | None = None
     permission_mode: str | None = None
     always_thinking_enabled: bool = False
@@ -50,6 +51,7 @@ class Session:
             "id": self.id,
             "name": self.name,
             "cbc_session_id": self.cbc_session_id,
+            "adapter": self.adapter,
             "model": self.model,
             "permission_mode": self.permission_mode,
             "always_thinking_enabled": self.always_thinking_enabled,
