@@ -524,7 +524,7 @@ async def api_worker_settings(worker_id: str, data: dict):
         extra_args.extend(["--model", data["model"]])
     if "permissionMode" in data:
         extra_args.extend(["--permission-mode", data["permissionMode"] or ""])
-    extra_args.extend(worker._effort_args(s))
+    extra_args.extend(worker.effort_args(s))
 
     err = await worker.respawn_worker(worker_id, extra_args if extra_args else None)
     if err:
@@ -690,6 +690,11 @@ async def api_takeover(worker_id: str):
     if not s.cbc_session_id:
         return {"error": "Worker has no cbc session yet"}
 
+    # check adapter supports takeover
+    adapter_cmd = w.adapter.takeover_command(s)
+    if not adapter_cmd:
+        return {"error": f"Adapter '{w.adapter.name}' does not support takeover"}
+
     # restart worker to free session, then mark held
     err = await worker.restart_worker(worker_id)
     if err:
@@ -703,10 +708,11 @@ async def api_takeover(worker_id: str):
         "status": "held",
     })
 
-    cmd = f'cd "{s.workdir}"; cbc --resume {s.cbc_session_id}'
     try:
         proc = subprocess.Popen(
-            ["powershell.exe", "-NoExit", "-Command", cmd],
+            ["powershell.exe", "-NoExit", "-Command",
+             " ".join(adapter_cmd)],
+            cwd=s.workdir,
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
         w.takeover_pid = proc.pid
