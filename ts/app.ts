@@ -457,6 +457,11 @@ function onThinkingToggle(): void {
  *  Handles both the "no worker" (PATCH session) and "worker exists" cases. */
 function applySettings(): void {
   if (!currentSessionId) return;
+  const s = modelData.find((x: Session) => x.id === currentSessionId);
+  if (s && (s.workerStatus === 'running' || s.workerStatus === 'held')) {
+    toast('Cannot change settings while worker is busy');
+    return;
+  }
 
   const thinking = (document.getElementById('settingThinking') as HTMLInputElement).checked;
   const effort = (document.getElementById('settingEffort') as HTMLSelectElement).value;
@@ -607,6 +612,11 @@ function send(): void {
     return;
   }
   if (!text) return;
+  const s = modelData.find((x: Session) => x.id === currentSessionId);
+  if (s && (s.workerStatus === 'running' || s.workerStatus === 'held')) {
+    toast('Worker is busy');
+    return;
+  }
   input.value = '';
 
   addMessage('user', text);

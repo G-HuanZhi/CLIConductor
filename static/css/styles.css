@@ -127,8 +127,8 @@ body {
   border-radius: 50%;
 }
 
-.s-dot.idle { background: #58a6ff; }
-.s-dot.running { background: #3fb950; }
+.s-dot.idle { background: #3fb950; }
+.s-dot.running { background: #58a6ff; }
 .s-dot.held { background: #f0883e; }
 .s-dot.error { background: #f85149; }
 .s-dot.offline { background: #8b949e; }

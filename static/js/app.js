@@ -359,6 +359,11 @@ function onThinkingToggle() {
 function applySettings() {
     if (!currentSessionId)
         return;
+    const s = modelData.find((x) => x.id === currentSessionId);
+    if (s && (s.workerStatus === 'running' || s.workerStatus === 'held')) {
+        toast('Cannot change settings while worker is busy');
+        return;
+    }
     const thinking = document.getElementById('settingThinking').checked;
     const effort = document.getElementById('settingEffort').value;
     if (!currentWorkerId) {
@@ -508,6 +513,11 @@ function send() {
     }
     if (!text)
         return;
+    const s = modelData.find((x) => x.id === currentSessionId);
+    if (s && (s.workerStatus === 'running' || s.workerStatus === 'held')) {
+        toast('Worker is busy');
+        return;
+    }
     input.value = '';
     addMessage('user', text);
     function doSend() {
