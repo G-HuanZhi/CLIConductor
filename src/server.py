@@ -526,9 +526,7 @@ async def api_restart(worker_id: str):
 @app.post("/api/worker/{worker_id}/settings")
 async def api_worker_settings(worker_id: str, data: dict):
     """Apply model/mode/thinking settings to a session and respawn the worker once.
-
-    This endpoint consolidates the deprecated switch-model, switch-mode, and
-    switch-thinking endpoints.  Accepted fields:
+    Accepted fields:
 
         model                  — model name (str or None)
         permissionMode         — permission mode (str or None)
@@ -566,68 +564,6 @@ async def api_worker_settings(worker_id: str, data: dict):
         "alwaysThinkingEnabled": s.always_thinking_enabled,
         "effort": s.effort,
         "status": "settings applied",
-    }
-
-
-# ─── Deprecated endpoints (kept for backward compatibility) ───
-
-@app.post("/api/worker/{worker_id}/switch-model")
-async def api_switch_model(worker_id: str, data: dict):
-    """Deprecated — use POST /api/worker/{worker_id}/settings instead."""
-    model = data.get("model")
-    if not model:
-        return {"error": "model is required"}
-    err = await worker.respawn_worker(worker_id, ["--model", model])
-    if err:
-        return {"error": err}
-    # update session model
-    w = worker.get_worker(worker_id)
-    if w:
-        s = sess.get(w.session_id)
-        if s:
-            s.model = model
-            sess.save(s)
-    return {"workerId": worker_id, "model": model, "status": "switched"}
-
-
-@app.post("/api/worker/{worker_id}/switch-mode")
-async def api_switch_mode(worker_id: str, data: dict):
-    """Deprecated — use POST /api/worker/{worker_id}/settings instead."""
-    mode = data.get("permissionMode")
-    if not mode:
-        return {"error": "permissionMode is required"}
-    err = await worker.respawn_worker(worker_id, ["--permission-mode", mode])
-    if err:
-        return {"error": err}
-    w = worker.get_worker(worker_id)
-    if w:
-        s = sess.get(w.session_id)
-        if s:
-            s.permission_mode = mode
-            sess.save(s)
-    return {"workerId": worker_id, "permissionMode": mode, "status": "switched"}
-
-
-@app.post("/api/worker/{worker_id}/switch-thinking")
-async def api_switch_thinking(worker_id: str, data: dict):
-    """Deprecated — use POST /api/worker/{worker_id}/settings instead."""
-    w = worker.get_worker(worker_id)
-    if not w:
-        return {"error": "Worker not found"}
-    s = sess.get(w.session_id)
-    if not s:
-        return {"error": "Session not found"}
-    _apply_session_updates(s, data)
-    sess.save(s)
-    err = await worker.respawn_worker(worker_id)
-    if err:
-        return {"error": err}
-    return {
-        "workerId": worker_id,
-        "alwaysThinkingEnabled": s.always_thinking_enabled,
-        "effort": s.effort,
-        "maxThinkingTokens": s.max_thinking_tokens,
-        "status": "switched",
     }
 
 
