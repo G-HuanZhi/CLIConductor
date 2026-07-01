@@ -405,6 +405,11 @@ async def api_spawn(data: dict):
             return {"error": err_name}
         s = sess.create(**params)
         session_id = s.id
+        await broadcast({
+            "type": "session.created",
+            "sessionId": s.id,
+            "name": s.name,
+        })
 
     result = await worker.create_worker(session_id)
     if isinstance(result, str):
