@@ -46,8 +46,13 @@ class CbcAdapter:
             return ["--settings", '{"alwaysThinkingEnabled": false}']
         return []
 
+    _VALID_EFFORT = frozenset({"low", "medium", "high", "xhigh"})
+
     def effort_args(self, s: Session) -> list[str]:
         if s.always_thinking_enabled and s.effort:
+            if s.effort not in self._VALID_EFFORT:
+                print(f"[CbcAdapter] Ignoring invalid effort value: {s.effort!r}")
+                return []
             return ["--effort", s.effort]
         return []
 

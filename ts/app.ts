@@ -432,7 +432,7 @@ function onThinkingToggle(): void {
   (document.getElementById('effortGroup')!).style.display = thinking ? '' : 'none';
   if (thinking) {
     const eff = document.getElementById('settingEffort') as HTMLSelectElement;
-    if (!eff.value || eff.value === 'minimal') eff.value = 'medium';
+    if (!eff.value || eff.value === 'low') eff.value = 'medium';
   }
   updateSetButtonVisibility();
 }

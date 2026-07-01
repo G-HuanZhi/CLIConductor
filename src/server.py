@@ -505,7 +505,7 @@ async def api_worker_settings(worker_id: str, data: dict):
         model                  — model name (str or None)
         permissionMode         — permission mode (str or None)
         alwaysThinkingEnabled  — enable thinking (bool)
-        effort                 — effort level (minimal/low/medium/high/xhigh/max)
+        effort                 — effort level (low/medium/high/xhigh)
     """
     w = worker.get_worker(worker_id)
     if not w:

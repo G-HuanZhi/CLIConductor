@@ -325,7 +325,7 @@ function onThinkingToggle() {
     (document.getElementById('effortGroup')).style.display = thinking ? '' : 'none';
     if (thinking) {
         const eff = document.getElementById('settingEffort');
-        if (!eff.value || eff.value === 'minimal')
+        if (!eff.value || eff.value === 'low')
             eff.value = 'medium';
     }
     updateSetButtonVisibility();
