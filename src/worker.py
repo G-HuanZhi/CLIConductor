@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -280,72 +279,70 @@ async def create_worker(session_id: str) -> Worker | str:
     return w
 
 
-def _kill_takeover_terminal(w: Worker) -> bool:
-    """杀掉 takeover 模式打开的 PowerShell 终端及其子进程树。
-
-    返回 True 表示有 takeover_pid 被处理（不论是否成功杀掉）。
-
-    关键：必须用 `taskkill /F /T /PID` 一次性强杀整棵树，绝不能先调
-    `os.kill(pid, SIGTERM)`。在 Windows 上 os.kill(SIGTERM) 走的是
-    TerminateProcess（强杀），会先把树根 powershell.exe 干掉，导致
-    cmd.exe / node.exe 变成孤儿进程，随后的 taskkill /T 找不到树根
-    就杀不到子进程——终端窗口和 cbc 子进程都会残留。这正是之前多次
-    修复都失败的根本原因。
-    """
+async def _kill_takeover_terminal(w: Worker) -> bool:
+    """杀掉 takeover 模式打开的终端及子进程树。异步版，不阻塞事件循环。"""
     if not w.takeover_pid:
         return False
     pid = w.takeover_pid
     print(f"[Worker {w.worker_id}] 杀 takeover 终端 PID={pid}")
     try:
-        result = subprocess.run(
-            ["taskkill", "/PID", str(pid), "/F", "/T"],
-            capture_output=True, text=True, timeout=10,
+        proc = await asyncio.create_subprocess_exec(
+            "taskkill", "/PID", str(pid), "/F", "/T",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        if result.returncode == 0:
-            print(f"[Worker {w.worker_id}] taskkill OK: {result.stdout.strip()}")
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=10)
+        out = stdout.decode("gbk", errors="replace").strip()
+        err = stderr.decode("gbk", errors="replace").strip()
+        if proc.returncode == 0:
+            print(f"[Worker {w.worker_id}] taskkill OK: {out}")
         else:
-            # taskkill 报错——可能是进程已自行退出，也可能是真的没杀掉。
-            # 用 tasklist 确认 PID 是否还活着，便于排查。
             try:
-                check = subprocess.run(
-                    ["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"],
-                    capture_output=True, text=True, timeout=5,
+                check = await asyncio.create_subprocess_exec(
+                    "tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
                 )
-                if str(pid) in check.stdout:
-                    print(f"[Worker {w.worker_id}] taskkill rc={result.returncode} "
-                          f"({result.stderr.strip()}), 进程仍存活！")
+                c_stdout, _ = await asyncio.wait_for(
+                    check.communicate(), timeout=5)
+                cout = c_stdout.decode("gbk", errors="replace")
+                if str(pid) in cout:
+                    print(f"[Worker {w.worker_id}] taskkill rc={proc.returncode} "
+                          f"({err}), 进程仍存活！")
                 else:
-                    print(f"[Worker {w.worker_id}] taskkill rc={result.returncode}, "
+                    print(f"[Worker {w.worker_id}] taskkill rc={proc.returncode}, "
                           f"进程已不存在（可能已自行退出）")
             except Exception as ce:
                 print(f"[Worker {w.worker_id}] tasklist 检查异常: {ce}")
+    except asyncio.TimeoutError:
+        print(f"[Worker {w.worker_id}] taskkill 超时 PID={pid}")
     except Exception as e:
         print(f"[Worker {w.worker_id}] taskkill 异常: {e}")
     w.takeover_pid = None
     return True
 
 
-def _kill_process_tree(w: Worker) -> None:
-    """杀掉 worker 的 cbc 进程及其整棵子进程树。
-
-    cbc.cmd 会 spawn node.exe 作为子进程。`w.process.kill()` 只杀 cbc.cmd
-    本身（等价于 TerminateProcess），node.exe 变孤儿继续运行。
-    必须用 `taskkill /F /T /PID` 一次性强杀整棵树。
-
-    与 _kill_takeover_terminal 的区别：本函数杀的是 worker 自己的 cbc
-    子进程；_kill_takeover_terminal 杀的是 takeover 模式打开的 PowerShell
-    终端。两者独立，都需要调用。
-    """
+async def _kill_process_tree(w: Worker) -> None:
+    """杀 worker 的 CLI 子进程树。异步版，不阻塞事件循环。"""
     if not w.process:
         return
     pid = w.process.pid
     try:
-        subprocess.run(
-            ["taskkill", "/F", "/T", "/PID", str(pid)],
-            capture_output=True, timeout=5,
+        proc = await asyncio.create_subprocess_exec(
+            "taskkill", "/F", "/T", "/PID", str(pid),
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
         )
+        await asyncio.wait_for(proc.wait(), timeout=5)
+    except asyncio.TimeoutError:
+        try:
+            w.process.kill()
+        except ProcessLookupError:
+            pass
+        except Exception:
+            pass
     except Exception:
-        # taskkill 失败（进程可能已退出）——回退到 .kill()，至少把 cbc.cmd 杀掉
         try:
             w.process.kill()
         except ProcessLookupError:
@@ -364,8 +361,8 @@ async def kill_worker(worker_id: str) -> str | None:
         w._consume_task.cancel()
     if w._stdout_task:
         w._stdout_task.cancel()
-    _kill_process_tree(w)
-    _kill_takeover_terminal(w)
+    await _kill_process_tree(w)
+    await _kill_takeover_terminal(w)
 
     workers.pop(worker_id, None)
     await _bcast({
@@ -429,10 +426,10 @@ async def restart_worker(worker_id: str) -> str | None:
         w._stdout_task.cancel()
 
     # kill takeover terminal if one was opened
-    _kill_takeover_terminal(w)
+    await _kill_takeover_terminal(w)
 
     # kill existing cbc process tree（taskkill /F /T，避免 node.exe 孤儿）
-    _kill_process_tree(w)
+    await _kill_process_tree(w)
     w.process = None
 
     proc = await _spawn_process(w.session_id, adapter=w.adapter)
@@ -470,8 +467,8 @@ async def respawn_worker(worker_id: str, extra_args: list[str] | None = None) ->
     if w._stdout_task:
         w._stdout_task.cancel()
 
-    _kill_takeover_terminal(w)
-    _kill_process_tree(w)
+    await _kill_takeover_terminal(w)
+    await _kill_process_tree(w)
 
     proc = await _spawn_process(w.session_id, adapter=w.adapter, extra_args=extra_args)
     if isinstance(proc, str):
@@ -603,6 +600,6 @@ async def shutdown_all():
             w._consume_task.cancel()
         if w._stdout_task:
             w._stdout_task.cancel()
-        _kill_process_tree(w)
-        _kill_takeover_terminal(w)
+        await _kill_process_tree(w)
+        await _kill_takeover_terminal(w)
     workers.clear()
