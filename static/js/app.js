@@ -287,10 +287,13 @@ function syncPanelFromServer() {
     const s = modelData.find((x) => x.id === currentSessionId);
     if (!s)
         return;
-    const sel = document.getElementById('settingModel');
-    if (sel.getAttribute('data-loaded') !== '1')
+    // wait until all selects are populated (async adapter config fetch)
+    if (document.getElementById('settingModel').getAttribute('data-loaded') !== '1')
+        return;
+    if (permissionModes.length === 0)
         return;
     const model = s.model || defaultModel;
+    const sel = document.getElementById('settingModel');
     sel.value = allModels.indexOf(model) >= 0 ? model : '';
     document.getElementById('settingMode').value =
         s.permissionMode || '';

@@ -375,9 +375,11 @@ function syncPanelFromServer(): void {
   const s = modelData.find((x: Session) => x.id === currentSessionId);
   if (!s) return;
 
-  const sel = document.getElementById('settingModel') as HTMLSelectElement;
-  if (sel.getAttribute('data-loaded') !== '1') return;
+  // wait until all selects are populated (async adapter config fetch)
+  if ((document.getElementById('settingModel') as HTMLSelectElement).getAttribute('data-loaded') !== '1') return;
+  if (permissionModes.length === 0) return;
 
+  const sel = document.getElementById('settingModel') as HTMLSelectElement;
   const model = s.model || defaultModel;
   sel.value = allModels.indexOf(model) >= 0 ? model : '';
 
