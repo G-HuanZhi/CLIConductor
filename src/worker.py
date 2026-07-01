@@ -84,50 +84,39 @@ def _session(w: Worker) -> _sess.Session | None:
 # ── stdout reader ──
 
 async def _read_stdout(w: Worker):
+    adapter = w.adapter
     async for line in w.process.stdout:
         line_str = line.decode("utf-8", errors="replace").rstrip("\n")
         if not line_str:
             continue
-        try:
-            event = json.loads(line_str)
-        except json.JSONDecodeError:
+        event = adapter.parse_event(line_str)
+        if event is None:
             continue
 
-        t = event.get("type")
-
-        # 提取 cbc_session_id + model 并写入 Session
-        if t == "system" and event.get("subtype") == "init":
+        # 提取 session_id + model 并写入 Session
+        if adapter.is_init_event(event):
             s = _session(w)
             if s:
-                cbc_sid = event.get("session_id")
-                if cbc_sid:
-                    s.cbc_session_id = cbc_sid
-                if event.get("model") and not s.model:
-                    s.model = event.get("model")
+                sid = adapter.extract_session_id(event)
+                if sid:
+                    s.cbc_session_id = sid
+                model = adapter.extract_model(event)
+                if model and not s.model:
+                    s.model = model
                 _sess.save(s)
 
         # 收集对话历史（replay 期间跳过，避免重复追加）
-        if t == "assistant" and not w._replaying:
+        if adapter.is_assistant_event(event) and not w._replaying:
             s = _session(w)
             if s:
-                for b in event.get("message", {}).get("content", []) or []:
-                    if b.get("type") == "text":
-                        s.history.append({"role": "assistant", "content": b["text"]})
-                    elif b.get("type") == "thinking":
-                        s.history.append({"role": "thinking", "content": b["thinking"]})
-                    elif b.get("type") == "tool_use":
-                        s.history.append({
-                            "role": "tool",
-                            "content": f"{b['name']}({json.dumps(b.get('input', {}))})",
-                        })
-                # 每个 assistant 事件后立即落盘——防止 worker 崩溃时丢失
-                # 本次 result 之前已 append 的 thinking/tool 消息
+                for b in adapter.extract_assistant_blocks(event):
+                    s.history.append(b)
                 _sess.save(s)
 
         # 任务完成 → 保存 Session + last_result
-        if t == "result":
+        if adapter.is_result_event(event):
             s = _session(w)
-            is_error = event.get("is_error", False)
+            is_error = adapter.is_result_error(event)
             w.status = "error" if is_error else "done"
 
             # replay 结束：标记完成，不保存（history 无变化）
@@ -137,16 +126,13 @@ async def _read_stdout(w: Worker):
                 continue
 
             if s:
+                result_text = adapter.extract_result_text(event)
                 s.last_result = {
                     "status": w.status,
-                    "result": event.get("result"),
+                    "result": result_text,
                     "cbc_session_id": s.cbc_session_id,
                     "timestamp": datetime.now().isoformat(),
                 }
-                # cbc 有时只在 result 事件里给出最终文本（不在 assistant 事件里），
-                # 这种情况下 history 会缺最后一条 assistant 消息，导致 dashboard 和
-                # QQ bridge 都拿不到回复。这里补一下，避免重复。
-                result_text = event.get("result")
                 if isinstance(result_text, str) and result_text.strip():
                     last = s.history[-1] if s.history else None
                     if not (last and last.get("role") == "assistant"
@@ -159,14 +145,12 @@ async def _read_stdout(w: Worker):
                 "workerId": w.worker_id,
                 "sessionId": w.session_id,
                 "status": w.status,
-                "result": event.get("result"),
+                "result": adapter.extract_result_text(event),
             })
             w.status = "idle"
             continue
 
-        # replay 期间不广播 stream 事件——这些是 cbc --resume 重放的旧事件，
-        # 广播会让 dashboard 显示旧历史滚动，QQ bridge 也会误处理。
-        # cbc 内部状态恢复即可，外部不需要感知。
+        # replay 期间不广播 stream 事件
         if not w._replaying:
             await _bcast({
                 "type": "worker.stream",
@@ -178,7 +162,7 @@ async def _read_stdout(w: Worker):
     # stdout EOF — 进程退出了
     w.status = "error"
     code = w.process.returncode if w.process else "unknown"
-    print(f"[Worker {w.worker_id}] cbc 进程退出，返回码 {code}")
+    print(f"[Worker {w.worker_id}] {adapter.name} 进程退出，返回码 {code}")
     await _bcast({
         "type": "worker.crashed",
         "workerId": w.worker_id,
@@ -234,14 +218,8 @@ async def _consumer(w: Worker):
 
         w.status = "running"
 
-        msg = json.dumps({
-            "type": "user",
-            "message": {
-                "role": "user",
-                "content": [{"type": "text", "text": text}],
-            },
-        })
-        w.process.stdin.write((msg + "\n").encode())
+        data = w.adapter.encode_user_message(text)
+        w.process.stdin.write(data + b"\n")
         await w.process.stdin.drain()
 
         await _bcast({
