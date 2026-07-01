@@ -71,11 +71,12 @@ cbc v2.66.0 起 `alwaysThinkingEnabled` 默认为 `true`，关闭时**必须显�
 | `high` | ✅ | 多文件重构、复杂 bug |
 | `xhigh` | ✅ | 架构决策、极高推理深度 |
 | `max` | ✅ | 最大推理投入 |
+| `ultracode` | ✅ | 超强推理（ultracode 模式） |
 | `minimal` | ❌ | **cbc 报 `400 invalid parameter value`** |
 
 **验证命令**（2026-07-01 执行）：
 ```bash
-for val in none off auto low medium high xhigh max minimal; do
+for val in none off auto low medium high xhigh max ultracode minimal; do
     echo -n "$val: "; cbc --effort $val -p "say hello" 2>&1 | head -1
 done
 ```
@@ -282,7 +283,7 @@ custom-local:deepseek-v4-pro
 {
   "models": ["glm-5.2", "glm-5.1", ...],
   "defaultModel": "deepseek-v4-flash",
-  "effortValues": ["none", "off", "auto", "low", "medium", "high", "xhigh", "max"],
+  "effortValues": ["none", "off", "auto", "low", "medium", "high", "xhigh", "max", "ultracode"],
   "permissionModes": [
     {"value": "", "label": "mode…"},
     {"value": "default", "label": "default"},

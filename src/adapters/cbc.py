@@ -25,7 +25,7 @@ class CbcAdapter:
     ]
     supports_resume = True
     supports_fork = True
-    effort_values = ["none", "off", "auto", "low", "medium", "high", "xhigh", "max"]
+    effort_values = ["none", "off", "auto", "low", "medium", "high", "xhigh", "max", "ultracode"]
     permission_modes = [
         {"value": "", "label": "mode…"},
         {"value": "default", "label": "default"},
@@ -55,7 +55,7 @@ class CbcAdapter:
             return ["--settings", '{"alwaysThinkingEnabled": false}']
         return []
 
-    _VALID_EFFORT = frozenset({"none", "off", "auto", "low", "medium", "high", "xhigh", "max"})
+    _VALID_EFFORT = frozenset({"none", "off", "auto", "low", "medium", "high", "xhigh", "max", "ultracode"})
 
     def effort_args(self, s: Session) -> list[str]:
         if s.always_thinking_enabled and s.effort:
