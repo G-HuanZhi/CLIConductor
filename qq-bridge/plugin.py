@@ -44,14 +44,23 @@ class BridgeSession:
 # ── HTTP 调用 ──
 
 
+_client: httpx.AsyncClient | None = None
+
+
+async def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=10)
+    return _client
+
+
 async def _get(path: str) -> dict:
     url = f"{CLICONDUCTOR_URL}{path}"
-    print(f"[QQ Bridge] GET {url}")
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(url)
-            r.raise_for_status()
-            return r.json()
+        client = await _get_client()
+        r = await client.get(url)
+        r.raise_for_status()
+        return r.json()
     except Exception as e:
         print(f"[QQ Bridge] GET 失败: {type(e).__name__}: {e}")
         return {"error": str(e)}
@@ -59,12 +68,11 @@ async def _get(path: str) -> dict:
 
 async def _post(path: str, data: dict = None) -> dict:
     url = f"{CLICONDUCTOR_URL}{path}"
-    print(f"[QQ Bridge] POST {url}")
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.post(url, json=data or {})
-            r.raise_for_status()
-            return r.json()
+        client = await _get_client()
+        r = await client.post(url, json=data or {})
+        r.raise_for_status()
+        return r.json()
     except Exception as e:
         print(f"[QQ Bridge] POST 失败: {type(e).__name__}: {e}")
         return {"error": str(e)}
@@ -293,3 +301,5 @@ async def _shutdown():
         task.cancel()
     if _poll_tasks:
         await asyncio.gather(*_poll_tasks.values(), return_exceptions=True)
+    if _client:
+        await _client.aclose()
