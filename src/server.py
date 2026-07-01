@@ -117,8 +117,19 @@ def _session_to_api(s: sess.Session):
     }
 
 
+_NAME_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
+_MAX_NAME_LEN = 64
+_MAX_TEXT_LEN = 10000
+
+
 def _check_session_name(name: str) -> str | None:
-    """Return error if name is taken, None otherwise."""
+    """Return error if name is empty, has invalid chars, too long, or taken."""
+    if not name or not name.strip():
+        return "Session name is required"
+    if len(name) > _MAX_NAME_LEN:
+        return f"Session name too long (max {_MAX_NAME_LEN})"
+    if not _NAME_RE.match(name):
+        return "Session name can only contain letters, digits, underscores and hyphens"
     for s in sess.list_all():
         if s.name == name:
             return f"Session name '{name}' already exists"
