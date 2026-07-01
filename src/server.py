@@ -123,6 +123,42 @@ def _check_session_name(name: str) -> str | None:
     return None
 
 
+def _resolve_workdir(workdir_name: str) -> Path:
+    """Resolve a workdir name to a Path under WORKDIRS_DIR, creating it."""
+    workdir = WORKDIRS_DIR / workdir_name
+    workdir.mkdir(parents=True, exist_ok=True)
+    return workdir
+
+
+def _build_session_params(data: dict) -> dict:
+    """Extract session creation parameters from request data, with defaults."""
+    name = data.get("name", "default")
+    workdir_name = data.get("workdir") or name
+    return {
+        "name": name,
+        "model": data.get("model") or worker.DEFAULT_MODEL,
+        "permission_mode": data.get("permissionMode") or None,
+        "always_thinking_enabled": data.get("alwaysThinkingEnabled", False),
+        "effort": data.get("effort", ""),
+        "max_thinking_tokens": data.get("maxThinkingTokens", 16000),
+        "workdir": str(_resolve_workdir(workdir_name)),
+    }
+
+
+def _apply_session_updates(s: sess.Session, data: dict):
+    """Apply model/mode/thinking/effort fields from data to a Session (in-place)."""
+    if "model" in data:
+        s.model = data["model"]
+    if "permissionMode" in data:
+        s.permission_mode = data["permissionMode"] or None
+    if "alwaysThinkingEnabled" in data:
+        s.always_thinking_enabled = data["alwaysThinkingEnabled"]
+    if "effort" in data:
+        s.effort = data["effort"]
+    if "maxThinkingTokens" in data:
+        s.max_thinking_tokens = data["maxThinkingTokens"]
+
+
 # ── Dashboard & favicon ──
 
 @app.get("/favicon.ico")
@@ -207,22 +243,8 @@ async def ws_agent_endpoint(ws: WebSocket):
                         await ws.send_json({"type": "error", "message": err})
 
             elif msg_type == "spawn":
-                name = msg.get("name", "agent-worker")
-                model = msg.get("model") or worker.DEFAULT_MODEL
-                permission_mode = msg.get("permissionMode") or ""
-                always_thinking_enabled = msg.get("alwaysThinkingEnabled", False)
-                effort = msg.get("effort", "")
-                max_thinking_tokens = msg.get("maxThinkingTokens", 16000)
-                workdir_name = msg.get("workdir") or name
-                workdir = WORKDIRS_DIR / workdir_name
-                workdir.mkdir(parents=True, exist_ok=True)
-
-                s = sess.create(name, model=model,
-                                permission_mode=permission_mode or None,
-                                always_thinking_enabled=always_thinking_enabled,
-                                effort=effort,
-                                max_thinking_tokens=max_thinking_tokens,
-                                workdir=str(workdir))
+                params = _build_session_params(msg)
+                s = sess.create(**params)
                 result = await worker.create_worker(s.id)
                 if isinstance(result, str):
                     await ws.send_json({"type": "error", "message": result})
@@ -269,26 +291,13 @@ async def api_list_sessions():
 @app.post("/api/sessions")
 async def api_create_session(data: dict):
     """Create a new Session (no worker spawned)."""
-    name = data.get("name", "default")
+    params = _build_session_params(data)
+    name = params["name"]
     err = _check_session_name(name)
     if err:
         return {"error": err}
 
-    model = data.get("model") or worker.DEFAULT_MODEL
-    permission_mode = data.get("permissionMode") or None
-    always_thinking_enabled = data.get("alwaysThinkingEnabled", False)
-    effort = data.get("effort", "")
-    max_thinking_tokens = data.get("maxThinkingTokens", 16000)
-    workdir_name = data.get("workdir") or name
-    workdir = WORKDIRS_DIR / workdir_name
-    workdir.mkdir(parents=True, exist_ok=True)
-
-    s = sess.create(name, model=model,
-                    permission_mode=permission_mode,
-                    always_thinking_enabled=always_thinking_enabled,
-                    effort=effort,
-                    max_thinking_tokens=max_thinking_tokens,
-                    workdir=str(workdir))
+    s = sess.create(**params)
     await broadcast({
         "type": "session.created",
         "sessionId": s.id,
@@ -311,16 +320,7 @@ async def api_update_session(session_id: str, data: dict):
     s = sess.get(session_id)
     if not s:
         return {"error": "Session not found"}
-    if "model" in data:
-        s.model = data["model"]
-    if "permissionMode" in data:
-        s.permission_mode = data["permissionMode"] or None
-    if "alwaysThinkingEnabled" in data:
-        s.always_thinking_enabled = data["alwaysThinkingEnabled"]
-    if "effort" in data:
-        s.effort = data["effort"]
-    if "maxThinkingTokens" in data:
-        s.max_thinking_tokens = data["maxThinkingTokens"]
+    _apply_session_updates(s, data)
     sess.save(s)
     await broadcast({
         "type": "session.updated",
@@ -367,38 +367,15 @@ async def api_spawn(data: dict):
         if existing:
             await worker.kill_worker(existing.worker_id)
         # apply settings from request if provided
-        if data.get("model"):
-            s.model = data["model"]
-        if data.get("permissionMode"):
-            s.permission_mode = data["permissionMode"]
-        if "alwaysThinkingEnabled" in data:
-            s.always_thinking_enabled = data["alwaysThinkingEnabled"]
-        if "effort" in data:
-            s.effort = data["effort"]
-        if "maxThinkingTokens" in data:
-            s.max_thinking_tokens = data["maxThinkingTokens"]
+        _apply_session_updates(s, data)
         sess.save(s)
     else:
-        name = data.get("name", "default")
-        model = data.get("model") or worker.DEFAULT_MODEL
-        permission_mode = data.get("permissionMode") or None
-        always_thinking_enabled = data.get("alwaysThinkingEnabled", False)
-        effort = data.get("effort", "")
-        max_thinking_tokens = data.get("maxThinkingTokens", 16000)
-        workdir_name = data.get("workdir") or name
-        workdir = WORKDIRS_DIR / workdir_name
-        workdir.mkdir(parents=True, exist_ok=True)
-
+        params = _build_session_params(data)
+        name = params["name"]
         err_name = _check_session_name(name)
         if err_name:
             return {"error": err_name}
-
-        s = sess.create(name, model=model,
-                        permission_mode=permission_mode,
-                        always_thinking_enabled=always_thinking_enabled,
-                        effort=effort,
-                        max_thinking_tokens=max_thinking_tokens,
-                        workdir=str(workdir))
+        s = sess.create(**params)
         session_id = s.id
 
     result = await worker.create_worker(session_id)
@@ -538,14 +515,7 @@ async def api_worker_settings(worker_id: str, data: dict):
         return {"error": "Session not found"}
 
     # update session fields first …
-    if "model" in data:
-        s.model = data["model"]
-    if "permissionMode" in data:
-        s.permission_mode = data["permissionMode"] or None
-    if "alwaysThinkingEnabled" in data:
-        s.always_thinking_enabled = data["alwaysThinkingEnabled"]
-    if "effort" in data:
-        s.effort = data["effort"]
+    _apply_session_updates(s, data)
     sess.save(s)
 
     # … then build extra args from the updated session and respawn once
@@ -619,12 +589,7 @@ async def api_switch_thinking(worker_id: str, data: dict):
     s = sess.get(w.session_id)
     if not s:
         return {"error": "Session not found"}
-    if "alwaysThinkingEnabled" in data:
-        s.always_thinking_enabled = data["alwaysThinkingEnabled"]
-    if "effort" in data:
-        s.effort = data["effort"]
-    if "maxThinkingTokens" in data:
-        s.max_thinking_tokens = data["maxThinkingTokens"]
+    _apply_session_updates(s, data)
     sess.save(s)
     err = await worker.respawn_worker(worker_id)
     if err:
@@ -648,21 +613,28 @@ async def api_rename(worker_id: str, data: dict):
     if err:
         return {"error": err}
 
+    # resolve session: prefer live worker, fallback to sessionId in body
+    session_id = None
     w = worker.get_worker(worker_id)
     if w:
-        s = sess.get(w.session_id)
-        if s:
-            old_name = s.name
-            s.name = new_name
-            sess.save(s)
-            await broadcast({
-                "type": "session.renamed",
-                "sessionId": w.session_id,
-                "oldName": old_name,
-                "newName": new_name,
-            })
-            return {"sessionId": w.session_id, "name": new_name, "status": "renamed"}
-    return {"error": "Worker not found"}
+        session_id = w.session_id
+    else:
+        session_id = data.get("sessionId") or worker_id
+
+    s = sess.get(session_id)
+    if not s:
+        return {"error": "Session not found"}
+
+    old_name = s.name
+    s.name = new_name
+    sess.save(s)
+    await broadcast({
+        "type": "session.renamed",
+        "sessionId": s.id,
+        "oldName": old_name,
+        "newName": new_name,
+    })
+    return {"sessionId": s.id, "name": new_name, "status": "renamed"}
 
 
 @app.post("/api/worker/{worker_id}/branch")
@@ -752,7 +724,6 @@ async def api_takeover(worker_id: str):
     }
 
 # ── Static files (CSS, JS) ──
-import os
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
