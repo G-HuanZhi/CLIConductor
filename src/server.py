@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -124,8 +125,20 @@ def _check_session_name(name: str) -> str | None:
     return None
 
 
+_WORKDIR_NAME_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
+
+
 def _resolve_workdir(workdir_name: str) -> Path:
-    """Resolve a workdir name to a Path under WORKDIRS_DIR, creating it."""
+    """Resolve a workdir name to a Path under WORKDIRS_DIR, creating it.
+
+    Only alphanumeric, underscores and hyphens are allowed — prevents
+    path traversal attacks (e.g. ../../../etc/foo).
+    """
+    if not _WORKDIR_NAME_RE.match(workdir_name):
+        raise ValueError(
+            f"Invalid workdir name: {workdir_name!r} "
+            f"(only alphanumeric, underscore, hyphen allowed)"
+        )
     workdir = WORKDIRS_DIR / workdir_name
     workdir.mkdir(parents=True, exist_ok=True)
     return workdir
