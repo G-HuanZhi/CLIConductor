@@ -19,7 +19,7 @@
 | Worker 生命周期 | spawn / list / kill / restart / branch / interrupt |
 | Session 独立管理 | Session（UUID 持久化）与 Worker（运行时进程）分离，kill 不删 Session |
 | 设置面板 | 一次性提交 model/mode/think/effort，自动 spawn |
-| 对话历史重建 | cbc --resume 回放后自动重建 CLIConductor history，缓冲期不丢失原数据 |
+| 对话历史持久化 | 磁盘 `s.history` 为 ground truth，replay 期间不重建不覆盖，cbc --resume 仅恢复内部状态 |
 | cbc 集成 | stdin stream-json 长驻进程，多轮对话 |
 | 任务队列 | 每个 Worker 独立 asyncio.Queue，一次一条写入 stdin |
 | Session 持久化 | `data/sessions/ses_<uuid>.json`，每次 result 保存 |
@@ -110,7 +110,7 @@ CLIConductor/
 ├── src/
 │   ├── __init__.py
 │   ├── server.py            FastAPI 路由 + WS + 日志中间件
-│   ├── worker.py            Worker 管理 + replay 重建
+│   ├── worker.py            Worker 管理 + 历史持久化 + 进程树清理
 │   └── session.py           Session 存储（UUID key）
 ├── index.html               Dashboard（单页）
 ├── static/                  CSS + JS（从 ts/ 编译）

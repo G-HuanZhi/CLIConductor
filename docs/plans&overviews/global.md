@@ -1,6 +1,6 @@
 # CLIConductor 全局规划
 
-> 最后更新：2026-06-28
+> 最后更新：2026-07-01
 
 ---
 
@@ -113,7 +113,7 @@ cbc 的 `/model`、`/branch`、Shift+Tab 等无法通过 stdin stream-json 发�
 | 用户接管（`cbc --resume <cbcSessionId>` 原生终端） | ✅ |
 | Session 持久化（JSON 文件，UUID key，独立生命周期） | ✅ |
 | Worker/Session 概念分离 | ✅ |
-| cbc --resume 重放去重（_replaying 标志） | ✅ |
+| cbc --resume 重放安全（_replaying 标志，replay 期间不动 history 不广播） | ✅ |
 | 中断任务（kill + --resume 重启） | ✅ |
 | 优雅关闭（lifespan handler） | ✅ |
 | 命令来源辨别（agent / user，独立 WS 通道） | ✅ |
