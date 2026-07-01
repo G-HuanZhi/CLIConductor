@@ -15,7 +15,8 @@ from datetime import datetime
 
 from . import session as _sess
 
-CBC_PATH = r"D:\node_npm\node_global\cbc.cmd"
+CBC_PATH = os.environ.get("CLICONDUCTOR_CBC_PATH",
+                           r"D:\node_npm\node_global\cbc.cmd")
 DEFAULT_MODEL = "deepseek-v4-flash"
 
 SUPPORTED_MODELS = [
