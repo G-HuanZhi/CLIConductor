@@ -1,0 +1,10 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - heading "CLIConductor" [level=1] [ref=e3]
+    - button "+ New Session" [ref=e4] [cursor=pointer]
+  - generic [ref=e6]:
+    - generic [ref=e8]: Select a session
+    - generic [ref=e10]:
+      - textbox "Type a message…" [ref=e11]
+      - button "Send" [ref=e12] [cursor=pointer]:
+        - generic: Send
