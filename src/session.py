@@ -6,6 +6,7 @@ The ID format is ses_<16-hex-chars> (e.g. ses_a1b2c3d4e5f67890).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import secrets
 from dataclasses import dataclass, field, asdict
@@ -107,11 +108,23 @@ def get(session_id: str) -> Session | None:
         return None
 
 
-def save(s: Session):
+def _save_sync(s: Session):
     s.updated_at = datetime.now().isoformat()
     SESSION_DIR.mkdir(parents=True, exist_ok=True)
-    _path(s.id).write_text(json.dumps(s.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+    _path(s.id).write_text(
+        json.dumps(s.to_dict(), ensure_ascii=False, indent=2),
+        encoding="utf-8")
     _cache[s.id] = s
+
+
+def save(s: Session):
+    """Sync save (for low-frequency server API calls)."""
+    _save_sync(s)
+
+
+async def save_async(s: Session):
+    """Async save (for high-frequency worker stdout/consumer calls)."""
+    await asyncio.to_thread(_save_sync, s)
 
 
 def delete(session_id: str):
@@ -121,28 +134,27 @@ def delete(session_id: str):
     _cache.pop(session_id, None)
 
 
+_all_loaded: bool = False
+
+
 def list_all() -> list[Session]:
-    if not SESSION_DIR.exists():
-        return []
-    sessions: list[Session] = []
-    for f in sorted(SESSION_DIR.iterdir()):
-        if f.suffix == ".json":
-            try:
-                data = json.loads(f.read_text(encoding="utf-8"))
-                # 不要覆盖已缓存的 Session：worker 可能在 _read_stdout 里
-                # 已经往内存 history append 了内容但还没 save，这里从磁盘
-                # 重新加载会丢掉那部分（dashboard 每 5s 轮询 /api/sessions
-                # 就会触发本函数）。已缓存时直接用内存版本。
-                sid = data.get("id")
-                if sid and sid in _cache:
-                    sessions.append(_cache[sid])
-                    continue
-                s = Session(**data)
-                _cache[s.id] = s
-                sessions.append(s)
-            except (json.JSONDecodeError, OSError):
-                pass
-    return sessions
+    global _all_loaded
+    if not _all_loaded:
+        if SESSION_DIR.exists():
+            for f in sorted(SESSION_DIR.iterdir()):
+                if f.suffix == ".json":
+                    try:
+                        data = json.loads(f.read_text(encoding="utf-8"))
+                        sid = data.get("id")
+                        # 不覆盖已缓存的 Session（worker 可能在 _read_stdout
+                        # 里 append 了 history 但还没 save，磁盘版本更旧）
+                        if sid and sid not in _cache:
+                            _cache[sid] = Session(**data)
+                    except (json.JSONDecodeError, OSError):
+                        pass
+        _all_loaded = True
+    # after initial load, cache is always current (create/save/delete sync it)
+    return sorted(_cache.values(), key=lambda s: s.created_at)
 
 
 def clear_cache():

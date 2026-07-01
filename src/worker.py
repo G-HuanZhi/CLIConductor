@@ -103,7 +103,7 @@ async def _read_stdout(w: Worker):
                 model = adapter.extract_model(event)
                 if model and not s.model:
                     s.model = model
-                _sess.save(s)
+                await _sess.save_async(s)
 
         # 收集对话历史（replay 期间跳过，避免重复追加）
         if adapter.is_assistant_event(event) and not w._replaying:
@@ -111,7 +111,7 @@ async def _read_stdout(w: Worker):
             if s:
                 for b in adapter.extract_assistant_blocks(event):
                     s.history.append(b)
-                _sess.save(s)
+                await _sess.save_async(s)
 
         # 任务完成 → 保存 Session + last_result
         if adapter.is_result_event(event):
@@ -138,7 +138,7 @@ async def _read_stdout(w: Worker):
                     if not (last and last.get("role") == "assistant"
                             and last.get("content") == result_text):
                         s.history.append({"role": "assistant", "content": result_text})
-                _sess.save(s)
+                await _sess.save_async(s)
 
             await _bcast({
                 "type": "worker.result",
@@ -194,7 +194,7 @@ async def _consumer(w: Worker):
         s = _session(w)
         if s:
             s.history.append({"role": "user", "content": text})
-            _sess.save(s)
+            await _sess.save_async(s)
 
         if w.process is None or w.process.returncode is not None:
             # 进程已死，别静默丢任务——记到 last_result 并广播，
@@ -206,7 +206,7 @@ async def _consumer(w: Worker):
                     "cbc_session_id": s.cbc_session_id,
                     "timestamp": datetime.now().isoformat(),
                 }
-                _sess.save(s)
+                await _sess.save_async(s)
             await _bcast({
                 "type": "worker.result",
                 "workerId": w.worker_id,
@@ -276,7 +276,7 @@ async def create_worker(session_id: str) -> Worker | str:
     })
 
     # 持久化 session（记录 workdir 等）
-    _sess.save(s)
+    await _sess.save_async(s)
     return w
 
 
@@ -536,7 +536,7 @@ async def branch_worker(worker_id: str, new_session_id: str) -> Worker | str:
     new_w._stdout_task = asyncio.create_task(_read_stdout(new_w))
     new_w._consume_task = asyncio.create_task(_consumer(new_w))
 
-    _sess.save(s)
+    await _sess.save_async(s)
 
     await _bcast({
         "type": "worker.spawned",
