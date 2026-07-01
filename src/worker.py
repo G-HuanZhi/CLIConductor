@@ -443,14 +443,13 @@ async def _spawn_process(session_id: str,
         return f"Session {session_id} not found"
 
     args = _base_args()
-    if s.cbc_session_id:
-        args.extend(["--resume", s.cbc_session_id])
-    if s.model:
-        args.extend(["--model", s.model])
+    args.extend(["--model", s.model or DEFAULT_MODEL])
     if s.permission_mode:
         args.extend(["--permission-mode", s.permission_mode])
     args.extend(_effort_args(s))
     args.extend(_thinking_args(s))
+    if s.cbc_session_id:
+        args.extend(["--resume", s.cbc_session_id])
     if extra_args:
         # extra_args 可能包含覆盖 --model, --permission-mode
         args.extend(extra_args)
