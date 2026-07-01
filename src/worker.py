@@ -10,7 +10,8 @@ import asyncio
 import json
 import os
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from datetime import datetime
 
 from . import session as _sess
 
@@ -158,7 +159,7 @@ async def _read_stdout(w: Worker):
                     "status": w.status,
                     "result": event.get("result"),
                     "cbc_session_id": s.cbc_session_id,
-                    "timestamp": __import__("datetime").datetime.now().isoformat(),
+                    "timestamp": datetime.now().isoformat(),
                 }
                 # cbc 有时只在 result 事件里给出最终文本（不在 assistant 事件里），
                 # 这种情况下 history 会缺最后一条 assistant 消息，导致 dashboard 和
@@ -237,7 +238,7 @@ async def _consumer(w: Worker):
                     "status": "error",
                     "result": f"Worker process dead (returncode={w.process.returncode if w.process else 'none'})",
                     "cbc_session_id": s.cbc_session_id,
-                    "timestamp": __import__("datetime").datetime.now().isoformat(),
+                    "timestamp": datetime.now().isoformat(),
                 }
                 _sess.save(s)
             await _bcast({
