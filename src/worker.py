@@ -293,33 +293,13 @@ async def create_worker(session_id: str) -> Worker | str:
 
     worker_id = await _next_worker_id()
 
+    proc = await _spawn_process(session_id)
+    if isinstance(proc, str):
+        return proc
+
     resuming = bool(s.cbc_session_id)
-
-    extra_args = ["--model", s.model or DEFAULT_MODEL]
-    if s.permission_mode:
-        extra_args.extend(["--permission-mode", s.permission_mode])
-    extra_args.extend(_effort_args(s))
-    extra_args.extend(_thinking_args(s))
-
-    spawn_args = _base_args() + extra_args
-    if s.cbc_session_id:
-        spawn_args += ["--resume", s.cbc_session_id]
-
-    try:
-        process = await asyncio.create_subprocess_exec(
-            *spawn_args,
-            stdout=asyncio.subprocess.PIPE,
-            stdin=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            cwd=s.workdir or None,
-        )
-    except FileNotFoundError:
-        return f"cbc not found at: {CBC_PATH}"
-    except OSError as e:
-        return f"OS error: {e}"
-
     w = Worker(worker_id=worker_id, session_id=session_id,
-               status="idle", process=process, queue=asyncio.Queue(),
+               status="idle", process=proc, queue=asyncio.Queue(),
                _replaying=resuming)
     workers[worker_id] = w
     w._stdout_task = asyncio.create_task(_read_stdout(w))
@@ -583,25 +563,21 @@ async def branch_worker(worker_id: str, new_session_id: str) -> Worker | str:
         if not s.max_thinking_tokens:
             s.max_thinking_tokens = orig.max_thinking_tokens
 
-    extra_args = ["--model", s.model or DEFAULT_MODEL,
-                  "--resume", s.cbc_session_id or "",
-                  "--fork-session"]
-    if s.permission_mode:
-        extra_args.extend(["--permission-mode", s.permission_mode])
-    extra_args.extend(_effort_args(s))
-    extra_args.extend(_thinking_args(s))
+    # branch requires --fork-session; --resume is handled by _spawn_process
+    # when cbc_session_id is set, otherwise we pass it explicitly
+    extra_args: list[str] = []
+    if s.cbc_session_id:
+        extra_args = ["--fork-session"]
+    else:
+        extra_args = ["--resume", "", "--fork-session"]
 
     new_id = await _next_worker_id()
-    process = await asyncio.create_subprocess_exec(
-        *_base_args(), *extra_args,
-        stdout=asyncio.subprocess.PIPE,
-        stdin=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-        cwd=s.workdir or None,
-    )
+    proc = await _spawn_process(new_session_id, extra_args=extra_args)
+    if isinstance(proc, str):
+        return proc
 
     new_w = Worker(worker_id=new_id, session_id=new_session_id,
-                   status="idle", process=process, queue=asyncio.Queue())
+                   status="idle", process=proc, queue=asyncio.Queue())
     # 注意：branch 不设 _replaying（与 create_worker/restart_worker 不同）。
     # branch 的新 session history 为空，需要从 cbc --resume --fork-session
     # 的重放中填入历史，所以走正常 append 路径。主路径的 session 已有
