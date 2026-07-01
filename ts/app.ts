@@ -71,6 +71,13 @@ interface ApiGenericResponse {
   cbcSessionId?: string;
 }
 
+interface ApiConfigResponse {
+  models: string[];
+  defaultModel: string;
+  effortValues: string[];
+  permissionModes: {value: string; label: string}[];
+}
+
 interface SyncedSettings {
   model: string;
   permissionMode: string;
@@ -82,6 +89,8 @@ interface SyncedSettings {
 
 let allModels: string[] = [];
 let defaultModel: string = 'deepseek-v4-flash';
+let effortValues: string[] = [];
+let permissionModes: {value: string; label: string}[] = [];
 let currentSessionId: string | null = null;
 let currentWorkerId: string | null = null;
 let modelData: Session[] = [];
@@ -377,9 +386,9 @@ function syncPanelFromServer(): void {
   (document.getElementById('settingThinking') as HTMLInputElement).checked =
     s.alwaysThinkingEnabled || false;
   (document.getElementById('settingEffort') as HTMLSelectElement).value =
-    s.effort || 'medium';
+    effortValues.indexOf(s.effort) >= 0 ? s.effort : (effortValues[1] || effortValues[0] || '');
   (document.getElementById('effortGroup')!).style.display =
-    s.alwaysThinkingEnabled ? '' : 'none';
+    (s.alwaysThinkingEnabled && effortValues.length > 0) ? '' : 'none';
 
   // record the baseline so we can detect pending changes
   lastSyncedSettings = {
@@ -429,10 +438,12 @@ function updateSetButtonVisibility(): void {
  *  medium, then update the Set button.  No API call is made. */
 function onThinkingToggle(): void {
   const thinking = (document.getElementById('settingThinking') as HTMLInputElement).checked;
-  (document.getElementById('effortGroup')!).style.display = thinking ? '' : 'none';
-  if (thinking) {
+  (document.getElementById('effortGroup')!).style.display =
+    (thinking && effortValues.length > 0) ? '' : 'none';
+  if (thinking && effortValues.length > 0) {
     const eff = document.getElementById('settingEffort') as HTMLSelectElement;
-    if (!eff.value || eff.value === 'low') eff.value = 'medium';
+    if (!eff.value || eff.value === effortValues[0])
+      eff.value = effortValues[1] || effortValues[0];
   }
   updateSetButtonVisibility();
 }
@@ -707,12 +718,16 @@ function deleteSession(id: string): void {
 // ── Init ──
 
 function init(): void {
-  fetch('/api/models')
+  fetch('/api/adapter/config')
     .then((r: Response) => r.json())
-    .then((data: ApiModelsResponse) => {
+    .then((data: ApiConfigResponse) => {
       allModels = data.models || [];
-      defaultModel = data.default || 'deepseek-v4-flash';
+      defaultModel = data.defaultModel || 'deepseek-v4-flash';
+      effortValues = data.effortValues || [];
+      permissionModes = data.permissionModes || [];
       buildModelSelect();
+      buildModeSelect();
+      buildEffortSelect();
     });
   refreshSessions();
   setInterval(refreshSessions, 5000);
@@ -741,6 +756,28 @@ function buildModelSelect(): void {
     updateSetButtonVisibility();
   };
   sel.setAttribute('data-loaded', '1');
+}
+
+function buildModeSelect(): void {
+  const sel = document.getElementById('settingMode') as HTMLSelectElement;
+  sel.innerHTML = '';
+  permissionModes.forEach((p: {value: string; label: string}) => {
+    const opt = document.createElement('option');
+    opt.value = p.value;
+    opt.textContent = p.label;
+    sel.appendChild(opt);
+  });
+}
+
+function buildEffortSelect(): void {
+  const sel = document.getElementById('settingEffort') as HTMLSelectElement;
+  sel.innerHTML = '';
+  effortValues.forEach((v: string) => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    sel.appendChild(opt);
+  });
 }
 
 function esc<T extends HTMLElement | string>(s: T): string {

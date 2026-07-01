@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import worker
 from . import session as sess
+from .adapters import get_adapter
 
 # ── logging ──
 
@@ -346,6 +347,20 @@ async def api_delete_session(session_id: str):
 @app.get("/api/models")
 async def api_models():
     return {"models": worker.SUPPORTED_MODELS, "default": worker.DEFAULT_MODEL}
+
+
+@app.get("/api/adapter/config")
+async def api_adapter_config():
+    """Return default adapter configuration (models, effort values, permission modes).
+    Frontend uses this to dynamically render selects.
+    """
+    a = get_adapter("cbc")
+    return {
+        "models": a.supported_models,
+        "defaultModel": a.default_model,
+        "effortValues": list(a.effort_values),
+        "permissionModes": a.permission_modes,
+    }
 
 
 # ── Spawn (create worker for a session) ──

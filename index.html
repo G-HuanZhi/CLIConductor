@@ -28,25 +28,13 @@
     <input id="settingModelCustom" class="model-custom" placeholder="custom">
     <div class="sep"></div>
     <label>Mode</label>
-    <select id="settingMode" onchange="updateSetButtonVisibility()">
-      <option value="">mode…</option>
-      <option value="default">default</option>
-      <option value="acceptEdits">acceptEdits</option>
-      <option value="bypassPermissions">bypass</option>
-      <option value="plan">plan</option>
-      <option value="dontAsk">dontAsk</option>
-    </select>
+    <select id="settingMode" onchange="updateSetButtonVisibility()"></select>
     <div class="sep"></div>
     <label for="settingThinking">Think</label>
     <input type="checkbox" id="settingThinking" onchange="onThinkingToggle()">
     <span id="effortGroup" style="display:none">
       <label for="settingEffort">Effort</label>
-      <select id="settingEffort" onchange="updateSetButtonVisibility()">
-        <option value="low">low</option>
-        <option value="medium">medium</option>
-        <option value="high">high</option>
-        <option value="xhigh">xhigh</option>
-      </select>
+      <select id="settingEffort" onchange="updateSetButtonVisibility()"></select>
     </span>
     <div class="sep"></div>
     <button id="applySettingsBtn" class="btn btn-p" style="display:none" onclick="applySettings()">Apply Settings</button>

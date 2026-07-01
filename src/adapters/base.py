@@ -29,6 +29,16 @@ class CliAdapter(Protocol):
     def supported_models(self) -> list[str]: ...
 
     @property
+    def effort_values(self) -> list[str]:
+        """允许的 effort 级别列表（空列表表示不支持 effort）。"""
+        ...
+
+    @property
+    def permission_modes(self) -> list[dict]:
+        """允许的权限模式列表，每项 {"value": str, "label": str}。"""
+        ...
+
+    @property
     def supports_resume(self) -> bool: ...
 
     @property

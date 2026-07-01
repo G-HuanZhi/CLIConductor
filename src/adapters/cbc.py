@@ -25,6 +25,15 @@ class CbcAdapter:
     ]
     supports_resume = True
     supports_fork = True
+    effort_values = ["low", "medium", "high", "xhigh"]
+    permission_modes = [
+        {"value": "", "label": "mode…"},
+        {"value": "default", "label": "default"},
+        {"value": "acceptEdits", "label": "acceptEdits"},
+        {"value": "bypassPermissions", "label": "bypass"},
+        {"value": "plan", "label": "plan"},
+        {"value": "dontAsk", "label": "dontAsk"},
+    ]
 
     _CBC_PATH = os.environ.get(
         "CLICONDUCTOR_CBC_PATH",

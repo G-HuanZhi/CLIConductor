@@ -3,6 +3,8 @@
 // ── State ──
 let allModels = [];
 let defaultModel = 'deepseek-v4-flash';
+let effortValues = [];
+let permissionModes = [];
 let currentSessionId = null;
 let currentWorkerId = null;
 let modelData = [];
@@ -280,9 +282,9 @@ function syncPanelFromServer() {
     document.getElementById('settingThinking').checked =
         s.alwaysThinkingEnabled || false;
     document.getElementById('settingEffort').value =
-        s.effort || 'medium';
+        effortValues.indexOf(s.effort) >= 0 ? s.effort : (effortValues[1] || effortValues[0] || '');
     (document.getElementById('effortGroup')).style.display =
-        s.alwaysThinkingEnabled ? '' : 'none';
+        (s.alwaysThinkingEnabled && effortValues.length > 0) ? '' : 'none';
     // record the baseline so we can detect pending changes
     lastSyncedSettings = {
         model: getSettingModel(),
@@ -322,11 +324,12 @@ function updateSetButtonVisibility() {
  *  medium, then update the Set button.  No API call is made. */
 function onThinkingToggle() {
     const thinking = document.getElementById('settingThinking').checked;
-    (document.getElementById('effortGroup')).style.display = thinking ? '' : 'none';
-    if (thinking) {
+    (document.getElementById('effortGroup')).style.display =
+        (thinking && effortValues.length > 0) ? '' : 'none';
+    if (thinking && effortValues.length > 0) {
         const eff = document.getElementById('settingEffort');
-        if (!eff.value || eff.value === 'low')
-            eff.value = 'medium';
+        if (!eff.value || eff.value === effortValues[0])
+            eff.value = effortValues[1] || effortValues[0];
     }
     updateSetButtonVisibility();
 }
@@ -591,12 +594,16 @@ function deleteSession(id) {
 }
 // ── Init ──
 function init() {
-    fetch('/api/models')
+    fetch('/api/adapter/config')
         .then((r) => r.json())
         .then((data) => {
         allModels = data.models || [];
-        defaultModel = data.default || 'deepseek-v4-flash';
+        defaultModel = data.defaultModel || 'deepseek-v4-flash';
+        effortValues = data.effortValues || [];
+        permissionModes = data.permissionModes || [];
         buildModelSelect();
+        buildModeSelect();
+        buildEffortSelect();
     });
     refreshSessions();
     setInterval(refreshSessions, 5000);
@@ -624,6 +631,26 @@ function buildModelSelect() {
         updateSetButtonVisibility();
     };
     sel.setAttribute('data-loaded', '1');
+}
+function buildModeSelect() {
+    const sel = document.getElementById('settingMode');
+    sel.innerHTML = '';
+    permissionModes.forEach((p) => {
+        const opt = document.createElement('option');
+        opt.value = p.value;
+        opt.textContent = p.label;
+        sel.appendChild(opt);
+    });
+}
+function buildEffortSelect() {
+    const sel = document.getElementById('settingEffort');
+    sel.innerHTML = '';
+    effortValues.forEach((v) => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        sel.appendChild(opt);
+    });
 }
 function esc(s) {
     const d = document.createElement('div');
