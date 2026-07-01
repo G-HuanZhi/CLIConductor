@@ -38,12 +38,7 @@ class BridgeSession:
     qq_user_id: str
     cli_session_id: str | None = None
     worker_id: str | None = None
-    last_history_len: int = 0
     last_result_ts: str = ""
-    created_at: float = 0.0
-
-    def __post_init__(self):
-        self.created_at = time.time()
 
 
 # ── HTTP 调用 ──
@@ -114,7 +109,6 @@ async def _poll_result(session_id: str, qq_user_id: str):
             new_ts = lr.get("timestamp", "") if lr else ""
             if new_ts and new_ts != last_ts:
                 session.last_result_ts = new_ts
-                session.last_history_len = len(data.get("history", []))
                 evt = _pending.get(session_id)
                 if evt:
                     evt.set()
@@ -157,7 +151,6 @@ async def _ensure_session(qq_user_id: str) -> str | None:
                     cli_session_id=sess_data["id"],
                     worker_id=sess_data.get("workerId"),
                     last_result_ts=lr.get("timestamp", ""),
-                    last_history_len=len(sess_data.get("history", [])),
                 )
                 _sessions[qq_user_id] = bridge
                 # 如果没有 worker，spawn 一个
@@ -235,9 +228,6 @@ async def _send_and_wait(text: str, qq_user_id: str) -> str:
 
     # 兜底：从 history 找最后一条 assistant 消息
     history = data.get("history", [])
-    bridge = _sessions.get(qq_user_id)
-    if bridge:
-        bridge.last_history_len = len(history)
 
     for msg in reversed(history):
         if msg.get("role") == "assistant":

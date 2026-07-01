@@ -145,10 +145,5 @@ def list_all() -> list[Session]:
     return sessions
 
 
-def list_active() -> list[Session]:
-    """Return sessions that have an in-memory cache entry (were loaded this session)."""
-    return list(_cache.values())
-
-
 def clear_cache():
     _cache.clear()

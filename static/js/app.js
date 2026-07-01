@@ -11,7 +11,14 @@ let modelData = [];
 let lastSyncedSettings = null;
 // ── WebSocket ──
 const ws = new WebSocket('ws://' + location.host + '/ws');
-ws.onopen = refreshSessions;
+let _pollTimer = null;
+ws.onopen = function () {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    refreshSessions();
+};
+ws.onclose = function () {
+    if (!_pollTimer) _pollTimer = setInterval(refreshSessions, 5000);
+};
 ws.onmessage = onWsMessage;
 function onWsMessage(e) {
     const d = JSON.parse(e.data);
@@ -73,7 +80,15 @@ function _setLocalWorker(sessionId, workerId, status) {
     renderSessionList();
 }
 // ── Session list ──
+let _refreshTimer = null;
 function refreshSessions() {
+    if (_refreshTimer) return;
+    _refreshTimer = setTimeout(() => {
+        _refreshTimer = null;
+        _doRefreshSessions();
+    }, 150);
+}
+function _doRefreshSessions() {
     fetch('/api/sessions')
         .then((r) => r.json())
         .then((data) => {
@@ -606,7 +621,6 @@ function init() {
         buildEffortSelect();
     });
     refreshSessions();
-    setInterval(refreshSessions, 5000);
 }
 function buildModelSelect() {
     const sel = document.getElementById('settingModel');
