@@ -315,6 +315,7 @@ body {
   color: #e6edf3;
   font-size: .75rem;
   max-width: 130px;
+  min-height: 26px;
 }
 
 #settingsPanel select:focus,
