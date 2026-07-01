@@ -181,12 +181,16 @@ async def _read_stdout(w: Worker):
             w.status = "idle"
             continue
 
-        await _bcast({
-            "type": "worker.stream",
-            "workerId": w.worker_id,
-            "sessionId": w.session_id,
-            "event": event,
-        })
+        # replay 期间不广播 stream 事件——这些是 cbc --resume 重放的旧事件，
+        # 广播会让 dashboard 显示旧历史滚动，QQ bridge 也会误处理。
+        # cbc 内部状态恢复即可，外部不需要感知。
+        if not w._replaying:
+            await _bcast({
+                "type": "worker.stream",
+                "workerId": w.worker_id,
+                "sessionId": w.session_id,
+                "event": event,
+            })
 
     # stdout EOF — 进程退出了
     w.status = "error"
@@ -213,6 +217,10 @@ async def _consumer(w: Worker):
 
         text = item["text"]
         source = item.get("source", "agent")
+
+        # 用户发新消息 → replay 阶段结束。即使 cbc 还在重放旧事件，
+        # 后续 assistant 事件必须正常 append 到 history（否则回复丢失）。
+        w._replaying = False
 
         # 先把用户消息记进 history 并落盘——不管进程死活都该记，
         # 否则 worker 崩溃 / server 重启会丢用户消息
@@ -374,6 +382,35 @@ def _kill_takeover_terminal(w: Worker) -> bool:
     return True
 
 
+def _kill_process_tree(w: Worker) -> None:
+    """杀掉 worker 的 cbc 进程及其整棵子进程树。
+
+    cbc.cmd 会 spawn node.exe 作为子进程。`w.process.kill()` 只杀 cbc.cmd
+    本身（等价于 TerminateProcess），node.exe 变孤儿继续运行。
+    必须用 `taskkill /F /T /PID` 一次性强杀整棵树。
+
+    与 _kill_takeover_terminal 的区别：本函数杀的是 worker 自己的 cbc
+    子进程；_kill_takeover_terminal 杀的是 takeover 模式打开的 PowerShell
+    终端。两者独立，都需要调用。
+    """
+    if not w.process:
+        return
+    pid = w.process.pid
+    try:
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            capture_output=True, timeout=5,
+        )
+    except Exception:
+        # taskkill 失败（进程可能已退出）——回退到 .kill()，至少把 cbc.cmd 杀掉
+        try:
+            w.process.kill()
+        except ProcessLookupError:
+            pass
+        except Exception:
+            pass
+
+
 async def kill_worker(worker_id: str) -> str | None:
     """Kill the Worker process. Does NOT touch the Session."""
     w = workers.get(worker_id)
@@ -384,12 +421,7 @@ async def kill_worker(worker_id: str) -> str | None:
         w._consume_task.cancel()
     if w._stdout_task:
         w._stdout_task.cancel()
-    if w.process:
-        try:
-            w.process.kill()
-        except ProcessLookupError:
-            pass
-
+    _kill_process_tree(w)
     _kill_takeover_terminal(w)
 
     workers.pop(worker_id, None)
@@ -454,25 +486,21 @@ async def restart_worker(worker_id: str) -> str | None:
     # always clear held status
     w.status = "idle"
 
-    # kill takeover terminal if one was opened（必须用 _kill_takeover_terminal，
-    # 不能 os.kill 先杀树根——会让孩子变孤儿，taskkill /T 就杀不到了）
-    _kill_takeover_terminal(w)
-
-    # kill existing process regardless of state
-    if w.process:
-        try:
-            w.process.kill()
-        except ProcessLookupError:
-            pass
-        except Exception:
-            pass
-        w.process = None
-
-    # cancel stale tasks
+    # cancel stale tasks FIRST — before killing the process.
+    # _read_stdout detects EOF on process death and calls workers.pop(),
+    # which would remove the worker being restarted.  Cancelling first
+    # means _read_stdout never sees the EOF.
     if w._consume_task:
         w._consume_task.cancel()
     if w._stdout_task:
         w._stdout_task.cancel()
+
+    # kill takeover terminal if one was opened
+    _kill_takeover_terminal(w)
+
+    # kill existing cbc process tree（taskkill /F /T，避免 node.exe 孤儿）
+    _kill_process_tree(w)
+    w.process = None
 
     proc = await _spawn_process(w.session_id)
     if isinstance(proc, str):
@@ -501,11 +529,16 @@ async def respawn_worker(worker_id: str, extra_args: list[str] | None = None) ->
     if not w:
         return "Worker not found"
 
-    if w.process:
-        try:
-            w.process.kill()
-        except ProcessLookupError:
-            pass
+    # cancel stale tasks FIRST — same race as restart_worker:
+    # if we kill before cancelling, _read_stdout sees EOF and
+    # pops the worker from workers dict during spawn.
+    if w._consume_task:
+        w._consume_task.cancel()
+    if w._stdout_task:
+        w._stdout_task.cancel()
+
+    _kill_takeover_terminal(w)
+    _kill_process_tree(w)
 
     proc = await _spawn_process(w.session_id, extra_args)
     if isinstance(proc, str):
@@ -568,6 +601,10 @@ async def branch_worker(worker_id: str, new_session_id: str) -> Worker | str:
 
     new_w = Worker(worker_id=new_id, session_id=new_session_id,
                    status="idle", process=process, queue=asyncio.Queue())
+    # 注意：branch 不设 _replaying（与 create_worker/restart_worker 不同）。
+    # branch 的新 session history 为空，需要从 cbc --resume --fork-session
+    # 的重放中填入历史，所以走正常 append 路径。主路径的 session 已有
+    # 完整 history（磁盘 ground truth），replay 期间跳过 append 避免重复。
     workers[new_id] = new_w
     new_w._stdout_task = asyncio.create_task(_read_stdout(new_w))
     new_w._consume_task = asyncio.create_task(_consumer(new_w))
@@ -625,6 +662,11 @@ def find_worker_by_session(session_id: str) -> Worker | None:
 
 
 async def shutdown_all():
+    """关闭所有 worker 的 cbc 进程树 + takeover 终端。
+
+    必须用 _kill_process_tree / _kill_takeover_terminal（内部走 taskkill /F /T），
+    不能只调 w.process.kill()——后者只杀 cbc.cmd，留下 node.exe 孤儿。
+    """
     ids = list(workers.keys())
     for wid in ids:
         w = workers.get(wid)
@@ -634,9 +676,6 @@ async def shutdown_all():
             w._consume_task.cancel()
         if w._stdout_task:
             w._stdout_task.cancel()
-        if w.process:
-            try:
-                w.process.kill()
-            except ProcessLookupError:
-                pass
+        _kill_process_tree(w)
+        _kill_takeover_terminal(w)
     workers.clear()
