@@ -91,6 +91,7 @@ let allModels: string[] = [];
 let defaultModel: string = 'deepseek-v4-flash';
 let effortValues: string[] = [];
 let permissionModes: {value: string; label: string}[] = [];
+let _adapterConfigReady: boolean = false;
 let currentSessionId: string | null = null;
 let currentWorkerId: string | null = null;
 let modelData: Session[] = [];
@@ -365,6 +366,8 @@ function toggleSettings(): void {
   const isOpen = panel.classList.toggle('open');
   btn.classList.toggle('open', isOpen);
   if (isOpen) {
+    if (!_adapterConfigReady)
+      toast('Loading settings…');
     syncPanelFromServer();
   }
 }
@@ -377,7 +380,7 @@ function syncPanelFromServer(): void {
 
   // wait until all selects are populated (async adapter config fetch)
   if ((document.getElementById('settingModel') as HTMLSelectElement).getAttribute('data-loaded') !== '1') return;
-  if (permissionModes.length === 0) return;
+  if (!_adapterConfigReady) return;
 
   const sel = document.getElementById('settingModel') as HTMLSelectElement;
   const model = s.model || defaultModel;
@@ -730,9 +733,11 @@ function init(): void {
       buildModelSelect();
       buildModeSelect();
       buildEffortSelect();
+      _adapterConfigReady = true;
+      if (document.getElementById('settingsPanel')!.classList.contains('open'))
+        syncPanelFromServer();
     });
   refreshSessions();
-  setInterval(refreshSessions, 5000);
 }
 
 function buildModelSelect(): void {
