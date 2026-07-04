@@ -137,11 +137,25 @@ cbc --replay-user-messages
                                            └─────────────────┘
 ```
 
-### 4.2 新增文件
+### 4.2 文件结构（已实现）
 
 ```
-src/
-├── cbc_sessions.py          # 扫描 + 解析 cbc session（纯 Python，不引入新依赖）
+src/adapters/
+├── __init__.py              # re-exports from subpackages
+├── base.py                  # CliAdapter protocol
+├── registry.py              # register/get_adapter/list_adapters
+└── cbc/
+    ├── __init__.py           # from .adapter import CbcAdapter
+    ├── adapter.py            # CbcAdapter 类（原 cbc.py）
+    └── sessions.py           # ← 新建：list_cbc_sessions + parse_cbc_history
+```
+
+将来接 ClaudeAdapter 时：
+```
+src/adapters/claude/
+├── __init__.py
+├── adapter.py
+└── sessions.py   # 扫 ~/.claude/sessions/，格式不同但接口一致
 ```
 
 ### 4.3 模块设计
@@ -199,22 +213,23 @@ def parse_cbc_history(session_id: str, project_cwd: str) -> list[dict]:
     """
 ```
 
-**映射规则**：
+**映射规则**（已实测验证）：
 
-| cbc JSONL type | cbc role | CLIConductor role | 内容构建方式 |
+| cbc JSONL type | content 格式 | CLIConductor role | 内容提取方式 |
 |---|---|---|---|
-| `message` | `user` | `user` | `message.content` (text) |
-| `message` | `assistant` | `assistant` | `message.content` (最后一条 text 块) |
-| `reasoning` | — | `thinking` | `reasoning` 字段 |
-| `function_call` | — | `tool` | `"tool call: {name}\nargs: {json.dumps(args)}"` |
-| `function_call_result` | — | `tool` | `"tool result: {name}\n{output[:500]}"` |
+| `message` (user) | `content[type=input_text].text` | `user` | 提取 `input_text` 的 text |
+| `message` (assistant) | `content[type=output_text].text` | `assistant` | 提取 `output_text` 的 text |
+| `reasoning` | `content[0].text` (list of dict) | `thinking` | 提取 content list 中所有 text |
+| `function_call` | `name` + `args`/`input` 字段 | `tool` | `"tool call: {name}\nargs: {args}"` |
+| `function_call_result` | `name` + `output` (dict/str) | `tool` | `"tool result: {name}\n{output[:500]}"` |
 | `custom-title` | — | **跳过** | 元数据，不放入 history |
 | `file-history-snapshot` | — | **跳过** | 内部事件，不放入 history |
+| `summary` | — | **跳过** | 压缩标记，不放入 history |
 
 **注意**：
-- 跳过 `file-history-snapshot` 和 `custom-title`（文档明确指出"既不是用户输入也不是助手回复"）
-- 工具调用的 `function_call` 和 `function_call_result` 需要按 `callId` 配对展示
-- `function_call_result` 的 content 截断到 500 字符避免过长
+- `summary` 是 cbc compact 后的标记事件，不放入 history
+- 工具结果截断到 500 字符避免过长
+- `function_call` 的 args 字段可能为空 `{}`（compact session），此时显示为 `args: {}`
 
 #### `src/server.py` 新增端点
 
@@ -324,13 +339,62 @@ def resume_args(self, s: Session) -> list[str]:
 
 ---
 
+## 五-bis、Session 过滤策略（待决策）
+
+并非所有 cbc session 都适合导入。以当前 `d-project-CLIConductor` 下 58 个 session 为例，需要过滤以下类别：
+
+### 5.1 已在 CLIConductor 的 Session
+
+CLIConductor 创建的 session 本身就由 cbc 子进程驱动，`cbc_session_id` 字段已经记录。导入时需跳过这些 session ID，避免重复。
+
+**识别方式**：数据库/磁盘已有同名 `cbc_session_id` 的 Session 记录。
+
+### 5.2 派生 Session（Fork / Branch）
+
+使用 `/branch` 或 `/fork` 创建的 session 在 `.meta.json` 中有 `forkedFrom` 字段。这些是从另一个 session 分支出来的，历史与父 session 重叠。
+
+**决策点**：默认隐藏（只列"根 session"）还是全部列出？前者更干净，后者给用户选择权。
+
+### 5.3 空 / 废弃 Session
+
+部分 session 的 JSONL 非常短（如 `947eba46` 仅 4 行），可能是误创建或只发了一条消息就放弃的。
+
+**决策点**：设置最小消息数阈值（建议 ≥ 5 条才显示），或在前端标记"短对话"供用户判断。
+
+### 5.4 其他 Workdir 的 Session
+
+cbc 为每个 workdir 创建独立的 project 目录（如 `d-project-CLIConductor-dev-data-workdirs-session-1`）。这些 session 属于某个已被删除的 workdir，不应导入。
+
+**识别方式**：`project_dir` 名包含 `-data-workdirs-` 后缀的跳过；或仅接受 `project_dir` 精确匹配主项目目录的。
+
+### 5.5 时间衰减
+
+不是所有历史 session 都有保留价值。可以按最后活跃时间排序，前端仅显示最近 N 个（如 30 个），或加入时间过滤。
+
+### 建议的默认策略
+
+```
+列表 API 默认过滤条件：
+1. 已在 CLIConductor 中的 session → 跳过
+2. project_dir 不匹配主工作目录的（-data-workdirs- 后缀）→ 跳过
+3. 消息数 < 5 → 跳过
+4. 按最后时间戳倒序排列
+5. 可带 ?all=1 查询参数绕过过滤（调试用）
+```
+
+**前端展示**：在候选列表中用 icon 区分"根 session"和"分支 session"，让用户知道来源。
+
+---
+
 ## 六、实操步骤
 
 ### Phase 1 — 后端核心
 
-1. [ ] **创建 `src/cbc_sessions.py`**
-   - 实现 `list_cbc_sessions(cwd)` — 扫描文件系统
-   - 实现 `parse_cbc_history(session_id, cwd)` — 解析 JSONL → CLIConductor history
+1. [x] **`src/adapters/cbc/sessions.py`** ← 已完成 (2026-07-05)
+   - 实现 `list_cbc_sessions(cwd)` — 扫描 `~/.codebuddy/projects/`，实测 58 个 session
+   - 实现 `parse_cbc_history(session_id, cwd)` — 解析 JSONL → CLIConductor history 格式
+   - 正确处理 cbc 完整事件格式：`input_text`/`output_text`/`reasoning`/`function_call`/`function_call_result`
+   - 跳过 `custom-title`、`file-history-snapshot`、`summary` 等内部事件
 
 2. [ ] **添加 API 端点**
    - `GET /api/cbc/sessions?cwd=<path>` — 列出可导入 session
