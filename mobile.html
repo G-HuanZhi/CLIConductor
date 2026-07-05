@@ -198,8 +198,12 @@ body {
 
 <script>
 function toggleSidebar(){
-  document.getElementById('sidebar').classList.toggle('open');
+  const sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('open');
   document.getElementById('sidebarOverlay').classList.toggle('show');
+  if (sidebar.classList.contains('open')) {
+    renderSessionList(); // Refresh when opening (hidden elements may not repaint on mobile)
+  }
 }
 </script>
 <script src="/static/js/app.js?v=2"></script>
