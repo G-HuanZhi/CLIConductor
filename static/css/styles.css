@@ -550,13 +550,13 @@ body {
 .im-select select {
   flex: 1;
   min-width: 120px;
+  max-height: 180px;
   padding: 4px 8px;
   border: 1px solid #30363d;
   border-radius: 4px;
   background: #0d1117;
   color: #e6edf3;
   font-size: .8rem;
-  min-height: 28px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
