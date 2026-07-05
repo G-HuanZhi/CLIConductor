@@ -92,6 +92,11 @@ async def log_requests(request: Request, call_next):
     """
     path = request.url.path
     response = await call_next(request)
+
+    # Prevent browsers/CDNs from serving stale static assets
+    if path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=0, must-revalidate"
+
     if not any(path.startswith(p) for p in _LOG_SKIP):
         status = response.status_code
         _log(f"{request.method}  {path}  → {status}")
@@ -201,8 +206,14 @@ async def favicon():
 async def dashboard(request: Request):
     ua = request.headers.get("user-agent", "")
     if _MOBILE_UA_RE.search(ua):
-        return MOBILE_DASHBOARD_FILE.read_text(encoding="utf-8")
-    return DASHBOARD_FILE.read_text(encoding="utf-8")
+        return HTMLResponse(
+            content=MOBILE_DASHBOARD_FILE.read_text(encoding="utf-8"),
+            headers={"Cache-Control": "no-cache"},
+        )
+    return HTMLResponse(
+        content=DASHBOARD_FILE.read_text(encoding="utf-8"),
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 # ── WebSocket: Dashboard ──
@@ -722,4 +733,4 @@ async def api_takeover(worker_id: str):
 # ── Static files (CSS, JS) ──
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 if STATIC_DIR.is_dir():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR), headers={"Cache-Control": "no-cache"}), name="static")
