@@ -105,6 +105,7 @@ CLIConductor/
 | 4 | Workdir 清理机制 | 目前 kill Worker 不删 workdir。将来需要清理无效的临时工作目录 |
 | 5 | 权限控制 | 目前通过 `source` 参数和独立 WS 通道辨别命令来源，未实现真正的权限限制 |
 | 6 | 崩溃自动恢复 | Worker 进程崩溃后自动检测并恢复 |
+| 7 | 发布前移除缓存规避方案 | 当前 `index.html` / `mobile.html` 中静态资源引用带了 `?v=2` 版本号，`server.py` 中对 HTML、static、api 路由都加了激进的 `Cache-Control: no-cache`。这些是开发阶段的临时方案，用于强制浏览器和 CDN 跳过缓存加载最新资源。**发布到正式环境前应替换为内容哈希方案**（如 `app.a1b2c3.js` 文件名），静态资源的 `Cache-Control` 应改为 `public, max-age=31536000, immutable`，API 的 `no-cache` 也应审视是否需要保留。 |
 
 ---
 
