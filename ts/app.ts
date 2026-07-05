@@ -627,13 +627,25 @@ function send(): void {
   addMessage('user', text);
 
   function doSend(): void {
-    ws.send(
-      JSON.stringify({
-        type: 'user_inject',
-        sessionId: currentSessionId,
-        text: text,
-      })
-    );
+    const msg = JSON.stringify({
+      type: 'user_inject',
+      sessionId: currentSessionId,
+      text: text,
+    });
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(msg);
+      return;
+    }
+    if (ws.readyState === WebSocket.CONNECTING) {
+      // Wait for connection to open (common on slow mobile networks)
+      ws.addEventListener('open', function handler() {
+        ws.removeEventListener('open', handler);
+        ws.send(msg);
+      }, { once: true } as any);
+      return;
+    }
+    // CLOSED or CLOSING — give up
+    toast('Connection lost. Please refresh the page.');
   }
 
   if (!currentWorkerId) {

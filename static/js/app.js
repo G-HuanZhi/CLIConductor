@@ -527,11 +527,25 @@ function send() {
     input.value = '';
     addMessage('user', text);
     function doSend() {
-        ws.send(JSON.stringify({
+        const msg = JSON.stringify({
             type: 'user_inject',
             sessionId: currentSessionId,
             text: text,
-        }));
+        });
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(msg);
+            return;
+        }
+        if (ws.readyState === WebSocket.CONNECTING) {
+            // Wait for connection to open (common on slow mobile networks)
+            ws.addEventListener('open', function handler() {
+                ws.removeEventListener('open', handler);
+                ws.send(msg);
+            }, { once: true });
+            return;
+        }
+        // CLOSED or CLOSING — give up
+        toast('Connection lost. Please refresh the page.');
     }
     if (!currentWorkerId) {
         const model = getSettingModel();
