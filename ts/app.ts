@@ -272,6 +272,8 @@ function updateTopBar(): void {
   const status = s.workerStatus || 'offline';
   (document.getElementById('chatStatus')!).textContent =
     status + (currentWorkerId ? ' (' + currentWorkerId + ')' : ' (no worker)');
+  const dot = document.getElementById('mobileWorkerDot');
+  if (dot) dot.className = 's-dot ' + status;
 }
 
 function showEmpty(): void {
@@ -279,6 +281,8 @@ function showEmpty(): void {
   (document.getElementById('chatName')!).style.display = 'none';
   (document.getElementById('chatModel')!).style.display = 'none';
   (document.getElementById('chatStatus')!).textContent = '';
+  const dot = document.getElementById('mobileWorkerDot');
+  if (dot) dot.className = 's-dot offline';
   (document.getElementById('settingsBtn')!).style.display = 'none';
   (document.getElementById('settingsPanel')!).className = '';
   (document.getElementById('messages')!).innerHTML =
