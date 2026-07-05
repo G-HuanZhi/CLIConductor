@@ -11,7 +11,8 @@ let currentWorkerId = null;
 let modelData = [];
 let lastSyncedSettings = null;
 // ── WebSocket ──
-const ws = new WebSocket('ws://' + location.host + '/ws');
+const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
+const ws = new WebSocket(wsProtocol + location.host + '/ws');
 let _pollTimer = null;
 ws.onopen = function () {
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
@@ -27,21 +28,11 @@ function onWsMessage(e) {
         case 'worker.spawned':
         case 'worker.restarted':
         case 'worker.reconfigured':
-            _setLocalWorker(d.sessionId, d.workerId, 'idle');
-            if (d.sessionId === currentSessionId) {
-                currentWorkerId = d.workerId ?? null;
-                updateTopBar();
-            }
-            refreshSessions();
+            _applyWorkerUpdate(d.sessionId, d.workerId, 'idle');
             break;
         case 'worker.destroyed':
         case 'worker.crashed':
-            _setLocalWorker(d.sessionId, null, null);
-            if (d.sessionId === currentSessionId) {
-                currentWorkerId = null;
-                updateTopBar();
-            }
-            refreshSessions();
+            _applyWorkerUpdate(d.sessionId, null, null);
             break;
         case 'worker.stream':
             if (d.sessionId === currentSessionId && d.event) {
@@ -51,13 +42,10 @@ function onWsMessage(e) {
         case 'worker.result':
             if (d.sessionId === currentSessionId)
                 appendResult(d);
-            refreshSessions();
+            _applyWorkerUpdate(d.sessionId, d.workerId, 'idle');
             break;
         case 'worker.status':
-            _setLocalWorker(d.sessionId, d.workerId, d.status ?? 'idle');
-            if (d.sessionId === currentSessionId)
-                updateTopBar();
-            refreshSessions();
+            _applyWorkerUpdate(d.sessionId, d.workerId, d.status ?? 'idle');
             break;
         case 'session.created':
         case 'session.renamed':
@@ -70,7 +58,10 @@ function onWsMessage(e) {
             break;
     }
 }
-function _setLocalWorker(sessionId, workerId, status) {
+/** Apply worker update from WS event. Side effects: syncs currentWorkerId,
+ *  updateTopBar (incl. mobile dot), renderSessionList, triggers debounced
+ *  refreshSessions fetch. */
+function _applyWorkerUpdate(sessionId, workerId, status) {
     for (let i = 0; i < modelData.length; i++) {
         if (modelData[i].id === sessionId) {
             modelData[i].workerId = workerId ?? undefined;
@@ -78,10 +69,16 @@ function _setLocalWorker(sessionId, workerId, status) {
             break;
         }
     }
+    if (sessionId === currentSessionId) {
+        currentWorkerId = workerId ?? null;
+        updateTopBar();
+    }
     renderSessionList();
+    refreshSessions();
 }
 // ── Session list ──
 let _refreshTimer = null;
+let _refreshVersion = 0;
 function refreshSessions() {
     if (_refreshTimer) return;
     _refreshTimer = setTimeout(() => {
@@ -90,9 +87,13 @@ function refreshSessions() {
     }, 150);
 }
 function _doRefreshSessions() {
+    _refreshVersion++;
+    const version = _refreshVersion;
     fetch('/api/sessions')
         .then((r) => r.json())
         .then((data) => {
+        // Ignore stale responses (e.g. poll in-flight before session creation)
+        if (version !== _refreshVersion) return;
         modelData = data.sessions || [];
         renderSessionList();
         const matched = modelData.find((s) => s.id === currentSessionId);
@@ -185,12 +186,18 @@ function updateTopBar() {
     const status = s.workerStatus || 'offline';
     (document.getElementById('chatStatus')).textContent =
         status + (currentWorkerId ? ' (' + currentWorkerId + ')' : ' (no worker)');
+    const dot = document.getElementById('mobileWorkerDot');
+    if (dot)
+        dot.className = 's-dot ' + status;
 }
 function showEmpty() {
     (document.getElementById('emptyHint')).style.display = '';
     (document.getElementById('chatName')).style.display = 'none';
     (document.getElementById('chatModel')).style.display = 'none';
     (document.getElementById('chatStatus')).textContent = '';
+    const dot = document.getElementById('mobileWorkerDot');
+    if (dot)
+        dot.className = 's-dot offline';
     (document.getElementById('settingsBtn')).style.display = 'none';
     (document.getElementById('settingsPanel')).className = '';
     (document.getElementById('messages')).innerHTML =
@@ -521,11 +528,25 @@ function send() {
     input.value = '';
     addMessage('user', text);
     function doSend() {
-        ws.send(JSON.stringify({
+        const msg = JSON.stringify({
             type: 'user_inject',
             sessionId: currentSessionId,
             text: text,
-        }));
+        });
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(msg);
+            return;
+        }
+        if (ws.readyState === WebSocket.CONNECTING) {
+            // Wait for connection to open (common on slow mobile networks)
+            ws.addEventListener('open', function handler() {
+                ws.removeEventListener('open', handler);
+                ws.send(msg);
+            }, { once: true });
+            return;
+        }
+        // CLOSED or CLOSING — give up
+        toast('Connection lost. Please refresh the page.');
     }
     if (!currentWorkerId) {
         const model = getSettingModel();

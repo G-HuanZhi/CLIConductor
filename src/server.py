@@ -56,6 +56,11 @@ agent_clients: set[WebSocket] = set()
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 WORKDIRS_DIR = DATA_DIR / "workdirs"
 DASHBOARD_FILE = Path(__file__).resolve().parent.parent / "index.html"
+MOBILE_DASHBOARD_FILE = Path(__file__).resolve().parent.parent / "mobile.html"
+_MOBILE_UA_RE = re.compile(
+    r"Mobile|Android|iPhone|iPad|iPod|BlackBerry|Windows Phone|webOS",
+    re.IGNORECASE,
+)
 
 
 async def broadcast(data: dict):
@@ -87,9 +92,23 @@ async def log_requests(request: Request, call_next):
     """
     path = request.url.path
     response = await call_next(request)
+
+    # Prevent browsers/CDNs from serving stale static assets
+    if path.startswith("/static/"):
+        response.headers["Cache-Control"] = "public, max-age=0, must-revalidate"
+
     if not any(path.startswith(p) for p in _LOG_SKIP):
         status = response.status_code
         _log(f"{request.method}  {path}  → {status}")
+    return response
+
+
+@app.middleware("http")
+async def no_cache_api(request: Request, call_next):
+    """Prevent browser/CDN from caching API responses."""
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 
 
@@ -193,8 +212,17 @@ async def favicon():
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard():
-    return DASHBOARD_FILE.read_text(encoding="utf-8")
+async def dashboard(request: Request):
+    ua = request.headers.get("user-agent", "")
+    if _MOBILE_UA_RE.search(ua):
+        return HTMLResponse(
+            content=MOBILE_DASHBOARD_FILE.read_text(encoding="utf-8"),
+            headers={"Cache-Control": "no-cache"},
+        )
+    return HTMLResponse(
+        content=DASHBOARD_FILE.read_text(encoding="utf-8"),
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 # ── WebSocket: Dashboard ──
