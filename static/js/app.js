@@ -28,11 +28,11 @@ function onWsMessage(e) {
         case 'worker.spawned':
         case 'worker.restarted':
         case 'worker.reconfigured':
-            _setLocalWorker(d.sessionId, d.workerId, 'idle');
+            _applyWorkerUpdate(d.sessionId, d.workerId, 'idle');
             break;
         case 'worker.destroyed':
         case 'worker.crashed':
-            _setLocalWorker(d.sessionId, null, null);
+            _applyWorkerUpdate(d.sessionId, null, null);
             break;
         case 'worker.stream':
             if (d.sessionId === currentSessionId && d.event) {
@@ -42,10 +42,10 @@ function onWsMessage(e) {
         case 'worker.result':
             if (d.sessionId === currentSessionId)
                 appendResult(d);
-            _setLocalWorker(d.sessionId, d.workerId, 'idle');
+            _applyWorkerUpdate(d.sessionId, d.workerId, 'idle');
             break;
         case 'worker.status':
-            _setLocalWorker(d.sessionId, d.workerId, d.status ?? 'idle');
+            _applyWorkerUpdate(d.sessionId, d.workerId, d.status ?? 'idle');
             break;
         case 'session.created':
         case 'session.renamed':
@@ -58,7 +58,10 @@ function onWsMessage(e) {
             break;
     }
 }
-function _setLocalWorker(sessionId, workerId, status) {
+/** Apply worker update from WS event. Side effects: syncs currentWorkerId,
+ *  updateTopBar (incl. mobile dot), renderSessionList, triggers debounced
+ *  refreshSessions fetch. */
+function _applyWorkerUpdate(sessionId, workerId, status) {
     for (let i = 0; i < modelData.length; i++) {
         if (modelData[i].id === sessionId) {
             modelData[i].workerId = workerId ?? undefined;

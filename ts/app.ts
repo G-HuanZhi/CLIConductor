@@ -110,11 +110,11 @@ function onWsMessage(e: MessageEvent): void {
     case 'worker.spawned':
     case 'worker.restarted':
     case 'worker.reconfigured':
-      _setLocalWorker(d.sessionId, d.workerId, 'idle');
+      _applyWorkerUpdate(d.sessionId, d.workerId, 'idle');
       break;
     case 'worker.destroyed':
     case 'worker.crashed':
-      _setLocalWorker(d.sessionId, null, null);
+      _applyWorkerUpdate(d.sessionId, null, null);
       break;
     case 'worker.stream':
       if (d.sessionId === currentSessionId && d.event) {
@@ -123,10 +123,10 @@ function onWsMessage(e: MessageEvent): void {
       break;
     case 'worker.result':
       if (d.sessionId === currentSessionId) appendResult(d);
-      _setLocalWorker(d.sessionId, d.workerId, 'idle');
+      _applyWorkerUpdate(d.sessionId, d.workerId, 'idle');
       break;
     case 'worker.status':
-      _setLocalWorker(d.sessionId, d.workerId, d.status ?? 'idle');
+      _applyWorkerUpdate(d.sessionId, d.workerId, d.status ?? 'idle');
       break;
     case 'session.created':
     case 'session.renamed':
@@ -140,7 +140,10 @@ function onWsMessage(e: MessageEvent): void {
   }
 }
 
-function _setLocalWorker(
+/** Apply a worker update from a WebSocket event.
+ *  Side effects: syncs currentWorkerId, updateTopBar (incl. mobile dot),
+ *  renderSessionList, and triggers a debounced refreshSessions fetch. */
+function _applyWorkerUpdate(
   sessionId: string | undefined,
   workerId: string | undefined | null,
   status: string | null
