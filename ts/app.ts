@@ -99,7 +99,8 @@ let lastSyncedSettings: SyncedSettings | null = null;
 
 // ── WebSocket ──
 
-const ws: WebSocket = new WebSocket('ws://' + location.host + '/ws');
+const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
+const ws: WebSocket = new WebSocket(wsProtocol + location.host + '/ws');
 ws.onopen = refreshSessions;
 ws.onmessage = onWsMessage;
 
@@ -167,11 +168,15 @@ function _setLocalWorker(
 }
 
 // ── Session list ──
+let _refreshVersion: number = 0;
 
 function refreshSessions(): void {
+  _refreshVersion++;
+  const version = _refreshVersion;
   fetch('/api/sessions')
     .then((r: Response) => r.json())
     .then((data: ApiSessionsResponse) => {
+      if (version !== _refreshVersion) return;
       modelData = data.sessions || [];
       renderSessionList();
       const matched = modelData.find((s: Session) => s.id === currentSessionId);

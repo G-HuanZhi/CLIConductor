@@ -11,7 +11,8 @@ let currentWorkerId = null;
 let modelData = [];
 let lastSyncedSettings = null;
 // ── WebSocket ──
-const ws = new WebSocket('ws://' + location.host + '/ws');
+const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
+const ws = new WebSocket(wsProtocol + location.host + '/ws');
 let _pollTimer = null;
 ws.onopen = function () {
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
@@ -82,6 +83,7 @@ function _setLocalWorker(sessionId, workerId, status) {
 }
 // ── Session list ──
 let _refreshTimer = null;
+let _refreshVersion = 0;
 function refreshSessions() {
     if (_refreshTimer) return;
     _refreshTimer = setTimeout(() => {
@@ -90,9 +92,13 @@ function refreshSessions() {
     }, 150);
 }
 function _doRefreshSessions() {
+    _refreshVersion++;
+    const version = _refreshVersion;
     fetch('/api/sessions')
         .then((r) => r.json())
         .then((data) => {
+        // Ignore stale responses (e.g. poll in-flight before session creation)
+        if (version !== _refreshVersion) return;
         modelData = data.sessions || [];
         renderSessionList();
         const matched = modelData.find((s) => s.id === currentSessionId);
