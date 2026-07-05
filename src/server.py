@@ -742,4 +742,4 @@ async def api_takeover(worker_id: str):
 # ── Static files (CSS, JS) ──
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 if STATIC_DIR.is_dir():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR), headers={"Cache-Control": "no-cache"}), name="static")
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
