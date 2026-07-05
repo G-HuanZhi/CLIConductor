@@ -16,6 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from . import worker
 from . import session as sess
 from .adapters import get_adapter
+from .adapters.cbc import sessions as cbc_sessions
+from .config import load_config
 
 # ── logging ──
 
@@ -555,6 +557,102 @@ async def api_list():
             for w in worker.list_workers()
         ]
     }
+
+
+# ── cbc Session Import ──
+
+def _sanitize_project_dir(cwd: str) -> str:
+    """Mirror cbc's sanitize logic for exact dir matching."""
+    p = cwd.replace(":", "")
+    p = p.replace("\\", "-").replace("/", "-")
+    p = re.sub(r"^[-]+", "", p)
+    p = re.sub(r"[-]+", "-", p)
+    return p.lower()
+
+
+@app.get("/api/cbc/sessions")
+async def api_cbc_sessions(cwd: str = "", all: int = 0):
+    """List external cbc sessions available for import."""
+    config = load_config()
+    filter_cfg = config.get("cbc_import", {})
+
+    cwd = cwd or str(Path.cwd())
+    all_sessions = cbc_sessions.list_cbc_sessions(cwd)
+
+    if all:
+        return {"sessions": all_sessions, "total": len(all_sessions)}
+
+    # Filter 1: skip if already in CLIConductor
+    existing_cbc_ids: set[str] = set()
+    for s in sess.list_all():
+        if s.cbc_session_id:
+            existing_cbc_ids.add(s.cbc_session_id)
+
+    # Filter 2: skip non-main workdir sessions
+    exclude_patterns = filter_cfg.get("exclude_workdir_patterns", [])
+    target_dir = None
+    if filter_cfg.get("project_dir_exact_match", False):
+        target_dir = _sanitize_project_dir(cwd)
+
+    filtered: list[dict] = []
+    for s in all_sessions:
+        if s["session_id"] in existing_cbc_ids:
+            continue
+        if target_dir and s["project_dir"] != target_dir:
+            continue
+        if not target_dir and any(p in s["project_dir"] for p in exclude_patterns):
+            continue
+        if s["message_count"] < filter_cfg.get("min_message_count", 5):
+            continue
+        filtered.append(s)
+
+    filtered.sort(key=lambda x: x.get("last_timestamp", ""), reverse=True)
+
+    max_shown = filter_cfg.get("max_sessions_shown", 30)
+    total = len(filtered)
+    filtered = filtered[:max_shown]
+
+    return {
+        "sessions": filtered,
+        "total": total,
+        "shown": len(filtered),
+    }
+
+
+@app.post("/api/cbc/sessions/import")
+async def api_cbc_sessions_import(data: dict):
+    """Import a cbc session into CLIConductor (Session only, no worker spawned)."""
+    session_id = data.get("session_id")
+    if not session_id:
+        return {"error": "session_id is required"}
+
+    cwd = data.get("cwd") or str(Path.cwd())
+
+    # Check if already imported
+    for s in sess.list_all():
+        if s.cbc_session_id == session_id:
+            return {"error": f"Session {session_id} already imported as {s.id}"}
+
+    try:
+        history = cbc_sessions.parse_cbc_history(session_id, cwd)
+    except Exception as e:
+        return {"error": f"Failed to parse session history: {e}"}
+
+    name = data.get("name", "") or f"cbc-{session_id[:8]}"
+
+    s = sess.create(
+        name=name,
+        cbc_session_id=session_id,
+        history=history,
+    )
+
+    await broadcast({
+        "type": "session.created",
+        "sessionId": s.id,
+        "name": s.name,
+    })
+
+    return _session_to_api(s)
 
 
 # ── Worker actions ──

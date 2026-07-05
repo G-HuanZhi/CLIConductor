@@ -191,6 +191,35 @@ function refreshSessions(): void {
     });
 }
 
+// ── cbc Session Import ──
+
+interface CbcSessionItem {
+  session_id: string;
+  project_dir: string;
+  title: string;
+  message_count: number;
+  first_timestamp: string;
+  last_timestamp: string;
+  model: string;
+  forked_from: string | null;
+}
+
+async function fetchCbcSessions(cwd: string = ''): Promise<CbcSessionItem[]> {
+  const params = cwd ? `?cwd=${encodeURIComponent(cwd)}` : '';
+  const resp = await fetch(`/api/cbc/sessions${params}`);
+  const data = await resp.json();
+  return data.sessions || [];
+}
+
+async function importCbcSession(sessionId: string, cwd: string = ''): Promise<any> {
+  const resp = await fetch('/api/cbc/sessions/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, cwd }),
+  });
+  return await resp.json();
+}
+
 function renderSessionList(): void {
   const el = document.getElementById('sessionList')!;
   el.innerHTML = '';
@@ -765,6 +794,69 @@ function init(): void {
         syncPanelFromServer();
     });
   refreshSessions();
+
+  // ── Import Modal ──
+  const importCbcBtn = document.getElementById('importCbcBtn') as HTMLButtonElement;
+  const importModal = document.getElementById('importModal') as HTMLDivElement;
+  const closeImportModal = document.getElementById('closeImportModal') as HTMLButtonElement;
+  const cbcSessionListEl = document.getElementById('cbcSessionList') as HTMLDivElement;
+  const cbcSessionCountEl = document.getElementById('cbcSessionCount') as HTMLDivElement;
+
+  importCbcBtn.addEventListener('click', async () => {
+    importModal.classList.add('open');
+    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
+    cbcSessionCountEl.textContent = '';
+    try {
+      const sessions = await fetchCbcSessions();
+      if (sessions.length === 0) {
+        cbcSessionListEl.innerHTML = '<div class="im-loading">No sessions to import.</div>';
+        return;
+      }
+      cbcSessionCountEl.textContent = `${sessions.length} session(s) found`;
+      cbcSessionListEl.innerHTML = sessions.map((s: CbcSessionItem) => {
+        const ts = s.last_timestamp ? new Date(s.last_timestamp).toLocaleString() : '';
+        const forkBadge = s.forked_from ? ' \uD83D\uDD00' : '';
+        return `
+          <div class="im-item" data-session-id="${esc(s.session_id)}">
+            <div class="im-title">${esc(s.title || 'Untitled')}${forkBadge}</div>
+            <div class="im-meta">
+              ${s.message_count} msgs \u00B7 ${esc(s.model || '?')} \u00B7 ${esc(ts)}
+            </div>
+          </div>`;
+      }).join('');
+
+      cbcSessionListEl.querySelectorAll<HTMLElement>('.im-item').forEach((el: HTMLElement) => {
+        el.addEventListener('click', async () => {
+          const sid = el.dataset.sessionId!;
+          el.style.opacity = '0.5';
+          el.style.pointerEvents = 'none';
+          const result = await importCbcSession(sid);
+          if (result.error) {
+            toast(result.error);
+            el.style.opacity = '1';
+            el.style.pointerEvents = '';
+            return;
+          }
+          importModal.classList.remove('open');
+          await refreshSessions();
+          selectSession(result.id);
+          toast('Session imported');
+        });
+      });
+    } catch (e: any) {
+      cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+    }
+  });
+
+  closeImportModal.addEventListener('click', () => {
+    importModal.classList.remove('open');
+  });
+
+  importModal.addEventListener('click', (e: MouseEvent) => {
+    if (e.target === importModal) {
+      importModal.classList.remove('open');
+    }
+  });
 }
 
 function buildModelSelect(): void {
