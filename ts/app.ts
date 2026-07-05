@@ -520,7 +520,7 @@ function markSettingsApplied(): void {
   updateSetButtonVisibility();
 }
 
-// ── Worker actions (restart / interrupt / kill) ──
+// ── Worker actions (restart / interrupt / takeover / kill) ──
 
 function restartWorker(): void {
   if (currentWorkerId) {
@@ -568,6 +568,29 @@ function interruptWorker(): void {
     });
 }
 
+function takeover(): void {
+  if (!currentWorkerId) {
+    toast('No worker running');
+    return;
+  }
+  fetch('/api/worker/' + currentWorkerId + '/takeover', { method: 'POST' })
+    .then((r: Response) => r.json())
+    .then((d: ApiGenericResponse) => {
+      if (d.error) {
+        toast(d.error);
+        return;
+      }
+      navigator.clipboard
+        .writeText('cbc --resume ' + (d.cbcSessionId ?? ''))
+        .then(() => {
+          toast('PowerShell opened. Session copied to clipboard.');
+        })
+        .catch(() => {
+          toast('PowerShell opened for takeover.');
+        });
+    });
+}
+
 function killWorker(): void {
   if (!currentWorkerId) {
     toast('No worker running');
@@ -582,11 +605,6 @@ function killWorker(): void {
     .then((d: ApiGenericResponse) => {
       if (d.error) toast(d.error);
     });
-}
-
-function toggleSidebar(): void {
-  document.getElementById('sidebar')!.classList.toggle('open');
-  document.getElementById('sidebarOverlay')!.classList.toggle('show');
 }
 
 // ── Send message ──
