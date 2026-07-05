@@ -443,6 +443,16 @@ body {
   background: #58a6ff66;
 }
 
+/* ── Worker dot indicator ── */
+#mobileWorkerDot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  align-self: center;
+  margin-right: 4px;
+}
+
 /* ── Toast ── */
 .toast {
   position: fixed;
