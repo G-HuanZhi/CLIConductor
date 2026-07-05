@@ -418,7 +418,7 @@ function markSettingsApplied() {
     };
     updateSetButtonVisibility();
 }
-// ── Worker actions (restart / interrupt / kill) ──
+// ── Worker actions (restart / interrupt / takeover / kill) ──
 function restartWorker() {
     if (currentWorkerId) {
         // Always restart with current panel settings (user intent).
@@ -464,6 +464,28 @@ function interruptWorker() {
             toast(d.error);
     });
 }
+function takeover() {
+    if (!currentWorkerId) {
+        toast('No worker running');
+        return;
+    }
+    fetch('/api/worker/' + currentWorkerId + '/takeover', { method: 'POST' })
+        .then((r) => r.json())
+        .then((d) => {
+        if (d.error) {
+            toast(d.error);
+            return;
+        }
+        navigator.clipboard
+            .writeText('cbc --resume ' + (d.cbcSessionId ?? ''))
+            .then(() => {
+            toast('PowerShell opened. Session copied to clipboard.');
+        })
+            .catch(() => {
+            toast('PowerShell opened for takeover.');
+        });
+    });
+}
 function killWorker() {
     if (!currentWorkerId) {
         toast('No worker running');
@@ -480,10 +502,6 @@ function killWorker() {
         if (d.error)
             toast(d.error);
     });
-}
-function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
-    document.getElementById('sidebarOverlay').classList.toggle('show');
 }
 // ── Send message ──
 function send() {

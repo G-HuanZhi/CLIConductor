@@ -56,6 +56,11 @@ agent_clients: set[WebSocket] = set()
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 WORKDIRS_DIR = DATA_DIR / "workdirs"
 DASHBOARD_FILE = Path(__file__).resolve().parent.parent / "index.html"
+MOBILE_DASHBOARD_FILE = Path(__file__).resolve().parent.parent / "mobile.html"
+_MOBILE_UA_RE = re.compile(
+    r"Mobile|Android|iPhone|iPad|iPod|BlackBerry|Windows Phone|webOS",
+    re.IGNORECASE,
+)
 
 
 async def broadcast(data: dict):
@@ -193,7 +198,10 @@ async def favicon():
 
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard():
+async def dashboard(request: Request):
+    ua = request.headers.get("user-agent", "")
+    if _MOBILE_UA_RE.search(ua):
+        return MOBILE_DASHBOARD_FILE.read_text(encoding="utf-8")
     return DASHBOARD_FILE.read_text(encoding="utf-8")
 
 
