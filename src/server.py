@@ -103,6 +103,15 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def no_cache_api(request: Request, call_next):
+    """Prevent browser/CDN from caching API responses."""
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+
 # ── helpers ──
 
 def _session_to_api(s: sess.Session):
