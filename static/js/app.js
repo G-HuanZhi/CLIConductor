@@ -52,6 +52,9 @@ function onWsMessage(e) {
         case 'worker.result':
             if (d.sessionId === currentSessionId)
                 appendResult(d);
+            _setLocalWorker(d.sessionId, d.workerId, 'idle');
+            if (d.sessionId === currentSessionId)
+                updateTopBar();
             refreshSessions();
             break;
         case 'worker.status':
