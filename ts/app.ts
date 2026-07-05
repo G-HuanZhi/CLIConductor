@@ -111,20 +111,10 @@ function onWsMessage(e: MessageEvent): void {
     case 'worker.restarted':
     case 'worker.reconfigured':
       _setLocalWorker(d.sessionId, d.workerId, 'idle');
-      if (d.sessionId === currentSessionId) {
-        currentWorkerId = d.workerId ?? null;
-        updateTopBar();
-      }
-      refreshSessions();
       break;
     case 'worker.destroyed':
     case 'worker.crashed':
       _setLocalWorker(d.sessionId, null, null);
-      if (d.sessionId === currentSessionId) {
-        currentWorkerId = null;
-        updateTopBar();
-      }
-      refreshSessions();
       break;
     case 'worker.stream':
       if (d.sessionId === currentSessionId && d.event) {
@@ -134,13 +124,9 @@ function onWsMessage(e: MessageEvent): void {
     case 'worker.result':
       if (d.sessionId === currentSessionId) appendResult(d);
       _setLocalWorker(d.sessionId, d.workerId, 'idle');
-      if (d.sessionId === currentSessionId) updateTopBar();
-      refreshSessions();
       break;
     case 'worker.status':
       _setLocalWorker(d.sessionId, d.workerId, d.status ?? 'idle');
-      if (d.sessionId === currentSessionId) updateTopBar();
-      refreshSessions();
       break;
     case 'session.created':
     case 'session.renamed':
@@ -166,7 +152,12 @@ function _setLocalWorker(
       break;
     }
   }
+  if (sessionId === currentSessionId) {
+    currentWorkerId = workerId ?? null;
+    updateTopBar();
+  }
   renderSessionList();
+  refreshSessions();
 }
 
 // ── Session list ──
