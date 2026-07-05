@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CLIConductor</title>
 <link rel="stylesheet" href="/static/css/styles.css">
 </head>
@@ -19,6 +20,7 @@
     <span class="chat-name" id="chatName" style="display:none"></span>
     <span class="chat-model" id="chatModel" style="display:none"></span>
     <span id="chatStatus" class="chat-status"></span>
+    <button id="menuToggle" onclick="toggleSidebar()" style="display:none">☰</button>
     <button id="settingsBtn" onclick="toggleSettings()" style="display:none">⚙</button>
   </div>
 
@@ -41,7 +43,6 @@
     <div class="sep"></div>
     <button class="btn" onclick="restartWorker()">Restart</button>
     <button class="btn" onclick="interruptWorker()">Interrupt</button>
-    <button class="btn btn-p" onclick="takeover()">Takeover</button>
     <button class="btn btn-d" onclick="killWorker()">Kill</button>
   </div>
 
@@ -54,6 +55,7 @@
 </div>
 
 <div id="toast" class="toast"></div>
+<div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
 
 <script src="/static/js/app.js"></script>
 </body>
