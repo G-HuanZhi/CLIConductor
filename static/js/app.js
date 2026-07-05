@@ -13,14 +13,7 @@ let lastSyncedSettings = null;
 // ── WebSocket ──
 const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
 const ws = new WebSocket(wsProtocol + location.host + '/ws');
-let _pollTimer = null;
-ws.onopen = function () {
-    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
-    refreshSessions();
-};
-ws.onclose = function () {
-    if (!_pollTimer) _pollTimer = setInterval(refreshSessions, 5000);
-};
+ws.onopen = refreshSessions;
 ws.onmessage = onWsMessage;
 function onWsMessage(e) {
     const d = JSON.parse(e.data);
@@ -58,9 +51,9 @@ function onWsMessage(e) {
             break;
     }
 }
-/** Apply worker update from WS event. Side effects: syncs currentWorkerId,
- *  updateTopBar (incl. mobile dot), renderSessionList, triggers debounced
- *  refreshSessions fetch. */
+/** Apply a worker update from a WebSocket event.
+ *  Side effects: syncs currentWorkerId, updateTopBar (incl. mobile dot),
+ *  renderSessionList, and triggers a debounced refreshSessions fetch. */
 function _applyWorkerUpdate(sessionId, workerId, status) {
     for (let i = 0; i < modelData.length; i++) {
         if (modelData[i].id === sessionId) {
@@ -77,23 +70,15 @@ function _applyWorkerUpdate(sessionId, workerId, status) {
     refreshSessions();
 }
 // ── Session list ──
-let _refreshTimer = null;
 let _refreshVersion = 0;
 function refreshSessions() {
-    if (_refreshTimer) return;
-    _refreshTimer = setTimeout(() => {
-        _refreshTimer = null;
-        _doRefreshSessions();
-    }, 150);
-}
-function _doRefreshSessions() {
     _refreshVersion++;
     const version = _refreshVersion;
     fetch('/api/sessions')
         .then((r) => r.json())
         .then((data) => {
-        // Ignore stale responses (e.g. poll in-flight before session creation)
-        if (version !== _refreshVersion) return;
+        if (version !== _refreshVersion)
+            return;
         modelData = data.sessions || [];
         renderSessionList();
         const matched = modelData.find((s) => s.id === currentSessionId);
@@ -112,6 +97,20 @@ function _doRefreshSessions() {
         if (currentSessionId)
             updateTopBar();
     });
+}
+async function fetchCbcSessions(cwd = '') {
+    const params = cwd ? `?cwd=${encodeURIComponent(cwd)}` : '';
+    const resp = await fetch(`/api/cbc/sessions${params}`);
+    const data = await resp.json();
+    return data.sessions || [];
+}
+async function importCbcSession(sessionId, cwd = '') {
+    const resp = await fetch('/api/cbc/sessions/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, cwd }),
+    });
+    return await resp.json();
 }
 function renderSessionList() {
     const el = document.getElementById('sessionList');
@@ -302,8 +301,8 @@ function syncPanelFromServer() {
         return;
     if (!_adapterConfigReady)
         return;
-    const model = s.model || defaultModel;
     const sel = document.getElementById('settingModel');
+    const model = s.model || defaultModel;
     sel.value = allModels.indexOf(model) >= 0 ? model : '';
     document.getElementById('settingMode').value =
         s.permissionMode || '';
@@ -661,6 +660,65 @@ function init() {
             syncPanelFromServer();
     });
     refreshSessions();
+    // ── Import Modal ──
+    const importCbcBtn = document.getElementById('importCbcBtn');
+    const importModal = document.getElementById('importModal');
+    const closeImportModal = document.getElementById('closeImportModal');
+    const cbcSessionListEl = document.getElementById('cbcSessionList');
+    const cbcSessionCountEl = document.getElementById('cbcSessionCount');
+    importCbcBtn.addEventListener('click', async () => {
+        importModal.classList.add('open');
+        cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
+        cbcSessionCountEl.textContent = '';
+        try {
+            const sessions = await fetchCbcSessions();
+            if (sessions.length === 0) {
+                cbcSessionListEl.innerHTML = '<div class="im-loading">No sessions to import.</div>';
+                return;
+            }
+            cbcSessionCountEl.textContent = `${sessions.length} session(s) found`;
+            cbcSessionListEl.innerHTML = sessions.map((s) => {
+                const ts = s.last_timestamp ? new Date(s.last_timestamp).toLocaleString() : '';
+                const forkBadge = s.forked_from ? ' \uD83D\uDD00' : '';
+                return `
+          <div class="im-item" data-session-id="${esc(s.session_id)}">
+            <div class="im-title">${esc(s.title || 'Untitled')}${forkBadge}</div>
+            <div class="im-meta">
+              ${s.message_count} msgs \u00B7 ${esc(s.model || '?')} \u00B7 ${esc(ts)}
+            </div>
+          </div>`;
+            }).join('');
+            cbcSessionListEl.querySelectorAll('.im-item').forEach((el) => {
+                el.addEventListener('click', async () => {
+                    const sid = el.dataset.sessionId;
+                    el.style.opacity = '0.5';
+                    el.style.pointerEvents = 'none';
+                    const result = await importCbcSession(sid);
+                    if (result.error) {
+                        toast(result.error);
+                        el.style.opacity = '1';
+                        el.style.pointerEvents = '';
+                        return;
+                    }
+                    importModal.classList.remove('open');
+                    await refreshSessions();
+                    selectSession(result.id);
+                    toast('Session imported');
+                });
+            });
+        }
+        catch (e) {
+            cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+        }
+    });
+    closeImportModal.addEventListener('click', () => {
+        importModal.classList.remove('open');
+    });
+    importModal.addEventListener('click', (e) => {
+        if (e.target === importModal) {
+            importModal.classList.remove('open');
+        }
+    });
 }
 function buildModelSelect() {
     const sel = document.getElementById('settingModel');
@@ -719,7 +777,7 @@ function toast(msg) {
         el.className = 'toast';
     }, 3000);
 }
-window.addEventListener('unhandledrejection', function (e) {
+window.addEventListener('unhandledrejection', (e) => {
     toast('Request failed');
     e.preventDefault();
 });

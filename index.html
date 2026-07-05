@@ -3,13 +3,16 @@
 <head>
 <meta charset="utf-8">
 <title>CLIConductor</title>
-<link rel="stylesheet" href="/static/css/styles.css?v=2">
+<link rel="stylesheet" href="/static/css/styles.css?v=3">
 </head>
 <body>
 
 <div id="sidebar">
   <h1>CLIConductor</h1>
-  <button id="newSessBtn" onclick="newSession()">+ New Session</button>
+  <div class="sess-actions">
+    <button id="newSessBtn" onclick="newSession()">+ New</button>
+    <button id="importCbcBtn">Import</button>
+  </div>
   <div id="sessionList"></div>
 </div>
 
@@ -53,8 +56,20 @@
   </div>
 </div>
 
+<!-- Import cbc Session Modal -->
+<div id="importModal">
+  <div class="im-panel">
+    <div class="im-header">
+      <span class="im-heading">Import from cbc</span>
+      <button id="closeImportModal" class="im-close">&times;</button>
+    </div>
+    <div id="cbcSessionList" class="im-body"></div>
+    <div id="cbcSessionCount" class="im-footer"></div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
-<script src="/static/js/app.js?v=2"></script>
+<script src="/static/js/app.js?v=3"></script>
 </body>
 </html>
