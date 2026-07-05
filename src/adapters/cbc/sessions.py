@@ -28,14 +28,20 @@ def _project_dir(project_cwd: str | None) -> Path:
     return base
 
 
-def list_cbc_sessions(project_cwd: str | None = None) -> list[dict]:
+def list_cbc_sessions(project_cwd: str | None = None, *, project_dir: str | None = None) -> list[dict]:
     """List resumable cbc sessions from ~/.codebuddy/projects/.
+
+    project_cwd: filesystem path → auto-sanitize to cbc project dir
+    project_dir:  cbc project dir name directly (e.g. "d-project-CLIConductor")
 
     Returns a list of dicts with keys: session_id, title, message_count,
     first_timestamp, last_timestamp, model, forked_from.
     """
     sessions: list[dict] = []
-    proj_dir = _project_dir(project_cwd)
+    if project_dir:
+        proj_dir = Path(os.path.expanduser("~/.codebuddy/projects")) / project_dir
+    else:
+        proj_dir = _project_dir(project_cwd)
     if not proj_dir.exists():
         return sessions
 
@@ -68,12 +74,67 @@ def list_cbc_sessions(project_cwd: str | None = None) -> list[dict]:
     return sessions
 
 
-def parse_cbc_history(session_id: str, project_cwd: str | None = None) -> list[dict]:
+
+
+def list_cbc_projects() -> list[dict]:
+    """Scan ~/.codebuddy/projects/ and return available project directories.
+
+    Returns list of dicts with keys: project_dir, session_count, path_hint.
+    """
+    base = Path(os.path.expanduser("~/.codebuddy/projects"))
+    if not base.exists():
+        return []
+
+    projects: list[dict] = []
+    for child in sorted(base.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        if not child.is_dir():
+            continue
+        # Count jsonl files (not agent.jsonl, not subagent dirs)
+        session_count = 0
+        for f in child.iterdir():
+            if f.suffix == ".jsonl" and f.stem != "agent" and f.is_file():
+                session_count += 1
+        if session_count == 0:
+            continue
+
+        # Generate a path hint from project_dir name
+        path_hint = _project_dir_to_path(child.name)
+
+        projects.append({
+            "project_dir": child.name,
+            "session_count": session_count,
+            "path_hint": path_hint,
+        })
+
+    return projects
+
+
+def _project_dir_to_path(dir_name: str) -> str:
+    """Reverse cbc's sanitization to create a reasonable path hint.
+
+    e.g. d-project-CLIConductor → D:/project/CLIConductor (best guess).
+    """
+    parts = dir_name.split("-")
+    if not parts:
+        return ""
+    # Reconstruct: first part starts with drive letter, rest join with /
+    drive = parts[0] + ":"  # e.g. "d:"
+    rest = "/".join(parts[1:])
+    return (drive + "/" + rest).upper()
+
+
+def parse_cbc_history(session_id: str, project_cwd: str | None = None, *, project_dir: str | None = None) -> list[dict]:
     """Parse cbc session JSONL into CLIConductor history format.
+
+    project_cwd: filesystem path → auto-sanitize to cbc project dir
+    project_dir:  cbc project dir name directly (e.g. "d-project-CLIConductor")
 
     Returns list of {"role": str, "content": str} blocks.
     """
-    proj_dir = _project_dir(project_cwd)
+    if project_dir:
+        proj_dir = Path(os.path.expanduser("~/.codebuddy/projects")) / project_dir
+    else:
+        proj_dir = _project_dir(project_cwd)
     path = proj_dir / f"{session_id}.jsonl"
     if not path.exists():
         return []

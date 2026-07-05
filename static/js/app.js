@@ -98,17 +98,21 @@ function refreshSessions() {
             updateTopBar();
     });
 }
-async function fetchCbcSessions(cwd = '') {
-    const params = cwd ? `?cwd=${encodeURIComponent(cwd)}` : '';
-    const resp = await fetch(`/api/cbc/sessions${params}`);
+async function fetchCbcProjects() {
+    const resp = await fetch('/api/cbc/projects');
+    const data = await resp.json();
+    return data.projects || [];
+}
+async function fetchCbcSessions(projectDir) {
+    const resp = await fetch(`/api/cbc/sessions?project_dir=${encodeURIComponent(projectDir)}`);
     const data = await resp.json();
     return data.sessions || [];
 }
-async function importCbcSession(sessionId, cwd = '') {
+async function importCbcSession(sessionId, projectDir) {
     const resp = await fetch('/api/cbc/sessions/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, cwd }),
+        body: JSON.stringify({ session_id: sessionId, project_dir: projectDir }),
     });
     return await resp.json();
 }
@@ -664,51 +668,86 @@ function init() {
     const importCbcBtn = document.getElementById('importCbcBtn');
     const importModal = document.getElementById('importModal');
     const closeImportModal = document.getElementById('closeImportModal');
+    const cbcProjectSelect = document.getElementById('cbcProjectSelect');
     const cbcSessionListEl = document.getElementById('cbcSessionList');
     const cbcSessionCountEl = document.getElementById('cbcSessionCount');
+    let currentProjectDir = '';
+    function renderCbcSessions(sessions) {
+        if (sessions.length === 0) {
+            cbcSessionListEl.innerHTML = '<div class="im-loading">No sessions to import.</div>';
+            cbcSessionCountEl.textContent = '';
+            return;
+        }
+        cbcSessionCountEl.textContent = `${sessions.length} session(s) found`;
+        cbcSessionListEl.innerHTML = sessions.map((s) => {
+            const ts = s.last_timestamp ? new Date(s.last_timestamp).toLocaleString() : '';
+            const forkBadge = s.forked_from ? ' \uD83D\uDD00' : '';
+            return `
+        <div class="im-item" data-session-id="${esc(s.session_id)}">
+          <div class="im-title">${esc(s.title || 'Untitled')}${forkBadge}</div>
+          <div class="im-meta">
+            ${s.message_count} msgs \u00B7 ${esc(s.model || '?')} \u00B7 ${esc(ts)}
+          </div>
+        </div>`;
+        }).join('');
+        cbcSessionListEl.querySelectorAll('.im-item').forEach((el) => {
+            el.addEventListener('click', async () => {
+                const sid = el.dataset.sessionId;
+                el.style.opacity = '0.5';
+                el.style.pointerEvents = 'none';
+                const result = await importCbcSession(sid, currentProjectDir);
+                if (result.error) {
+                    toast(result.error);
+                    el.style.opacity = '1';
+                    el.style.pointerEvents = '';
+                    return;
+                }
+                importModal.classList.remove('open');
+                await refreshSessions();
+                selectSession(result.id);
+                toast('Session imported');
+            });
+        });
+    }
+    async function loadCbcSessions(projectDir) {
+        cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
+        cbcSessionCountEl.textContent = '';
+        try {
+            const sessions = await fetchCbcSessions(projectDir);
+            renderCbcSessions(sessions);
+        }
+        catch (e) {
+            cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+        }
+    }
     importCbcBtn.addEventListener('click', async () => {
         importModal.classList.add('open');
         cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
         cbcSessionCountEl.textContent = '';
+        // Populate project selector
+        cbcProjectSelect.innerHTML = '<option value="">Loading...</option>';
         try {
-            const sessions = await fetchCbcSessions();
-            if (sessions.length === 0) {
-                cbcSessionListEl.innerHTML = '<div class="im-loading">No sessions to import.</div>';
+            const projects = await fetchCbcProjects();
+            if (projects.length === 0) {
+                cbcProjectSelect.innerHTML = '<option value="">No projects found</option>';
+                cbcSessionListEl.innerHTML = '<div class="im-loading">No cbc projects found.</div>';
                 return;
             }
-            cbcSessionCountEl.textContent = `${sessions.length} session(s) found`;
-            cbcSessionListEl.innerHTML = sessions.map((s) => {
-                const ts = s.last_timestamp ? new Date(s.last_timestamp).toLocaleString() : '';
-                const forkBadge = s.forked_from ? ' \uD83D\uDD00' : '';
-                return `
-          <div class="im-item" data-session-id="${esc(s.session_id)}">
-            <div class="im-title">${esc(s.title || 'Untitled')}${forkBadge}</div>
-            <div class="im-meta">
-              ${s.message_count} msgs \u00B7 ${esc(s.model || '?')} \u00B7 ${esc(ts)}
-            </div>
-          </div>`;
-            }).join('');
-            cbcSessionListEl.querySelectorAll('.im-item').forEach((el) => {
-                el.addEventListener('click', async () => {
-                    const sid = el.dataset.sessionId;
-                    el.style.opacity = '0.5';
-                    el.style.pointerEvents = 'none';
-                    const result = await importCbcSession(sid);
-                    if (result.error) {
-                        toast(result.error);
-                        el.style.opacity = '1';
-                        el.style.pointerEvents = '';
-                        return;
-                    }
-                    importModal.classList.remove('open');
-                    await refreshSessions();
-                    selectSession(result.id);
-                    toast('Session imported');
-                });
-            });
+            // Default: first project
+            currentProjectDir = projects[0].project_dir;
+            cbcProjectSelect.innerHTML = projects.map((p) => `<option value="${esc(p.project_dir)}">${esc(p.path_hint || p.project_dir)} (${p.session_count})</option>`).join('');
+            cbcProjectSelect.value = currentProjectDir;
+            await loadCbcSessions(currentProjectDir);
         }
         catch (e) {
+            cbcProjectSelect.innerHTML = '<option value="">Failed to load</option>';
             cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+        }
+    });
+    cbcProjectSelect.addEventListener('change', async () => {
+        currentProjectDir = cbcProjectSelect.value;
+        if (currentProjectDir) {
+            await loadCbcSessions(currentProjectDir);
         }
     });
     closeImportModal.addEventListener('click', () => {

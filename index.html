@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>CLIConductor</title>
-<link rel="stylesheet" href="/static/css/styles.css?v=3">
+<link rel="stylesheet" href="/static/css/styles.css?v=4">
 </head>
 <body>
 
@@ -63,6 +63,12 @@
       <span class="im-heading">Import from cbc</span>
       <button id="closeImportModal" class="im-close">&times;</button>
     </div>
+    <div class="im-select">
+      <label for="cbcProjectSelect">Workdir</label>
+      <select id="cbcProjectSelect">
+        <option value="">Loading...</option>
+      </select>
+    </div>
     <div id="cbcSessionList" class="im-body"></div>
     <div id="cbcSessionCount" class="im-footer"></div>
   </div>
@@ -70,6 +76,6 @@
 
 <div id="toast" class="toast"></div>
 
-<script src="/static/js/app.js?v=3"></script>
+<script src="/static/js/app.js?v=4"></script>
 </body>
 </html>

@@ -519,6 +519,37 @@ body {
   color: #e6edf3;
 }
 
+.im-select {
+  padding: 10px 18px;
+  border-bottom: 1px solid #21262d;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.im-select label {
+  font-size: .8rem;
+  color: #8b949e;
+  white-space: nowrap;
+}
+
+.im-select select {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  background: #0d1117;
+  color: #e6edf3;
+  font-size: .8rem;
+  min-height: 28px;
+}
+
+.im-select select:focus {
+  outline: none;
+  border-color: #58a6ff;
+}
+
 .im-body {
   flex: 1;
   overflow-y: auto;

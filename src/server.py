@@ -561,6 +561,13 @@ async def api_list():
 
 # ── cbc Session Import ──
 
+@app.get("/api/cbc/projects")
+async def api_cbc_projects():
+    """List cbc project directories that have resumable sessions."""
+    projects = cbc_sessions.list_cbc_projects()
+    return {"projects": projects}
+
+
 def _sanitize_project_dir(cwd: str) -> str:
     """Mirror cbc's sanitize logic for exact dir matching."""
     p = cwd.replace(":", "")
@@ -571,13 +578,20 @@ def _sanitize_project_dir(cwd: str) -> str:
 
 
 @app.get("/api/cbc/sessions")
-async def api_cbc_sessions(cwd: str = "", all: int = 0):
-    """List external cbc sessions available for import."""
+async def api_cbc_sessions(project_dir: str = "", cwd: str = "", all: int = 0):
+    """List external cbc sessions available for import.
+
+    project_dir: cbc project dir name (e.g. "d-project-CLIConductor")
+    cwd:         fallback filesystem path (auto-sanitized)
+    """
     config = load_config()
     filter_cfg = config.get("cbc_import", {})
 
-    cwd = cwd or str(Path.cwd())
-    all_sessions = cbc_sessions.list_cbc_sessions(cwd)
+    if project_dir:
+        all_sessions = cbc_sessions.list_cbc_sessions(project_dir=project_dir)
+    else:
+        cwd = cwd or str(Path.cwd())
+        all_sessions = cbc_sessions.list_cbc_sessions(cwd)
 
     if all:
         return {"sessions": all_sessions, "total": len(all_sessions)}
@@ -626,6 +640,7 @@ async def api_cbc_sessions_import(data: dict):
     if not session_id:
         return {"error": "session_id is required"}
 
+    project_dir = data.get("project_dir")
     cwd = data.get("cwd") or str(Path.cwd())
 
     # Check if already imported
@@ -634,7 +649,10 @@ async def api_cbc_sessions_import(data: dict):
             return {"error": f"Session {session_id} already imported as {s.id}"}
 
     try:
-        history = cbc_sessions.parse_cbc_history(session_id, cwd)
+        if project_dir:
+            history = cbc_sessions.parse_cbc_history(session_id, project_dir=project_dir)
+        else:
+            history = cbc_sessions.parse_cbc_history(session_id, cwd)
     except Exception as e:
         return {"error": f"Failed to parse session history: {e}"}
 
