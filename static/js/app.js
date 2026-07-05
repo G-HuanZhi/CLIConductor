@@ -668,10 +668,44 @@ function init() {
     const importCbcBtn = document.getElementById('importCbcBtn');
     const importModal = document.getElementById('importModal');
     const closeImportModal = document.getElementById('closeImportModal');
+    const cbcDriveSelect = document.getElementById('cbcDriveSelect');
     const cbcProjectSelect = document.getElementById('cbcProjectSelect');
     const cbcSessionListEl = document.getElementById('cbcSessionList');
     const cbcSessionCountEl = document.getElementById('cbcSessionCount');
+    let allProjects = [];
     let currentProjectDir = '';
+    // Group projects by drive letter
+    function buildDriveSelect() {
+        const drives = [...new Set(allProjects.map((p) => p.drive))].sort();
+        cbcDriveSelect.innerHTML = '<option value="">Drive</option>';
+        drives.forEach((d) => {
+            const total = allProjects.filter((p) => p.drive === d)
+                .reduce((sum, p) => sum + p.session_count, 0);
+            const opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = `${d} (${total} sessions)`;
+            cbcDriveSelect.appendChild(opt);
+        });
+        if (drives.length === 1) {
+            cbcDriveSelect.value = drives[0];
+            cbcDriveSelect.dispatchEvent(new Event('change'));
+        }
+    }
+    function buildProjectSelect(drive) {
+        const projects = allProjects.filter((p) => p.drive === drive);
+        projects.sort((a, b) => a.short_label.localeCompare(b.short_label));
+        cbcProjectSelect.innerHTML = '<option value="">Project</option>';
+        projects.forEach((p) => {
+            const opt = document.createElement('option');
+            opt.value = p.project_dir;
+            opt.textContent = `${p.short_label} (${p.session_count})`;
+            cbcProjectSelect.appendChild(opt);
+        });
+        if (projects.length > 0) {
+            cbcProjectSelect.value = projects[0].project_dir;
+            currentProjectDir = projects[0].project_dir;
+        }
+    }
     function renderCbcSessions(sessions) {
         if (sessions.length === 0) {
             cbcSessionListEl.innerHTML = '<div class="im-loading">No sessions to import.</div>';
@@ -724,30 +758,39 @@ function init() {
         importModal.classList.add('open');
         cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
         cbcSessionCountEl.textContent = '';
-        // Populate project selector
-        cbcProjectSelect.innerHTML = '<option value="">Loading...</option>';
+        cbcDriveSelect.innerHTML = '<option value="">Loading...</option>';
+        cbcProjectSelect.innerHTML = '<option value="">-</option>';
         try {
-            const projects = await fetchCbcProjects();
-            if (projects.length === 0) {
-                cbcProjectSelect.innerHTML = '<option value="">No projects found</option>';
+            allProjects = await fetchCbcProjects();
+            if (allProjects.length === 0) {
+                cbcDriveSelect.innerHTML = '<option value="">No projects</option>';
                 cbcSessionListEl.innerHTML = '<div class="im-loading">No cbc projects found.</div>';
                 return;
             }
-            // Default: first project
-            currentProjectDir = projects[0].project_dir;
-            cbcProjectSelect.innerHTML = projects.map((p) => `<option value="${esc(p.project_dir)}">${esc(p.path_hint || p.project_dir)} (${p.session_count})</option>`).join('');
-            cbcProjectSelect.value = currentProjectDir;
-            await loadCbcSessions(currentProjectDir);
+            buildDriveSelect();
         }
         catch (e) {
-            cbcProjectSelect.innerHTML = '<option value="">Failed to load</option>';
+            cbcDriveSelect.innerHTML = '<option value="">Failed</option>';
             cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
         }
     });
-    cbcProjectSelect.addEventListener('change', async () => {
+    cbcDriveSelect.addEventListener('change', () => {
+        const drive = cbcDriveSelect.value;
+        if (!drive) {
+            cbcProjectSelect.innerHTML = '<option value="">Project</option>';
+            cbcSessionListEl.innerHTML = '<div class="im-loading">Select a project.</div>';
+            cbcSessionCountEl.textContent = '';
+            return;
+        }
+        buildProjectSelect(drive);
+        if (currentProjectDir) {
+            loadCbcSessions(currentProjectDir);
+        }
+    });
+    cbcProjectSelect.addEventListener('change', () => {
         currentProjectDir = cbcProjectSelect.value;
         if (currentProjectDir) {
-            await loadCbcSessions(currentProjectDir);
+            loadCbcSessions(currentProjectDir);
         }
     });
     closeImportModal.addEventListener('click', () => {

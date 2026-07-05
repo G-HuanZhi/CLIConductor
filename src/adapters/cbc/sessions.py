@@ -79,7 +79,8 @@ def list_cbc_sessions(project_cwd: str | None = None, *, project_dir: str | None
 def list_cbc_projects() -> list[dict]:
     """Scan ~/.codebuddy/projects/ and return available project directories.
 
-    Returns list of dicts with keys: project_dir, session_count, path_hint.
+    Returns list of dicts with keys: project_dir, session_count, path_hint,
+    drive, short_label.
     """
     base = Path(os.path.expanduser("~/.codebuddy/projects"))
     if not base.exists():
@@ -97,16 +98,34 @@ def list_cbc_projects() -> list[dict]:
         if session_count == 0:
             continue
 
-        # Generate a path hint from project_dir name
-        path_hint = _project_dir_to_path(child.name)
+        drive, short_label = _parse_project_label(child.name)
 
         projects.append({
             "project_dir": child.name,
             "session_count": session_count,
-            "path_hint": path_hint,
+            "path_hint": _project_dir_to_path(child.name),
+            "drive": drive,
+            "short_label": short_label,
         })
 
     return projects
+
+
+def _parse_project_label(dir_name: str) -> tuple[str, str]:
+    """Extract drive letter and short label from sanitized project name.
+
+    e.g. d-project-CLIConductor → ("D:", "CLIConductor")
+         d-other-data-project  → ("D:", "other/data/project")
+    """
+    parts = dir_name.split("-")
+    if not parts:
+        return ("", dir_name)
+    drive = parts[0].upper() + ":"
+    # Short label: everything after the drive letter and first directory
+    short_label = "-".join(parts[2:]) if len(parts) >= 2 else dir_name
+    if not short_label:
+        short_label = dir_name
+    return drive, short_label
 
 
 def _project_dir_to_path(dir_name: str) -> str:
