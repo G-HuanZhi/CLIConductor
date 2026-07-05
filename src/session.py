@@ -77,16 +77,20 @@ def create(name: str, model: str | None = None,
            always_thinking_enabled: bool = False,
            effort: str = "",
            max_thinking_tokens: int = 16000,
-           workdir: str = "") -> Session:
+           workdir: str = "",
+           cbc_session_id: str | None = None,
+           history: list[dict] | None = None) -> Session:
     s = Session(
         id=_new_id(),
         name=name,
+        cbc_session_id=cbc_session_id,
         model=model,
         permission_mode=permission_mode,
         always_thinking_enabled=always_thinking_enabled,
         effort=effort,
         max_thinking_tokens=max_thinking_tokens,
         workdir=workdir,
+        history=history or [],
     )
     save(s)
     _cache[s.id] = s
