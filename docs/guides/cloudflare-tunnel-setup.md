@@ -147,7 +147,7 @@ Tunnel credentials written to C:\Users\...\.cloudflared\<UUID>.json
 Created tunnel cliconductor with id <UUID>
 ```
 
-**记下 UUID**，之后会用到。
+**记下 UUID**，之后会用到。 fa87468c-4d93-4042-85fd-6182d2a22b65
 
 ### 步骤 4：配置隧道规则
 
@@ -161,12 +161,12 @@ notepad $env:USERPROFILE\.cloudflared\config.yml
 填入以下内容（替换 `<TUNNEL_UUID>` 为上一步的 UUID）：
 
 ```yaml
-tunnel: <TUNNEL_UUID>
-credentials-file: C:\Users\<你的用户名>\.cloudflared\<TUNNEL_UUID>.json
+tunnel: fa87468c-4d93-4042-85fd-6182d2a22b65
+credentials-file: C:\Users\14709\.cloudflared\fa87468c-4d93-4042-85fd-6182d2a22b65.json
 
 ingress:
   # Dashboard + API + WebSocket
-  - hostname: dashboard.你的域名.com
+  - hostname: cliconductor.ablaze.dpdns.org
     service: http://localhost:8767
 
   # 可选：如果以后需要调试 QQ Bridge
@@ -180,7 +180,7 @@ ingress:
 ### 步骤 5：设置 DNS 记录
 
 ```powershell
-cloudflared tunnel route dns cliconductor dashboard.你的域名.com
+cloudflared tunnel route dns cliconductor cliconductor.ablaze.dpdns.org
 ```
 
 这会在 Cloudflare DNS 中自动创建一条 CNAME 记录：
