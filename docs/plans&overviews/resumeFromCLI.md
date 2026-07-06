@@ -386,33 +386,412 @@ cbc 为每个 workdir 创建独立的 project 目录（如 `d-project-CLIConduct
 
 ---
 
-## 六、实操步骤
+## 六、实操步骤（详细实现方案）
 
 ### Phase 1 — 后端核心
 
-1. [x] **`src/adapters/cbc/sessions.py`** ← 已完成 (2026-07-05)
-   - 实现 `list_cbc_sessions(cwd)` — 扫描 `~/.codebuddy/projects/`，实测 58 个 session
-   - 实现 `parse_cbc_history(session_id, cwd)` — 解析 JSONL → CLIConductor history 格式
-   - 正确处理 cbc 完整事件格式：`input_text`/`output_text`/`reasoning`/`function_call`/`function_call_result`
-   - 跳过 `custom-title`、`file-history-snapshot`、`summary` 等内部事件
+#### 1.1 `src/adapters/cbc/sessions.py` ← 已完成 (2026-07-05) ✅
 
-2. [ ] **添加 API 端点**
-   - `GET /api/cbc/sessions?cwd=<path>` — 列出可导入 session
-   - `POST /api/cbc/sessions/import` — 导入单个 session + 创建 worker
+已完成内容见上方 Phase 1.1，不再重复。
+
+#### 1.2 配置系统 — 新增 `src/config.py`
+
+当前项目无集中配置系统。需要新增一个简单的配置文件，存储 session 过滤策略的参数。
+
+**文件**: `src/config.py` (新建)
+
+```python
+"""CLIConductor configuration."""
+import json
+from pathlib import Path
+
+CONFIG_FILE = Path(__file__).parent.parent / "config.json"
+
+DEFAULT_CONFIG = {
+    "cbc_import": {
+        "min_message_count": 5,
+        "max_sessions_shown": 30,
+        "exclude_workdir_patterns": ["-data-workdirs-"],
+        "project_dir_exact_match": False,  # 是否仅接受精确匹配的 project_dir
+    }
+}
+
+
+def load_config():
+    if not CONFIG_FILE.exists():
+        return dict(DEFAULT_CONFIG)
+    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        config = json.load(f)
+    # Deep merge with defaults
+    return _deep_merge(DEFAULT_CONFIG, config)
+
+
+def _deep_merge(base, override):
+    result = dict(base)
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = _deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
+```
+
+**配置文件**: `config.json` (新建，在项目根目录)
+
+```json
+{
+  "cbc_import": {
+    "min_message_count": 5,
+    "max_sessions_shown": 30,
+    "exclude_workdir_patterns": ["-data-workdirs-"],
+    "project_dir_exact_match": false
+  }
+}
+```
+
+**说明**: 配置文件放在项目根目录，由 `config.json` 加载。`_deep_merge` 确保新增字段有默认值、用户只覆盖他们关心的字段。无需环境变量或命令行参数，直接编辑 JSON 即可。
+
+#### 1.3 API 端点 — `src/server.py`
+
+在现有 `src/server.py` 中添加两个新端点。当前 server.py 无 Router 分层，直接追加即可。
+
+**3.1 新增 import**（在现有 import 行之后新增一行）
+
+```python
+from .adapters.cbc import sessions as cbc_sessions
+from .config import load_config
+```
+
+插入位置：`src/server.py` 第 18 行后（`from .adapters import get_adapter` 之后）。
+
+**3.2 `GET /api/cbc/sessions?cwd=<path>[&all=1]`**
+
+列出可导入的外部 cbc session。放在现有 `/api/list` (约第 545 行) 之后。
+
+```python
+@app.get("/api/cbc/sessions")
+async def api_cbc_sessions(cwd: str = "", all: int = 0):
+    """List external cbc sessions available for import."""
+    config = load_config()
+    filter_cfg = config.get("cbc_import", {})
+
+    cwd = cwd or str(Path.cwd())
+    all_sessions = cbc_sessions.list_cbc_sessions(cwd)
+
+    if all:
+        # Debug mode: return everything
+        return {"sessions": all_sessions, "total": len(all_sessions)}
+
+    # Filter 1: skip if already in CLIConductor
+    existing_cbc_ids = set()
+    for s in sess.list_all():
+        if s.cbc_session_id:
+            existing_cbc_ids.add(s.cbc_session_id)
+
+    # Filter 2: skip non-main workdir sessions
+    exclude_patterns = filter_cfg.get("exclude_workdir_patterns", [])
+    if filter_cfg.get("project_dir_exact_match", False):
+        import hashlib
+        target_dir = _sanitize_project_dir(cwd)
+    else:
+        target_dir = None
+
+    filtered = []
+    for s in all_sessions:
+        # Filter 1
+        if s["session_id"] in existing_cbc_ids:
+            continue
+        # Filter 2
+        if target_dir and s["project_dir"] != target_dir:
+            continue
+        if not target_dir and any(p in s["project_dir"] for p in exclude_patterns):
+            continue
+        # Filter 3: min message count
+        if s["message_count"] < filter_cfg.get("min_message_count", 5):
+            continue
+        filtered.append(s)
+
+    # Sort by last_timestamp desc
+    filtered.sort(key=lambda x: x.get("last_timestamp", ""), reverse=True)
+
+    # Limit
+    max_shown = filter_cfg.get("max_sessions_shown", 30)
+    total = len(filtered)
+    filtered = filtered[:max_shown]
+
+    return {
+        "sessions": filtered,
+        "total": total,
+        "shown": len(filtered),
+    }
+
+
+def _sanitize_project_dir(cwd: str) -> str:
+    """Mirror cbc's sanitize logic. Move to sessions.py later if needed."""
+    import re
+    p = cwd.replace(":", "")
+    p = p.replace("\\", "-").replace("/", "-")
+    p = re.sub(r"^[-]+", "", p)
+    p = re.sub(r"[-]+", "-", p)
+    return p.lower()
+```
+
+**3.3 `POST /api/cbc/sessions/import`**
+
+导入指定的 cbc session，只创建 CLIConductor Session（不 spawn worker）。
+
+```python
+@app.post("/api/cbc/sessions/import")
+async def api_cbc_sessions_import(data: dict):
+    """Import a cbc session into CLIConductor (Session only, no worker)."""
+    session_id = data.get("session_id")
+    if not session_id:
+        return {"error": "session_id is required"}
+
+    cwd = data.get("cwd") or str(Path.cwd())
+
+    # Check if already imported
+    for s in sess.list_all():
+        if s.cbc_session_id == session_id:
+            return {"error": f"Session {session_id} already imported as {s.id}"}
+
+    try:
+        history = cbc_sessions.parse_cbc_history(session_id, cwd)
+    except Exception as e:
+        return {"error": f"Failed to parse session history: {e}"}
+
+    name = data.get("name", "") or f"cbc-{session_id[:8]}"
+
+    s = sess.create(
+        name=name,
+        cbc_session_id=session_id,
+        history=history,
+    )
+
+    await broadcast({
+        "type": "session.created",
+        "sessionId": s.id,
+        "name": s.name,
+    })
+
+    return _session_to_api(s)
+```
+
+**3.4 注意事项**
+
+- `_sanitize_project_dir` 可以先放在 server.py 底部，后续重构时移到 `sessions.py`（因为它和 `sessions.py._project_dir` 逻辑重复）。
+- 导入端点不自动 spawn worker——用户看到历史后可手动点 Send 触发 spawn。
+- `cwd` 参数在各端点间保持一致，默认用 `Path.cwd()`。
 
 ### Phase 2 — 前端
 
-3. [ ] **添加导入入口**
-   - Session 列表页面增加"Import"按钮或下拉
-   - 展示候选 session 列表（模态框）
-   - 点击导入后自动创建 session
+#### 2.1 TypeScript 源码位置
+
+- 源文件: `ts/app.ts` (838 行)
+- 编译输出: `static/js/app.js`
+- HTML 模板: `index.html`
+
+#### 2.2 新增 API 调用函数
+
+在 `ts/app.ts` 中添加两个函数（放在 `refreshSessions()` 附近，约第 192 行后）：
+
+```typescript
+async function fetchCbcSessions(cwd: string = '') {
+  const params = cwd ? `?cwd=${encodeURIComponent(cwd)}` : '';
+  const resp = await fetch(`/api/cbc/sessions${params}`);
+  const data = await resp.json();
+  return data.sessions || [];
+}
+
+async function importCbcSession(sessionId: string, cwd: string = '') {
+  const resp = await fetch('/api/cbc/sessions/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, cwd }),
+  });
+  return await resp.json();
+}
+```
+
+#### 2.3 HTML 新增: Import 按钮 + 模态框
+
+在 `index.html` 的 sidebar 中 "New Session" 按钮旁新增 Import 按钮，以及模态框结构。
+
+**sidebar 区域修改**（`index.html` 第 10 行附近）：
+
+```html
+<div id="sidebar">
+  <h1>CLIConductor</h1>
+  <div style="display:flex; gap:4px; margin-bottom:8px;">
+    <button id="newSessionBtn" title="New Session" style="flex:1;">+ New</button>
+    <button id="importCbcBtn" title="Import from cbc">↓ Import</button>
+  </div>
+  <div id="sessionList"></div>
+</div>
+```
+
+**模态框**（放在 `#inputRow` 之后、`#toast` 之前，约第 53 行）：
+
+```html
+<!-- Import Modal -->
+<div id="importModal" style="display:none; position:fixed; inset:0;
+  background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--bg); border:1px solid var(--border);
+    border-radius:8px; padding:20px; width:480px; max-height:70vh; display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <b>Import cbc Session</b>
+      <button id="closeImportModal" style="background:none; border:none; cursor:pointer; font-size:18px;">&times;</button>
+    </div>
+    <div id="cbcSessionList" style="flex:1; overflow-y:auto; max-height:50vh;"></div>
+    <div style="margin-top:8px; font-size:12px; color:#888;" id="cbcSessionCount"></div>
+  </div>
+</div>
+```
+
+**样式补充**（追加到 `static/css/styles.css`）：
+
+```css
+.cbc-sess-item {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+.cbc-sess-item:hover {
+  background: var(--hover, #2a2a2a);
+}
+.cbc-sess-item .cbc-title {
+  font-weight: 500;
+}
+.cbc-sess-item .cbc-meta {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
+```
+
+#### 2.4 TypeScript: 模态框逻辑
+
+在 `ts/app.ts` 的 `init()` 中添加事件绑定（约第 770 行，init 函数末尾）：
+
+```typescript
+// Import modal
+const importCbcBtn = document.getElementById('importCbcBtn') as HTMLButtonElement;
+const importModal = document.getElementById('importModal') as HTMLDivElement;
+const closeImportModal = document.getElementById('closeImportModal') as HTMLButtonElement;
+const cbcSessionList = document.getElementById('cbcSessionList') as HTMLDivElement;
+const cbcSessionCount = document.getElementById('cbcSessionCount') as HTMLDivElement;
+
+importCbcBtn.addEventListener('click', async () => {
+  importModal.style.display = 'flex';
+  cbcSessionList.innerHTML = '<div style="padding:12px; color:#888;">Loading...</div>';
+  try {
+    const sessions = await fetchCbcSessions();
+    if (sessions.length === 0) {
+      cbcSessionList.innerHTML = '<div style="padding:12px; color:#888;">No sessions to import.</div>';
+      cbcSessionCount.textContent = '';
+      return;
+    }
+    cbcSessionCount.textContent = `${sessions.length} session(s) found`;
+    cbcSessionList.innerHTML = sessions.map((s: any) => {
+      const ts = s.last_timestamp ? new Date(s.last_timestamp).toLocaleString() : '';
+      const forkBadge = s.forked_from ? ' 🔀' : '';
+      return `
+        <div class="cbc-sess-item" data-session-id="${s.session_id}">
+          <div class="cbc-title">${escapeHtml(s.title || 'Untitled')}${forkBadge}</div>
+          <div class="cbc-meta">
+            ${s.message_count} msgs · ${s.model || '?'} · ${ts}
+          </div>
+        </div>`;
+    }).join('');
+
+    // Click to import
+    cbcSessionList.querySelectorAll('.cbc-sess-item').forEach(el => {
+      el.addEventListener('click', async () => {
+        const sid = (el as HTMLElement).dataset.sessionId!;
+        (el as HTMLElement).style.opacity = '0.5';
+        (el as HTMLElement).style.pointerEvents = 'none';
+        const result = await importCbcSession(sid);
+        if (result.error) {
+          showToast(result.error);
+          (el as HTMLElement).style.opacity = '1';
+          (el as HTMLElement).style.pointerEvents = '';
+          return;
+        }
+        importModal.style.display = 'none';
+        await refreshSessions();
+        selectSession(result.id);
+        showToast('Session imported');
+      });
+    });
+  } catch (e: any) {
+    cbcSessionList.innerHTML = `<div style="padding:12px; color:#c00;">Error: ${e.message}</div>`;
+  }
+});
+
+closeImportModal.addEventListener('click', () => {
+  importModal.style.display = 'none';
+});
+
+// Click outside modal to close
+importModal.addEventListener('click', (e) => {
+  if (e.target === importModal) {
+    importModal.style.display = 'none';
+  }
+});
+```
+
+#### 2.5 辅助函数
+
+如果 `ts/app.ts` 还没有 `escapeHtml`：
+
+```typescript
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+```
+
+#### 2.6 编译
+
+修改 `ts/app.ts` 后，需重新编译：
+
+```bash
+npx tsc -p ts/tsconfig.json
+```
+
+或者如果项目有构建脚本，执行对应的 build 命令。
 
 ### Phase 3 — 测试
 
-4. [ ] **手动测试**
-   - 用 cbc 创建一个本地 session
-   - 刷新 CLIConductor，从导入列表中选择该 session
-   - 验证历史完整、worker 正常启动、后续对话正常
+#### 手动测试步骤
+
+1. **准备**: 确保 `~/.codebuddy/projects/d-project-CLIConductor/` 下有历史 session JSONL 文件。
+2. **启动**: `python main.py`
+3. **验证**: 浏览器打开 http://127.0.0.1:8767
+4. **列出**: 点击 sidebar 的 "↓ Import" 按钮 → 模态框应列出可导入 session
+5. **过滤**: 验证消息数 < 5 的 session 不在列表中、已有 CLIConductor session 的 cbc session 不在列表中
+6. **详情**: 验证每条显示 title、消息数、model、时间戳
+7. **导入**: 点击一条 → 模态框关闭 → 左侧 session 列表新增该 session
+8. **历史**: 选中新 session → 查看 messages 区域是否展示完整历史（含 user/assistant/thinking/tool 块）
+9. **恢复**: 在 input 框输入消息并 Send → worker 应启动并带 `--resume` 参数 → 后续对话正常
+
+#### API 测试（curl）
+
+```bash
+# 列出可导入 session
+curl "http://127.0.0.1:8767/api/cbc/sessions"
+
+# 列出全部（不过滤）
+curl "http://127.0.0.1:8767/api/cbc/sessions?all=1"
+
+# 导入指定 session
+curl -X POST "http://127.0.0.1:8767/api/cbc/sessions/import" \
+  -H "Content-Type: application/json" \
+  -d '{"session_id": "your-session-uuid"}'
+```
 
 ---
 
