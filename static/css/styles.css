@@ -481,27 +481,33 @@ body {
   margin: 0;
 }
 
-/* TUI user: green separator lines above and below */
+/* TUI user: green left bar + ">" prefix */
 #messages.tui-mode .msg.user {
   background: transparent;
   border: none;
-  border-top: 1px solid #3fb950;
-  border-bottom: 1px solid #3fb950;
-  padding: 6px 0;
-  align-self: stretch;
-  position: static;
+  border-left: 3px solid #3fb950;
+  padding: 2px 0 2px 16px;
+  align-self: flex-start;
+  position: relative;
 }
 
-#messages.tui-mode .msg.user::before,
-#messages.tui-mode .msg.user::after {
-  display: none;
+#messages.tui-mode .msg.user::before {
+  content: '\003e';
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  color: #3fb950;
+  font-weight: bold;
+  font-size: .85rem;
+  line-height: 1;
 }
 
-/* TUI assistant: no prefix */
+/* TUI assistant: white left bar */
 #messages.tui-mode .msg.assistant {
   background: transparent;
   border: none;
-  padding: 2px 0;
+  border-left: 3px solid #8b949e;
+  padding: 2px 0 2px 12px;
 }
 
 /* TUI thinking: still collapsible with purple border */
