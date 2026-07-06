@@ -22,34 +22,51 @@ if (typeof marked !== 'undefined') {
 function renderMarkdown(text) {
     if (!text)
         return '';
-    let html;
-    if (typeof marked !== 'undefined') {
-        html = marked.parse(text);
+
+    const mathStore = [];
+    let mathIndex = 0;
+    function saveMath(latex, display) {
+        const key = `[[MATH_PLACEHOLDER_${mathIndex++}]]`;
+        mathStore.push({ key, latex: latex.trim(), display });
+        return key;
     }
-    else {
-        html = esc(text).replace(/\n/g, '<br>');
-    }
-    // Wrap in temp div to process
-    const tmp = document.createElement('div');
-    tmp.innerHTML = html;
-    // Highlight code blocks
-    if (typeof hljs !== 'undefined') {
-        tmp.querySelectorAll('pre code').forEach((block) => {
-            hljs.highlightElement(block);
+
+    // 1. Extract block math $$...$$ first (must happen before markdown parsing)
+    text = text.replace(/\$\$([\s\S]*?)\$\$/g, function (match, latex) {
+        return saveMath(latex, true);
+    });
+
+    // 2. Extract inline math $...$
+    text = text.replace(/\$([^$\n]+?)\$/g, function (match, latex) {
+        return saveMath(latex, false);
+    });
+
+    // 3. Parse markdown on the remaining text
+    let html = typeof marked !== 'undefined' ? marked.parse(text) : esc(text).replace(/\n/g, '<br>');
+
+    // 4. Restore math placeholders with rendered KaTeX HTML
+    if (typeof katex !== 'undefined') {
+        mathStore.forEach(function (item) {
+            try {
+                const rendered = katex.renderToString(item.latex, {
+                    displayMode: item.display,
+                    throwOnError: false,
+                });
+                html = html.split(item.key).join(rendered);
+            }
+            catch (e) {
+                html = html.split(item.key).join('<code>' + esc(item.latex) + '</code>');
+            }
         });
     }
-    // Render LaTeX: block $$...$$ and inline $...$
-    if (typeof renderMathInElement !== 'undefined') {
-        try {
-            renderMathInElement(tmp, {
-                delimiters: [
-                    { left: '$$', right: '$$', display: true },
-                    { left: '$', right: '$', display: false },
-                ],
-                throwOnError: false,
-            });
-        }
-        catch (e) { /* ignore LaTeX errors */ }
+
+    // 5. Wrap and highlight code
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    if (typeof hljs !== 'undefined') {
+        tmp.querySelectorAll('pre code').forEach(function (block) {
+            hljs.highlightElement(block);
+        });
     }
     return tmp.innerHTML;
 }
@@ -65,7 +82,7 @@ function toggleView() {
         msgs.classList.remove('tui-mode');
     }
     else {
-        btn.innerHTML = '&gt;_';
+        btn.innerHTML = '\uD83D\uDDA5\uFE0F';
         btn.title = 'Switch to Bubble view';
         msgs.classList.add('tui-mode');
     }

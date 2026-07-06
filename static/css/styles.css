@@ -481,13 +481,18 @@ body {
   margin: 0;
 }
 
-/* TUI user: green left bar + ">" prefix */
+/* TUI user: green left bar + ">" prefix + green full-width separator lines */
 #messages.tui-mode .msg.user {
   background: transparent;
   border: none;
   border-left: 3px solid #3fb950;
-  padding: 2px 0 2px 16px;
-  align-self: flex-start;
+  border-top: 1px solid #3fb950;
+  border-bottom: 1px solid #3fb950;
+  padding: 8px 16px 8px 28px;
+  align-self: stretch;
+  width: auto;
+  max-width: none;
+  margin: 6px -16px;
   position: relative;
 }
 
@@ -495,7 +500,7 @@ body {
   content: '\003e';
   position: absolute;
   left: 4px;
-  top: 2px;
+  top: 7px;
   color: #3fb950;
   font-weight: bold;
   font-size: .85rem;
