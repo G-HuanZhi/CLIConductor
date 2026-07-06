@@ -327,6 +327,33 @@ function renderMessages(history) {
     toolGroupOpen = false;
 }
 
+function formatToolContent(content) {
+    if (!content)
+        return '';
+    const match = content.match(/^([^(]+)(\(([\s\S]*)\))?$/);
+    if (!match)
+        return '\uD83D\uDD27 ' + content;
+    const name = match[1] || '';
+    const jsonText = match[3] || '';
+    if (!jsonText)
+        return '\uD83D\uDD27 ' + name;
+    let formatted;
+    try {
+        formatted = JSON.stringify(JSON.parse(jsonText), null, 2);
+    }
+    catch (e) {
+        formatted = jsonText;
+    }
+    return '\uD83D\uDD27 ' + name + ':\n' + formatted;
+}
+
+function toolName(content) {
+    if (!content)
+        return '';
+    const idx = content.indexOf('(');
+    return idx < 0 ? content : content.slice(0, idx);
+}
+
 function _renderMsgEl(role, content) {
     const el = document.getElementById('messages');
     const div = document.createElement('div');
@@ -356,7 +383,7 @@ function _renderMsgEl(role, content) {
     }
     else if (role === 'tool') {
         div.className = 'msg tool';
-        div.textContent = '\uD83D\uDD27 ' + content;
+        div.textContent = formatToolContent(content);
     }
     else {
         div.className = 'msg system';
@@ -373,9 +400,9 @@ function _renderToolGroup(items) {
     }
     const el = document.getElementById('messages');
     const wrapper = document.createElement('div');
-    wrapper.className = 'tool-group collapsed';
+    wrapper.className = 'tool-group open';
     const count = items.length;
-    const names = items.map(function (t) { return t.content.split('(')[0] || ''; }).join(', ');
+    const names = items.map(function (t) { return toolName(t.content); }).join(', ');
     wrapper.innerHTML =
         '<div class="tool-group-header">' +
             '\uD83D\uDD27 <strong>' + count + ' tool calls:</strong> ' +
@@ -387,7 +414,7 @@ function _renderToolGroup(items) {
     items.forEach(function (t) {
         const toolDiv = document.createElement('div');
         toolDiv.className = 'msg tool';
-        toolDiv.textContent = '\uD83D\uDD27 ' + t.content;
+        toolDiv.textContent = formatToolContent(t.content);
         body.appendChild(toolDiv);
     });
     wrapper.querySelector('.tool-group-header').onclick = function () {

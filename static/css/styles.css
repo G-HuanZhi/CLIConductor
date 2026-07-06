@@ -385,14 +385,15 @@ body {
   align-self: flex-start;
   border-left: 3px solid #ffa657;
   border-radius: 0 4px 4px 0;
-  font-size: .8rem;
+  font-size: .75rem;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
   color: #ffa657;
-  padding: 4px 10px;
+  padding: 5px 10px;
   margin: 1px 0;
   cursor: pointer;
   white-space: pre-wrap;
   min-height: 1.4em;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 /* Tool group wrapper (consecutive tools) */
@@ -418,6 +419,8 @@ body {
   user-select: none;
   min-height: 1.8em;
   line-height: 1.4;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
 }
 
 .tool-group-header:hover {
@@ -539,6 +542,8 @@ body {
   background: transparent;
   white-space: pre-wrap;
   min-height: 1.2em;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-size: .75rem;
 }
 
 /* TUI tool group */
