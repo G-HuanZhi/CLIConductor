@@ -115,14 +115,14 @@ def _parse_project_label(dir_name: str) -> tuple[str, str]:
     """Extract drive letter and short label from sanitized project name.
 
     e.g. d-project-CLIConductor → ("D:", "CLIConductor")
-         d-other-data-project  → ("D:", "other/data/project")
+         d-obisidian_plugin    → ("D:", "obisidian_plugin")
     """
     parts = dir_name.split("-")
     if not parts:
         return ("", dir_name)
     drive = parts[0].upper() + ":"
-    # Short label: everything after the drive letter and first directory
-    short_label = "-".join(parts[2:]) if len(parts) >= 2 else dir_name
+    # Take everything after the drive letter as the short label
+    short_label = "-".join(parts[1:]) if len(parts) >= 2 else dir_name
     if not short_label:
         short_label = dir_name
     return drive, short_label
@@ -219,18 +219,26 @@ def _parse_summary(fpath: Path) -> tuple[str, int, str, str, str]:
 
             if not title:
                 if event.get("type") == "custom-title":
-                    title = event.get("customTitle", "")
+                    title = _strip_html(event.get("customTitle", ""))
+                elif event.get("type") == "ai-title":
+                    title = _strip_html(event.get("aiTitle", ""))
                 elif event.get("type") == "message" and event.get("role") == "user":
-                    content = event.get("content", [])
+                    content = event.get("content") or []
                     if isinstance(content, list):
                         for block in content:
                             if isinstance(block, dict) and block.get("type") in ("input_text", "text"):
                                 t = block.get("text", "").strip()
                                 if t:
-                                    title = t[:80]
+                                    title = _strip_html(t)[:80]
                                     break
 
     return title, msg_count, first_ts, last_ts, model
+
+
+def _strip_html(text: str) -> str:
+    """Remove HTML tags and system-reminder markers from text."""
+    text = re.sub(r"<[^>]*>", "", text)
+    return text
 
 
 def _ts_to_iso(ts: int) -> str:
@@ -248,8 +256,12 @@ def _event_to_block(event: dict) -> dict | None:
 
     if etype == "message":
         role = event.get("role")
-        msg = event.get("message", {})
-        content_blocks = msg.get("content", [])
+        # Content is at event["content"] directly (newer cbc format).
+        # Fall back to event["message"]["content"] for older sessions.
+        content_blocks = event.get("content") or []
+        if not content_blocks:
+            msg = event.get("message", {})
+            content_blocks = msg.get("content", [])
         if not isinstance(content_blocks, list):
             content_blocks = []
 
@@ -257,7 +269,7 @@ def _event_to_block(event: dict) -> dict | None:
             text = "".join(
                 block.get("text", "")
                 for block in content_blocks
-                if isinstance(block, dict) and block.get("type") in ("input_text", "text")
+                if isinstance(block, dict) and block.get("type") in ("input_text", "text", "user")
             )
             if text.strip():
                 return {"role": "user", "content": text.strip()}
@@ -265,14 +277,22 @@ def _event_to_block(event: dict) -> dict | None:
             text = "".join(
                 block.get("text", "")
                 for block in content_blocks
-                if isinstance(block, dict) and block.get("type") in ("text", "output_text")
+                if isinstance(block, dict) and block.get("type") in ("text", "output_text", "assistant")
             )
             if text.strip():
                 return {"role": "assistant", "content": text.strip()}
 
     elif etype == "reasoning":
-        content_blocks = event.get("content") or []
+        # Newer cbc stores reasoning in rawContent, fall back to content
+        content_blocks = event.get("rawContent") or event.get("content") or []
         if isinstance(content_blocks, list):
+            text = "".join(
+                block.get("text", "")
+                for block in content_blocks
+                if isinstance(block, dict)
+            )
+            if text.strip():
+                return {"role": "thinking", "content": text.strip()}
             text = "".join(
                 block.get("text", "")
                 for block in content_blocks
