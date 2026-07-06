@@ -223,6 +223,7 @@ body {
   font-size: .85rem;
   word-break: break-word;
   margin: 2px 0;
+  overflow-wrap: anywhere;
 }
 
 /* ── Markdown content inside messages ── */
@@ -380,13 +381,18 @@ body {
 
 /* ── Tool (collapsible, orange left border) ── */
 .msg.tool {
-  background: #21262d44;
+  background: #21262d;
   align-self: flex-start;
   border-left: 3px solid #ffa657;
+  border-radius: 0 4px 4px 0;
   font-size: .8rem;
   color: #ffa657;
   padding: 4px 10px;
+  margin: 1px 0;
   cursor: pointer;
+  white-space: pre-wrap;
+  min-height: 1.4em;
+  line-height: 1.4;
 }
 
 /* Tool group wrapper (consecutive tools) */
@@ -402,7 +408,7 @@ body {
 }
 
 .tool-group-header {
-  padding: 5px 12px;
+  padding: 6px 12px;
   font-size: .8rem;
   color: #ffa657;
   cursor: pointer;
@@ -410,6 +416,8 @@ body {
   align-items: center;
   gap: 6px;
   user-select: none;
+  min-height: 1.8em;
+  line-height: 1.4;
 }
 
 .tool-group-header:hover {
@@ -481,13 +489,18 @@ body {
   margin: 0;
 }
 
-/* TUI user: green left bar + ">" prefix */
+/* TUI user: green left bar + ">" prefix + green full-width separator lines */
 #messages.tui-mode .msg.user {
   background: transparent;
   border: none;
   border-left: 3px solid #3fb950;
-  padding: 2px 0 2px 16px;
-  align-self: flex-start;
+  border-top: 1px solid #3fb950;
+  border-bottom: 1px solid #3fb950;
+  padding: 8px 16px 8px 28px;
+  align-self: stretch;
+  width: auto;
+  max-width: none;
+  margin: 6px -16px;
   position: relative;
 }
 
@@ -495,7 +508,7 @@ body {
   content: '\003e';
   position: absolute;
   left: 4px;
-  top: 2px;
+  top: 7px;
   color: #3fb950;
   font-weight: bold;
   font-size: .85rem;
@@ -524,6 +537,8 @@ body {
   padding: 2px 0 2px 12px;
   border-radius: 0;
   background: transparent;
+  white-space: pre-wrap;
+  min-height: 1.2em;
 }
 
 /* TUI tool group */
