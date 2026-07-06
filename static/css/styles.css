@@ -326,37 +326,20 @@ body {
 
 .msg-content .katex .mathnormal { color: #e6edf3; }
 
-/* ── User messages (green border + "<" indicator) ── */
+/* ── User messages (original bubble style) ── */
 .msg.user {
-  background: transparent;
-  border: 2px solid #3fb950;
-  border-radius: 12px;
-  position: relative;
-  padding-left: 28px;
+  background: #1f6feb22;
   align-self: flex-end;
+  border: 1px solid #1f6feb33;
   color: #e6edf3;
 }
 
-.msg.user::before {
-  content: '\003c';
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #3fb950;
-  font-weight: bold;
-  font-size: 1.2em;
-  line-height: 1;
-}
-
-/* ── Assistant messages (no bubble) ── */
+/* ── Assistant messages (original bubble style) ── */
 .msg.assistant {
-  background: transparent;
-  border: none;
+  background: #21262d;
   align-self: flex-start;
+  border: 1px solid #30363d;
   color: #e6edf3;
-  padding: 4px 0;
-  max-width: 100%;
 }
 
 /* ── Thinking (collapsible, purple left border) ── */
@@ -498,21 +481,20 @@ body {
   margin: 0;
 }
 
-/* TUI user: green "> " prefix */
+/* TUI user: green separator lines above and below */
 #messages.tui-mode .msg.user {
   background: transparent;
   border: none;
-  padding-left: 16px;
-  align-self: flex-start;
-  position: relative;
+  border-top: 1px solid #3fb950;
+  border-bottom: 1px solid #3fb950;
+  padding: 6px 0;
+  align-self: stretch;
+  position: static;
 }
 
-#messages.tui-mode .msg.user::before {
-  content: '\003e ';
-  left: 0;
-  top: 2px;
-  transform: none;
-  font-size: .85rem;
+#messages.tui-mode .msg.user::before,
+#messages.tui-mode .msg.user::after {
+  display: none;
 }
 
 /* TUI assistant: no prefix */

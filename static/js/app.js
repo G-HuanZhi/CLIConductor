@@ -60,12 +60,12 @@ function toggleView() {
     const btn = document.getElementById('viewToggleBtn');
     const msgs = document.getElementById('messages');
     if (bubbleViewEnabled) {
-        btn.textContent = '\uD83D\uDDEF';
+        btn.innerHTML = '\uD83D\uDCAC';
         btn.title = 'Switch to TUI view';
         msgs.classList.remove('tui-mode');
     }
     else {
-        btn.textContent = '\uD83D\uDCCB';
+        btn.innerHTML = '&gt;_';
         btn.title = 'Switch to Bubble view';
         msgs.classList.add('tui-mode');
     }
