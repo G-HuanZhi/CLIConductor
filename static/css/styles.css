@@ -388,12 +388,30 @@ body {
   font-size: .75rem;
   font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
   color: #ffa657;
-  padding: 5px 10px;
+  padding: 6px 10px;
   margin: 1px 0;
   cursor: pointer;
-  white-space: pre-wrap;
-  min-height: 1.4em;
   line-height: 1.45;
+  overflow: visible;
+  white-space: normal;
+}
+
+.msg.tool strong {
+  color: #ffa657;
+  font-weight: 600;
+}
+
+.tool-pre {
+  margin: 3px 0 0 0;
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: #c9d1d9;
+  white-space: pre;
+  line-height: 1.45;
+  tab-size: 2;
 }
 
 /* Tool group wrapper (consecutive tools) */
@@ -448,10 +466,12 @@ body {
 .tool-group-body .msg.tool {
   margin: 0;
   border-radius: 0;
-  border-left: none;
+  border-left: 2px solid #ffa65744;
   background: transparent;
-  padding: 3px 12px 3px 24px;
-  font-size: .75rem;
+  padding: 4px 10px 4px 18px;
+  font-size: .7rem;
+  white-space: normal;
+  line-height: 1.45;
 }
 
 /* ── System messages ── */
@@ -537,11 +557,11 @@ body {
 /* TUI tool: still collapsible with orange border */
 #messages.tui-mode .msg.tool {
   border-left: 3px solid #ffa657;
-  padding: 2px 0 2px 12px;
+  padding: 3px 0 3px 12px;
   border-radius: 0;
   background: transparent;
-  white-space: pre-wrap;
-  min-height: 1.2em;
+  white-space: normal;
+  line-height: 1.45;
   font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
   font-size: .75rem;
 }
