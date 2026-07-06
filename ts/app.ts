@@ -504,26 +504,21 @@ function onThinkingToggle(): void {
  *  Handles both the "no worker" (PATCH session) and "worker exists" cases. */
 function applySettings(): void {
   if (!currentSessionId) return;
+
+  // Worker-level settings can only be changed when idle.
+  // Use Restart to apply settings + respawn while worker is running/held.
   const s = modelData.find((x: Session) => x.id === currentSessionId);
   if (s && (s.workerStatus === 'running' || s.workerStatus === 'held')) {
-    toast('Cannot change settings while worker is busy');
+    toast('Cannot change settings while worker is busy. Use Restart instead.');
     return;
   }
-
-  const thinking = (document.getElementById('settingThinking') as HTMLInputElement).checked;
-  const effort = (document.getElementById('settingEffort') as HTMLSelectElement).value;
 
   if (!currentWorkerId) {
     // no worker: persist settings to session via PATCH
     fetch('/api/sessions/' + currentSessionId, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: getSettingModel(),
-        permissionMode: (document.getElementById('settingMode') as HTMLSelectElement).value || undefined,
-        alwaysThinkingEnabled: thinking,
-        effort: effort,
-      }),
+      body: JSON.stringify(_buildSettingsBody()),
     })
       .then((r: Response) => r.json())
       .then((d: ApiGenericResponse) => {
@@ -533,16 +528,26 @@ function applySettings(): void {
     return;
   }
 
-  // worker exists: consolidated endpoint
+  _postWorkerSettings();
+}
+
+/** Build the settings payload object from panel values. */
+function _buildSettingsBody(): Record<string, unknown> {
+  const mode = (document.getElementById('settingMode') as HTMLSelectElement).value;
+  return {
+    model: getSettingModel(),
+    permissionMode: mode || undefined,
+    alwaysThinkingEnabled: (document.getElementById('settingThinking') as HTMLInputElement).checked,
+    effort: (document.getElementById('settingEffort') as HTMLSelectElement).value,
+  };
+}
+
+/** POST current panel settings to the worker (always allowed, triggers respawn). */
+function _postWorkerSettings(): void {
   fetch('/api/worker/' + currentWorkerId + '/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: getSettingModel(),
-      permissionMode: (document.getElementById('settingMode') as HTMLSelectElement).value || undefined,
-      alwaysThinkingEnabled: thinking,
-      effort: effort,
-    }),
+    body: JSON.stringify(_buildSettingsBody()),
   })
     .then((r: Response) => r.json())
     .then((d: ApiGenericResponse) => {
@@ -566,21 +571,11 @@ function markSettingsApplied(): void {
 
 function restartWorker(): void {
   if (currentWorkerId) {
-    // Always restart with current panel settings (user intent).
-    // applySettings handles both "no-change respawn" and "apply pending changes".
-    applySettings();
+    // Restart is always allowed — post panel settings + respawn, no busy check.
+    _postWorkerSettings();
   } else {
-    const model = getSettingModel();
-    const mode = (document.getElementById('settingMode') as HTMLSelectElement).value;
-    const body: Record<string, unknown> = {
-      sessionId: currentSessionId,
-      model: model,
-    };
-    if (mode) body.permissionMode = mode;
-    body.alwaysThinkingEnabled = (
-      document.getElementById('settingThinking') as HTMLInputElement
-    ).checked;
-    body.effort = (document.getElementById('settingEffort') as HTMLSelectElement).value;
+    const body = _buildSettingsBody();
+    body.sessionId = currentSessionId;
     fetch('/api/spawn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
