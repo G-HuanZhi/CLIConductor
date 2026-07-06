@@ -412,6 +412,62 @@ body {
   tab-size: 2;
 }
 
+/* Tool group wrapper (consecutive tools - default expanded) */
+.tool-group {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-left: 3px solid #ffa657;
+  border-radius: 6px;
+  margin: 4px 0;
+  max-width: 100%;
+  align-self: flex-start;
+}
+
+.tool-group-header {
+  padding: 7px 12px;
+  font-size: .8rem;
+  color: #ffa657;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+  background: #21262d;
+  border-radius: 5px 5px 0 0;
+}
+
+.tool-group-header:hover {
+  background: #30363d;
+}
+
+.tool-group-header .toggle-icon {
+  display: inline-block;
+  transition: transform .2s;
+  font-size: .7rem;
+  margin-left: auto;
+}
+
+.tool-group.collapsed .toggle-icon {
+  transform: rotate(-90deg);
+}
+
+.tool-group-body .msg.tool {
+  margin: 0;
+  border-radius: 0;
+  border-left: none;
+  background: transparent;
+  padding: 4px 12px 4px 14px;
+  font-size: .7rem;
+}
+
+.tool-group-body .msg.tool + .msg.tool {
+  border-top: 1px solid #21262d;
+}
+
+.tool-group.collapsed .tool-group-body {
+  display: none;
+}
+
 /* ── System messages ── */
 .msg.system {
   background: transparent;
@@ -500,6 +556,20 @@ body {
   background: transparent;
   font-size: .75rem;
   font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+}
+
+/* TUI tool group */
+#messages.tui-mode .tool-group {
+  border-radius: 0;
+  border-right: none;
+  border-top: none;
+  border-bottom: none;
+  background: transparent;
+}
+
+#messages.tui-mode .tool-group-header {
+  border-radius: 0;
+  background: transparent;
 }
 
 /* TUI system */
