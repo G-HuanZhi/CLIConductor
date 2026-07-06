@@ -297,8 +297,35 @@ function renderMessages(history) {
         toolGroupOpen = false;
         return;
     }
-    currentHistory.forEach(function (h) {
-        _renderMsgEl(h.role, h.content);
+    // Group consecutive tool messages
+    const grouped = [];
+    var toolGroup = null;
+    for (var i = 0; i < currentHistory.length; i++) {
+        var h = currentHistory[i];
+        if (h.role === 'tool') {
+            if (!toolGroup) {
+                toolGroup = { type: 'tool_group', items: [] };
+                grouped.push(toolGroup);
+            }
+            toolGroup.items.push(h);
+        }
+        else {
+            toolGroup = null;
+            grouped.push(h);
+        }
+    }
+    grouped.forEach(function (g) {
+        if (g.type === 'tool_group') {
+            if (g.items.length === 1) {
+                _renderMsgEl('tool', g.items[0].content);
+            }
+            else {
+                _renderToolGroup(g.items);
+            }
+        }
+        else {
+            _renderMsgEl(g.role, g.content);
+        }
     });
     el.scrollTop = el.scrollHeight;
     toolGroupOpen = false;
@@ -366,6 +393,35 @@ function _renderMsgEl(role, content) {
         div.textContent = content || '';
     }
     el.appendChild(div);
+    el.scrollTop = el.scrollHeight;
+}
+
+function _renderToolGroup(items) {
+    var el = document.getElementById('messages');
+    var wrapper = document.createElement('div');
+    wrapper.className = 'tool-group';
+    var count = items.length;
+    var names = items.map(function (t) { return toolName(t.content); }).slice(0, 3).join(', ');
+    if (items.length > 3)
+        names += ', \u2026';
+    wrapper.innerHTML =
+        '<div class="tool-group-header">' +
+            '\uD83D\uDD27 <strong>' + count + ' tools:</strong> ' +
+            esc(names) +
+            ' <span class="toggle-icon">\u25BC</span>' +
+            '</div>' +
+            '<div class="tool-group-body"></div>';
+    var body = wrapper.querySelector('.tool-group-body');
+    items.forEach(function (t) {
+        var toolDiv = document.createElement('div');
+        toolDiv.className = 'msg tool';
+        toolDiv.innerHTML = formatToolContent(t.content);
+        body.appendChild(toolDiv);
+    });
+    wrapper.querySelector('.tool-group-header').onclick = function () {
+        wrapper.classList.toggle('collapsed');
+    };
+    el.appendChild(wrapper);
     el.scrollTop = el.scrollHeight;
 }
 
