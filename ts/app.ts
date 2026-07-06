@@ -191,6 +191,48 @@ function refreshSessions(): void {
     });
 }
 
+// ── cbc Session Import ──
+
+interface CbcSessionItem {
+  session_id: string;
+  project_dir: string;
+  title: string;
+  message_count: number;
+  first_timestamp: string;
+  last_timestamp: string;
+  model: string;
+  forked_from: string | null;
+}
+
+interface CbcProject {
+  project_dir: string;
+  session_count: number;
+  path_hint: string;
+  drive: string;
+  short_label: string;
+}
+
+async function fetchCbcProjects(): Promise<CbcProject[]> {
+  const resp = await fetch('/api/cbc/projects');
+  const data = await resp.json();
+  return data.projects || [];
+}
+
+async function fetchCbcSessions(projectDir: string): Promise<CbcSessionItem[]> {
+  const resp = await fetch(`/api/cbc/sessions?project_dir=${encodeURIComponent(projectDir)}`);
+  const data = await resp.json();
+  return data.sessions || [];
+}
+
+async function importCbcSession(sessionId: string, projectDir: string): Promise<any> {
+  const resp = await fetch('/api/cbc/sessions/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, project_dir: projectDir }),
+  });
+  return await resp.json();
+}
+
 function renderSessionList(): void {
   const el = document.getElementById('sessionList')!;
   el.innerHTML = '';
@@ -765,6 +807,154 @@ function init(): void {
         syncPanelFromServer();
     });
   refreshSessions();
+
+  // ── Import Modal ──
+  const importCbcBtn = document.getElementById('importCbcBtn') as HTMLButtonElement;
+  const importModal = document.getElementById('importModal') as HTMLDivElement;
+  const closeImportModal = document.getElementById('closeImportModal') as HTMLButtonElement;
+  const cbcDriveSelect = document.getElementById('cbcDriveSelect') as HTMLSelectElement;
+  const cbcProjectSelect = document.getElementById('cbcProjectSelect') as HTMLSelectElement;
+  const cbcSessionListEl = document.getElementById('cbcSessionList') as HTMLDivElement;
+  const cbcSessionCountEl = document.getElementById('cbcSessionCount') as HTMLDivElement;
+
+  let allProjects: CbcProject[] = [];
+  let currentProjectDir = '';
+
+  // Group projects by drive letter
+  function buildDriveSelect(): void {
+    const drives = [...new Set(allProjects.map((p: CbcProject) => p.drive))].sort();
+    cbcDriveSelect.innerHTML = '<option value="">Drive</option>';
+    drives.forEach((d: string) => {
+      const total = allProjects.filter((p: CbcProject) => p.drive === d)
+        .reduce((sum: number, p: CbcProject) => sum + p.session_count, 0);
+      const opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = `${d} (${total} sessions)`;
+      cbcDriveSelect.appendChild(opt);
+    });
+    if (drives.length === 1) {
+      cbcDriveSelect.value = drives[0];
+      cbcDriveSelect.dispatchEvent(new Event('change'));
+    }
+  }
+
+  function buildProjectSelect(drive: string): void {
+    const projects = allProjects.filter((p: CbcProject) => p.drive === drive);
+    projects.sort((a: CbcProject, b: CbcProject) => a.short_label.localeCompare(b.short_label));
+    cbcProjectSelect.innerHTML = '<option value="">Project</option>';
+    projects.forEach((p: CbcProject) => {
+      const opt = document.createElement('option');
+      opt.value = p.project_dir;
+      opt.textContent = p.short_label;
+      cbcProjectSelect.appendChild(opt);
+    });
+    if (projects.length > 0) {
+      cbcProjectSelect.value = projects[0].project_dir;
+      currentProjectDir = projects[0].project_dir;
+    }
+  }
+
+  function renderCbcSessions(sessions: CbcSessionItem[]): void {
+    if (sessions.length === 0) {
+      cbcSessionListEl.innerHTML = '<div class="im-loading">No sessions to import.</div>';
+      cbcSessionCountEl.textContent = '';
+      return;
+    }
+    cbcSessionCountEl.textContent = `${sessions.length} session(s) found`;
+    cbcSessionListEl.innerHTML = sessions.map((s: CbcSessionItem) => {
+      const ts = s.last_timestamp ? new Date(s.last_timestamp).toLocaleString() : '';
+      const forkBadge = s.forked_from ? ' \uD83D\uDD00' : '';
+      return `
+        <div class="im-item" data-session-id="${esc(s.session_id)}">
+          <div class="im-title">${esc(s.title || 'Untitled')}${forkBadge}</div>
+          <div class="im-meta">
+            ${s.message_count} msgs \u00B7 ${esc(s.model || '?')} \u00B7 ${esc(ts)}
+          </div>
+        </div>`;
+    }).join('');
+
+    cbcSessionListEl.querySelectorAll<HTMLElement>('.im-item').forEach((el: HTMLElement) => {
+      el.addEventListener('click', async () => {
+        const sid = el.dataset.sessionId!;
+        el.style.opacity = '0.5';
+        el.style.pointerEvents = 'none';
+        const result = await importCbcSession(sid, currentProjectDir);
+        if (result.error) {
+          toast(result.error);
+          el.style.opacity = '1';
+          el.style.pointerEvents = '';
+          return;
+        }
+        importModal.classList.remove('open');
+        await refreshSessions();
+        selectSession(result.id);
+        toast('Session imported');
+      });
+    });
+  }
+
+  async function loadCbcSessions(projectDir: string): Promise<void> {
+    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
+    cbcSessionCountEl.textContent = '';
+    try {
+      const sessions = await fetchCbcSessions(projectDir);
+      renderCbcSessions(sessions);
+    } catch (e: any) {
+      cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+    }
+  }
+
+  importCbcBtn.addEventListener('click', async () => {
+    importModal.classList.add('open');
+    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
+    cbcSessionCountEl.textContent = '';
+    cbcDriveSelect.innerHTML = '<option value="">Loading...</option>';
+    cbcProjectSelect.innerHTML = '<option value="">-</option>';
+
+    try {
+      allProjects = await fetchCbcProjects();
+      if (allProjects.length === 0) {
+        cbcDriveSelect.innerHTML = '<option value="">No projects</option>';
+        cbcSessionListEl.innerHTML = '<div class="im-loading">No cbc projects found.</div>';
+        return;
+      }
+      buildDriveSelect();
+    } catch (e: any) {
+      cbcDriveSelect.innerHTML = '<option value="">Failed</option>';
+      cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+    }
+  });
+
+  cbcDriveSelect.addEventListener('change', () => {
+    const drive = cbcDriveSelect.value;
+    if (!drive) {
+      cbcProjectSelect.innerHTML = '<option value="">Project</option>';
+      cbcSessionListEl.innerHTML = '<div class="im-loading">Select a project.</div>';
+      cbcSessionCountEl.textContent = '';
+      return;
+    }
+    buildProjectSelect(drive);
+    if (currentProjectDir) {
+      loadCbcSessions(currentProjectDir);
+    }
+  });
+
+  cbcProjectSelect.addEventListener('change', () => {
+    currentProjectDir = cbcProjectSelect.value;
+    if (currentProjectDir) {
+      loadCbcSessions(currentProjectDir);
+    }
+  });
+
+  closeImportModal.addEventListener('click', () => {
+    importModal.classList.remove('open');
+  });
+
+  importModal.addEventListener('click', (e: MouseEvent) => {
+    if (e.target === importModal) {
+      importModal.classList.remove('open');
+    }
+  });
 }
 
 function buildModelSelect(): void {
