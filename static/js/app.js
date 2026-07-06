@@ -10,6 +10,67 @@ let currentSessionId = null;
 let currentWorkerId = null;
 let modelData = [];
 let lastSyncedSettings = null;
+let bubbleViewEnabled = true;
+let currentHistory = [];
+let toolGroupOpen = false;
+
+// ── Markdown / LaTeX rendering ──
+if (typeof marked !== 'undefined') {
+    marked.setOptions({ breaks: true, gfm: true });
+}
+
+function renderMarkdown(text) {
+    if (!text)
+        return '';
+    let html;
+    if (typeof marked !== 'undefined') {
+        html = marked.parse(text);
+    }
+    else {
+        html = esc(text).replace(/\n/g, '<br>');
+    }
+    // Wrap in temp div to process
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    // Highlight code blocks
+    if (typeof hljs !== 'undefined') {
+        tmp.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+    }
+    // Render LaTeX: block $$...$$ and inline $...$
+    if (typeof renderMathInElement !== 'undefined') {
+        try {
+            renderMathInElement(tmp, {
+                delimiters: [
+                    { left: '$$', right: '$$', display: true },
+                    { left: '$', right: '$', display: false },
+                ],
+                throwOnError: false,
+            });
+        }
+        catch (e) { /* ignore LaTeX errors */ }
+    }
+    return tmp.innerHTML;
+}
+
+// ── View toggle ──
+function toggleView() {
+    bubbleViewEnabled = !bubbleViewEnabled;
+    const btn = document.getElementById('viewToggleBtn');
+    const msgs = document.getElementById('messages');
+    if (bubbleViewEnabled) {
+        btn.textContent = '\uD83D\uDDEF';
+        btn.title = 'Switch to TUI view';
+        msgs.classList.remove('tui-mode');
+    }
+    else {
+        btn.textContent = '\uD83D\uDCCB';
+        btn.title = 'Switch to Bubble view';
+        msgs.classList.add('tui-mode');
+    }
+    renderMessages(currentHistory);
+}
 // ── WebSocket ──
 const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
 const ws = new WebSocket(wsProtocol + location.host + '/ws');
@@ -205,39 +266,66 @@ function showEmpty() {
     (document.getElementById('settingsPanel')).className = '';
     (document.getElementById('messages')).innerHTML =
         '<div class="empty-chat">Select a session to start</div>';
+    currentHistory = [];
+    toolGroupOpen = false;
 }
 // ── Messages ──
 function renderMessages(history) {
+    currentHistory = history || [];
     const el = document.getElementById('messages');
     el.innerHTML = '';
-    if (!history || history.length === 0) {
+    if (!currentHistory || currentHistory.length === 0) {
         el.innerHTML =
             '<div class="empty-chat">No messages yet. Start a conversation.</div>';
+        toolGroupOpen = false;
         return;
     }
-    history.forEach((h) => {
-        addMessage(h.role, h.content);
+    // Group consecutive tool messages
+    const grouped = [];
+    let toolGroup = null;
+    for (let i = 0; i < currentHistory.length; i++) {
+        const h = currentHistory[i];
+        if (h.role === 'tool') {
+            if (!toolGroup) {
+                toolGroup = { type: 'tool_group', items: [] };
+                grouped.push(toolGroup);
+            }
+            toolGroup.items.push(h);
+        }
+        else {
+            toolGroup = null;
+            grouped.push(h);
+        }
+    }
+    // Render grouped items
+    grouped.forEach((g) => {
+        if (g.type === 'tool_group') {
+            _renderToolGroup(g.items);
+        }
+        else {
+            _renderMsgEl(g.role, g.content);
+        }
     });
     el.scrollTop = el.scrollHeight;
+    toolGroupOpen = false;
 }
-function addMessage(role, content) {
+
+function _renderMsgEl(role, content) {
     const el = document.getElementById('messages');
     const div = document.createElement('div');
     if (role === 'user') {
         div.className = 'msg user';
-        div.textContent = content;
+        div.innerHTML = '<div class="msg-content">' + renderMarkdown(content) + '</div>';
     }
     else if (role === 'assistant') {
         div.className = 'msg assistant';
-        const display = content.replace(/🔧.*(\n|$)/g, '').trim();
-        div.textContent = display || '(tool call only)';
+        div.innerHTML = '<div class="msg-content">' + renderMarkdown(content) + '</div>';
     }
     else if (role === 'thinking') {
         div.className = 'msg thinking';
         div.innerHTML =
-            '💭 <span class="thinking-toggle">show thinking</span><div class="thinking-body">' +
-                esc(content) +
-                '</div>';
+            '\uD83D\uDCAD <span class="thinking-toggle">show thinking</span>' +
+                '<div class="thinking-body">' + esc(content) + '</div>';
         div.onclick = function () {
             const body = div.querySelector('.thinking-body');
             const toggle = div.querySelector('.thinking-toggle');
@@ -251,7 +339,7 @@ function addMessage(role, content) {
     }
     else if (role === 'tool') {
         div.className = 'msg tool';
-        div.textContent = '🔧 ' + content;
+        div.textContent = '\uD83D\uDD27 ' + content;
     }
     else {
         div.className = 'msg system';
@@ -259,6 +347,44 @@ function addMessage(role, content) {
     }
     el.appendChild(div);
     el.scrollTop = el.scrollHeight;
+}
+
+function _renderToolGroup(items) {
+    if (items.length === 1) {
+        _renderMsgEl('tool', items[0].content);
+        return;
+    }
+    const el = document.getElementById('messages');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'tool-group collapsed';
+    const count = items.length;
+    const names = items.map(function (t) { return t.content.split('(')[0] || ''; }).join(', ');
+    wrapper.innerHTML =
+        '<div class="tool-group-header">' +
+            '\uD83D\uDD27 <strong>' + count + ' tool calls:</strong> ' +
+            esc(names) +
+            ' <span class="toggle-icon">\u25B6</span>' +
+            '</div>' +
+            '<div class="tool-group-body"></div>';
+    const body = wrapper.querySelector('.tool-group-body');
+    items.forEach(function (t) {
+        const toolDiv = document.createElement('div');
+        toolDiv.className = 'msg tool';
+        toolDiv.textContent = '\uD83D\uDD27 ' + t.content;
+        body.appendChild(toolDiv);
+    });
+    wrapper.querySelector('.tool-group-header').onclick = function () {
+        wrapper.classList.toggle('collapsed');
+        wrapper.classList.toggle('open');
+    };
+    el.appendChild(wrapper);
+    el.scrollTop = el.scrollHeight;
+}
+
+function addMessage(role, content) {
+    // Also push to currentHistory for re-render on toggle
+    currentHistory.push({ role: role, content: content });
+    _renderMsgEl(role, content);
 }
 function appendEvent(event) {
     const t = event.type;
@@ -268,14 +394,34 @@ function appendEvent(event) {
         return;
     if (t === 'assistant') {
         const content = (event.message && event.message.content) || [];
-        content.forEach((b) => {
-            if (b.type === 'text')
-                addMessage('assistant', b.text ?? '');
-            else if (b.type === 'thinking')
-                addMessage('thinking', b.thinking ?? '');
-            else if (b.type === 'tool_use')
-                addMessage('tool', (b.name ?? '') + '(' + JSON.stringify(b.input || {}) + ')');
-        });
+        // Check if all blocks are tool_use (consecutive tool group)
+        const allTools = content.length > 0 && content.every(function (b) { return b.type === 'tool_use'; });
+        if (allTools && content.length >= 2) {
+            // Create as tool group
+            const items = content.map(function (b) {
+                const c = (b.name || '') + '(' + JSON.stringify(b.input || {}) + ')';
+                currentHistory.push({ role: 'tool', content: c });
+                return { role: 'tool', content: c };
+            });
+            _renderToolGroup(items);
+        }
+        else {
+            content.forEach(function (b) {
+                if (b.type === 'text') {
+                    currentHistory.push({ role: 'assistant', content: b.text || '' });
+                    _renderMsgEl('assistant', b.text || '');
+                }
+                else if (b.type === 'thinking') {
+                    currentHistory.push({ role: 'thinking', content: b.thinking || '' });
+                    _renderMsgEl('thinking', b.thinking || '');
+                }
+                else if (b.type === 'tool_use') {
+                    var c = (b.name || '') + '(' + JSON.stringify(b.input || {}) + ')';
+                    currentHistory.push({ role: 'tool', content: c });
+                    _renderMsgEl('tool', c);
+                }
+            });
+        }
     }
 }
 function appendResult(d) {
