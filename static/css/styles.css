@@ -501,12 +501,13 @@ body {
 
 /* ── TUI Mode (flat text, no bubbles) ── */
 #messages.tui-mode {
-  padding: 12px 0;
+  padding: 12px 0 !important;
 }
 
 #messages.tui-mode .msg {
   border-radius: 0;
-  max-width: 100%;
+  max-width: 100% !important;
+  width: 100%;
   padding: 2px 16px;
   margin: 0;
 }
@@ -519,9 +520,9 @@ body {
   border-top: 1px solid #3fb950;
   border-bottom: 1px solid #3fb950;
   padding: 8px 16px 8px 28px;
-  align-self: stretch;
-  width: 100%;
-  max-width: none;
+  align-self: stretch !important;
+  width: 100% !important;
+  max-width: none !important;
   margin: 6px 0;
   position: relative;
 }
@@ -539,10 +540,12 @@ body {
 
 /* TUI assistant: white left bar */
 #messages.tui-mode .msg.assistant {
-  background: transparent;
-  border: none;
+  background: transparent !important;
+  border: none !important;
   border-left: 3px solid #8b949e;
   padding: 2px 16px 2px 24px;
+  max-width: 100% !important;
+  width: 100%;
 }
 
 /* TUI thinking: still collapsible with purple border */
