@@ -554,6 +554,8 @@ body {
   padding: 2px 16px 2px 24px;
   border-radius: 0;
   background: transparent;
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 /* TUI tool: orange border */
@@ -564,6 +566,8 @@ body {
   background: transparent;
   font-size: .75rem;
   font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  width: 100% !important;
+  max-width: 100% !important;
 }
 
 /* TUI tool group */
@@ -573,6 +577,9 @@ body {
   border-top: none;
   border-bottom: none;
   background: transparent;
+  width: 100% !important;
+  max-width: 100% !important;
+  align-self: stretch !important;
 }
 
 #messages.tui-mode .tool-group-header {
