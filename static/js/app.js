@@ -297,31 +297,8 @@ function renderMessages(history) {
         toolGroupOpen = false;
         return;
     }
-    // Group consecutive tool messages
-    const grouped = [];
-    let toolGroup = null;
-    for (let i = 0; i < currentHistory.length; i++) {
-        const h = currentHistory[i];
-        if (h.role === 'tool') {
-            if (!toolGroup) {
-                toolGroup = { type: 'tool_group', items: [] };
-                grouped.push(toolGroup);
-            }
-            toolGroup.items.push(h);
-        }
-        else {
-            toolGroup = null;
-            grouped.push(h);
-        }
-    }
-    // Render grouped items
-    grouped.forEach((g) => {
-        if (g.type === 'tool_group') {
-            _renderToolGroup(g.items);
-        }
-        else {
-            _renderMsgEl(g.role, g.content);
-        }
+    currentHistory.forEach(function (h) {
+        _renderMsgEl(h.role, h.content);
     });
     el.scrollTop = el.scrollHeight;
     toolGroupOpen = false;
@@ -392,38 +369,6 @@ function _renderMsgEl(role, content) {
     el.scrollTop = el.scrollHeight;
 }
 
-function _renderToolGroup(items) {
-    if (items.length === 1) {
-        _renderMsgEl('tool', items[0].content);
-        return;
-    }
-    const el = document.getElementById('messages');
-    const wrapper = document.createElement('div');
-    wrapper.className = 'tool-group open';
-    const count = items.length;
-    const names = items.map(function (t) { return toolName(t.content); }).join(', ');
-    wrapper.innerHTML =
-        '<div class="tool-group-header">' +
-            '\uD83D\uDD27 <strong>' + count + ' tool calls:</strong> ' +
-            esc(names) +
-            ' <span class="toggle-icon">\u25B6</span>' +
-            '</div>' +
-            '<div class="tool-group-body"></div>';
-    const body = wrapper.querySelector('.tool-group-body');
-    items.forEach(function (t) {
-        const toolDiv = document.createElement('div');
-        toolDiv.className = 'msg tool';
-        toolDiv.innerHTML = formatToolContent(t.content);
-        body.appendChild(toolDiv);
-    });
-    wrapper.querySelector('.tool-group-header').onclick = function () {
-        wrapper.classList.toggle('collapsed');
-        wrapper.classList.toggle('open');
-    };
-    el.appendChild(wrapper);
-    el.scrollTop = el.scrollHeight;
-}
-
 function addMessage(role, content) {
     // Also push to currentHistory for re-render on toggle
     currentHistory.push({ role: role, content: content });
@@ -437,34 +382,21 @@ function appendEvent(event) {
         return;
     if (t === 'assistant') {
         const content = (event.message && event.message.content) || [];
-        // Check if all blocks are tool_use (consecutive tool group)
-        const allTools = content.length > 0 && content.every(function (b) { return b.type === 'tool_use'; });
-        if (allTools && content.length >= 2) {
-            // Create as tool group
-            const items = content.map(function (b) {
-                const c = (b.name || '') + '(' + JSON.stringify(b.input || {}) + ')';
+        content.forEach(function (b) {
+            if (b.type === 'text') {
+                currentHistory.push({ role: 'assistant', content: b.text || '' });
+                _renderMsgEl('assistant', b.text || '');
+            }
+            else if (b.type === 'thinking') {
+                currentHistory.push({ role: 'thinking', content: b.thinking || '' });
+                _renderMsgEl('thinking', b.thinking || '');
+            }
+            else if (b.type === 'tool_use') {
+                var c = (b.name || '') + '(' + JSON.stringify(b.input || {}) + ')';
                 currentHistory.push({ role: 'tool', content: c });
-                return { role: 'tool', content: c };
-            });
-            _renderToolGroup(items);
-        }
-        else {
-            content.forEach(function (b) {
-                if (b.type === 'text') {
-                    currentHistory.push({ role: 'assistant', content: b.text || '' });
-                    _renderMsgEl('assistant', b.text || '');
-                }
-                else if (b.type === 'thinking') {
-                    currentHistory.push({ role: 'thinking', content: b.thinking || '' });
-                    _renderMsgEl('thinking', b.thinking || '');
-                }
-                else if (b.type === 'tool_use') {
-                    var c = (b.name || '') + '(' + JSON.stringify(b.input || {}) + ')';
-                    currentHistory.push({ role: 'tool', content: c });
-                    _renderMsgEl('tool', c);
-                }
-            });
-        }
+                _renderMsgEl('tool', c);
+            }
+        });
     }
 }
 function appendResult(d) {
