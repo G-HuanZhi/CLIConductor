@@ -392,6 +392,7 @@ body {
   margin: 2px 0;
   line-height: 1.45;
   max-width: 100%;
+  overflow-x: auto;
 }
 
 .msg.tool strong {
@@ -499,10 +500,14 @@ body {
 }
 
 /* ── TUI Mode (flat text, no bubbles) ── */
+#messages.tui-mode {
+  padding: 12px 0;
+}
+
 #messages.tui-mode .msg {
   border-radius: 0;
   max-width: 100%;
-  padding: 2px 0;
+  padding: 2px 16px;
   margin: 0;
 }
 
@@ -515,9 +520,9 @@ body {
   border-bottom: 1px solid #3fb950;
   padding: 8px 16px 8px 28px;
   align-self: stretch;
-  width: auto;
+  width: 100%;
   max-width: none;
-  margin: 6px -16px;
+  margin: 6px 0;
   position: relative;
 }
 
@@ -537,13 +542,13 @@ body {
   background: transparent;
   border: none;
   border-left: 3px solid #8b949e;
-  padding: 2px 0 2px 12px;
+  padding: 2px 16px 2px 24px;
 }
 
 /* TUI thinking: still collapsible with purple border */
 #messages.tui-mode .msg.thinking {
   border-left: 3px solid #d2a8ff;
-  padding: 2px 0 2px 12px;
+  padding: 2px 16px 2px 24px;
   border-radius: 0;
   background: transparent;
 }
@@ -551,7 +556,7 @@ body {
 /* TUI tool: orange border */
 #messages.tui-mode .msg.tool {
   border-left: 3px solid #ffa657;
-  padding: 3px 0 3px 12px;
+  padding: 3px 16px 3px 24px;
   border-radius: 0;
   background: transparent;
   font-size: .75rem;
@@ -576,7 +581,7 @@ body {
 #messages.tui-mode .msg.system {
   align-self: flex-start;
   text-align: left;
-  padding: 2px 0;
+  padding: 2px 16px;
 }
 
 #messages.tui-mode .msg.system::before {
