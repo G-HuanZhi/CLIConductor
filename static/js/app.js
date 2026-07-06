@@ -330,13 +330,11 @@ function renderMessages(history) {
 function formatToolContent(content) {
     if (!content)
         return '';
-    const match = content.match(/^([^(]+)(\(([\s\S]*)\))?$/);
+    const match = content.match(/^([^(]+)\(([\s\S]*)\)$/);
     if (!match)
-        return '\uD83D\uDD27 ' + content;
+        return '\uD83D\uDD27 ' + esc(content);
     const name = match[1] || '';
-    const jsonText = match[3] || '';
-    if (!jsonText)
-        return '\uD83D\uDD27 ' + name;
+    const jsonText = match[2] || '';
     let formatted;
     try {
         formatted = JSON.stringify(JSON.parse(jsonText), null, 2);
@@ -344,7 +342,8 @@ function formatToolContent(content) {
     catch (e) {
         formatted = jsonText;
     }
-    return '\uD83D\uDD27 ' + name + ':\n' + formatted;
+    return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>' +
+        '<div class="tool-pre">' + esc(formatted) + '</div>';
 }
 
 function toolName(content) {
@@ -383,7 +382,7 @@ function _renderMsgEl(role, content) {
     }
     else if (role === 'tool') {
         div.className = 'msg tool';
-        div.textContent = formatToolContent(content);
+        div.innerHTML = formatToolContent(content);
     }
     else {
         div.className = 'msg system';
@@ -414,7 +413,7 @@ function _renderToolGroup(items) {
     items.forEach(function (t) {
         const toolDiv = document.createElement('div');
         toolDiv.className = 'msg tool';
-        toolDiv.textContent = formatToolContent(t.content);
+        toolDiv.innerHTML = formatToolContent(t.content);
         body.appendChild(toolDiv);
     });
     wrapper.querySelector('.tool-group-header').onclick = function () {
