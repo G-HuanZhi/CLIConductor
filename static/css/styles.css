@@ -379,7 +379,7 @@ body {
   color: #d2a8ff;
 }
 
-/* ── Tool (collapsible, orange left border) ── */
+/* ── Tool (orange left border) ── */
 .msg.tool {
   background: #21262d;
   align-self: flex-start;
@@ -389,11 +389,9 @@ body {
   font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
   color: #ffa657;
   padding: 6px 10px;
-  margin: 1px 0;
-  cursor: pointer;
+  margin: 2px 0;
   line-height: 1.45;
-  overflow: visible;
-  white-space: normal;
+  max-width: 100%;
 }
 
 .msg.tool strong {
@@ -412,66 +410,6 @@ body {
   white-space: pre;
   line-height: 1.45;
   tab-size: 2;
-}
-
-/* Tool group wrapper (consecutive tools) */
-.tool-group {
-  background: #21262d22;
-  border: 1px solid #30363d;
-  border-left: 3px solid #ffa657;
-  border-radius: 6px;
-  margin: 4px 0;
-  overflow: hidden;
-  max-width: 100%;
-  align-self: flex-start;
-}
-
-.tool-group-header {
-  padding: 6px 12px;
-  font-size: .8rem;
-  color: #ffa657;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  user-select: none;
-  min-height: 1.8em;
-  line-height: 1.4;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
-}
-
-.tool-group-header:hover {
-  background: #ffa65711;
-}
-
-.tool-group-header .toggle-icon {
-  display: inline-block;
-  transition: transform .2s;
-  font-size: .7rem;
-}
-
-.tool-group.open .tool-group-header .toggle-icon {
-  transform: rotate(90deg);
-}
-
-.tool-group-body {
-  display: none;
-}
-
-.tool-group.open .tool-group-body {
-  display: block;
-}
-
-.tool-group-body .msg.tool {
-  margin: 0;
-  border-radius: 0;
-  border-left: 2px solid #ffa65744;
-  background: transparent;
-  padding: 4px 10px 4px 18px;
-  font-size: .7rem;
-  white-space: normal;
-  line-height: 1.45;
 }
 
 /* ── System messages ── */
@@ -554,25 +492,14 @@ body {
   background: transparent;
 }
 
-/* TUI tool: still collapsible with orange border */
+/* TUI tool: orange border */
 #messages.tui-mode .msg.tool {
   border-left: 3px solid #ffa657;
   padding: 3px 0 3px 12px;
   border-radius: 0;
   background: transparent;
-  white-space: normal;
-  line-height: 1.45;
-  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
   font-size: .75rem;
-}
-
-/* TUI tool group */
-#messages.tui-mode .tool-group {
-  border-radius: 0;
-  border-right: none;
-  border-top: none;
-  border-bottom: none;
-  background: transparent;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
 }
 
 /* TUI system */
