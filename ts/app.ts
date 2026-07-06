@@ -845,7 +845,7 @@ function init(): void {
     projects.forEach((p: CbcProject) => {
       const opt = document.createElement('option');
       opt.value = p.project_dir;
-      opt.textContent = `${p.short_label} (${p.session_count})`;
+      opt.textContent = p.short_label;
       cbcProjectSelect.appendChild(opt);
     });
     if (projects.length > 0) {
