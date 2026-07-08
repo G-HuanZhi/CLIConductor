@@ -399,7 +399,7 @@ function _renderMsgEl(role, content) {
 function _renderToolGroup(items) {
     var el = document.getElementById('messages');
     var wrapper = document.createElement('div');
-    wrapper.className = 'tool-group';
+    wrapper.className = 'tool-group collapsed';
     var count = items.length;
     var names = items.map(function (t) { return toolName(t.content); }).slice(0, 3).join(', ');
     if (items.length > 3)
