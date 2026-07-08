@@ -331,12 +331,7 @@ function renderMessages(history) {
     }
     grouped.forEach(function (g) {
         if (g.type === 'tool_group') {
-            if (g.items.length === 1) {
-                _renderMsgEl('tool', g.items[0].content);
-            }
-            else {
-                _renderToolGroup(g.items);
-            }
+            _renderToolGroup(g.items);
         }
         else {
             _renderMsgEl(g.role, g.content);
@@ -453,7 +448,8 @@ function _renderMsgEl(role, content) {
 function _renderToolGroup(items) {
     var el = document.getElementById('messages');
     var wrapper = document.createElement('div');
-    wrapper.className = 'tool-group collapsed';
+    // Only collapse when there are multiple tools
+    wrapper.className = items.length > 1 ? 'tool-group collapsed' : 'tool-group';
     var count = items.length;
     var names = items.map(function (t) { return toolName(t.content); }).slice(0, 3).join(', ');
     if (items.length > 3)
