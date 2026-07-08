@@ -448,8 +448,7 @@ function _renderMsgEl(role, content) {
 function _renderToolGroup(items) {
     var el = document.getElementById('messages');
     var wrapper = document.createElement('div');
-    // Only collapse when there are multiple tools
-    wrapper.className = items.length > 1 ? 'tool-group collapsed' : 'tool-group';
+    wrapper.className = 'tool-group collapsed';
     var count = items.length;
     var names = items.map(function (t) { return toolName(t.content); }).slice(0, 3).join(', ');
     if (items.length > 3)
