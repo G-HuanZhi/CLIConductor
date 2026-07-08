@@ -178,6 +178,35 @@ body {
   color: #484f58;
   font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
   margin-left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sid-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #161b22;
+  padding: 1px 4px 1px 6px;
+  border-radius: 3px;
+}
+
+.sid-copy {
+  background: none;
+  border: none;
+  color: #484f58;
+  cursor: pointer;
+  font-size: .6rem;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0.5;
+  transition: opacity .15s;
+}
+
+.sid-copy:hover {
+  opacity: 1;
+  color: #58a6ff;
 }
 
 #topBar .chat-status {

@@ -266,8 +266,19 @@ function updateTopBar() {
     (document.getElementById('chatModel')).textContent = s.model || defaultModel;
     const sidsEl = document.getElementById('chatSessionIds');
     sidsEl.style.display = '';
-    sidsEl.textContent = 'id: ' + (s.id || '').slice(0, 12) +
-        (s.cbc_session_id ? ' | cbc: ' + s.cbc_session_id.slice(0, 8) : '');
+    var sesId = s.id || '';
+    var cbcId = s.cbcSessionId;
+    sidsEl.innerHTML =
+        '<span class="sid-item">' +
+            esc(sesId.slice(0, 12)) +
+            '<button class="sid-copy" title="Copy session ID" onclick="copyToClipboard(\'' + sesId + '\')">\u29C9</button>' +
+            '</span>' +
+        (cbcId ?
+            '<span class="sid-item">' +
+            esc(cbcId.slice(0, 8)) +
+            '<button class="sid-copy" title="Copy cbc session ID" onclick="copyToClipboard(\'' + cbcId + '\')">\u29C9</button>' +
+            '</span>'
+            : '');
     const status = s.workerStatus || 'offline';
     (document.getElementById('chatStatus')).textContent =
         status + (currentWorkerId ? ' (' + currentWorkerId + ')' : ' (no worker)');
@@ -1039,6 +1050,15 @@ function esc(s) {
     const d = document.createElement('div');
     d.textContent = s;
     return d.innerHTML;
+}
+function copyToClipboard(text) {
+    if (!text)
+        return;
+    navigator.clipboard.writeText(text).then(function () {
+        toast('Copied: ' + text);
+    }).catch(function () {
+        toast('Copy failed');
+    });
 }
 function toast(msg) {
     const el = document.getElementById('toast');
