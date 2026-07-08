@@ -173,6 +173,13 @@ body {
   color: #8b949e;
 }
 
+#topBar .chat-sessionids {
+  font-size: .65rem;
+  color: #484f58;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  margin-left: 4px;
+}
+
 #topBar .chat-status {
   font-size: .7rem;
   color: #484f58;

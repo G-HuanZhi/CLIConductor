@@ -264,6 +264,10 @@ function updateTopBar() {
     (document.getElementById('chatName')).textContent =
         s.name || (currentSessionId ?? '').slice(0, 12);
     (document.getElementById('chatModel')).textContent = s.model || defaultModel;
+    const sidsEl = document.getElementById('chatSessionIds');
+    sidsEl.style.display = '';
+    sidsEl.textContent = 'id: ' + (s.id || '').slice(0, 12) +
+        (s.cbc_session_id ? ' | cbc: ' + s.cbc_session_id.slice(0, 8) : '');
     const status = s.workerStatus || 'offline';
     (document.getElementById('chatStatus')).textContent =
         status + (currentWorkerId ? ' (' + currentWorkerId + ')' : ' (no worker)');
