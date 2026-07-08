@@ -461,6 +461,11 @@ body {
   font-size: .7rem;
 }
 
+/* TUI: inner tool-group tools must not double the left border */
+#messages.tui-mode .tool-group-body .msg.tool {
+  border-left: none;
+}
+
 .tool-group-body .msg.tool + .msg.tool {
   border-top: 1px solid #21262d;
 }
