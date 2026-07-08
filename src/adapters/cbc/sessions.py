@@ -293,32 +293,18 @@ def _event_to_block(event: dict) -> dict | None:
             )
             if text.strip():
                 return {"role": "thinking", "content": text.strip()}
-            text = "".join(
-                block.get("text", "")
-                for block in content_blocks
-                if isinstance(block, dict)
-            )
-            if text.strip():
-                return {"role": "thinking", "content": text.strip()}
 
     elif etype == "function_call":
+        # Same format as adapter.extract_assistant_blocks tool_use
         name = event.get("name", "?")
         args_raw = event.get("args") or event.get("input") or {}
         if isinstance(args_raw, dict):
             args_str = json.dumps(args_raw, ensure_ascii=False)[:500]
         else:
             args_str = str(args_raw)[:500]
-        return {"role": "tool", "content": f"tool call: {name}\nargs: {args_str}"}
+        return {"role": "tool", "content": f"{name}({args_str})"}
 
-    elif etype == "function_call_result":
-        name = event.get("name", "?")
-        output = event.get("output", "")
-        if isinstance(output, dict):
-            output = output.get("text", str(output))
-        if isinstance(output, str):
-            output = output[:500]
-        else:
-            output = str(output)[:500]
-        return {"role": "tool", "content": f"tool result ({name}):\n{output}"}
+    # function_call_result is intentionally skipped — the live stdout path
+    # does not store tool results in session history either.
 
     return None
