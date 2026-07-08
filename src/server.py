@@ -596,11 +596,8 @@ async def api_cbc_sessions(project_dir: str = "", cwd: str = "", all: int = 0):
     if all:
         return {"sessions": all_sessions, "total": len(all_sessions)}
 
-    # Filter 1: skip if already in CLIConductor
-    existing_cbc_ids: set[str] = set()
-    for s in sess.list_all():
-        if s.cbc_session_id:
-            existing_cbc_ids.add(s.cbc_session_id)
+    # Filter 1: removed — already-imported sessions are now visible
+    #           and can be re-imported (old session is replaced).
 
     # Filter 2: skip non-main workdir sessions
     exclude_patterns = filter_cfg.get("exclude_workdir_patterns", [])
@@ -610,8 +607,6 @@ async def api_cbc_sessions(project_dir: str = "", cwd: str = "", all: int = 0):
 
     filtered: list[dict] = []
     for s in all_sessions:
-        if s["session_id"] in existing_cbc_ids:
-            continue
         if target_dir and s["project_dir"] != target_dir:
             continue
         if not target_dir and any(p in s["project_dir"] for p in exclude_patterns):
@@ -643,10 +638,18 @@ async def api_cbc_sessions_import(data: dict):
     project_dir = data.get("project_dir")
     cwd = data.get("cwd") or str(Path.cwd())
 
-    # Check if already imported
+    # If already imported, delete the existing session and re-import
     for s in sess.list_all():
         if s.cbc_session_id == session_id:
-            return {"error": f"Session {session_id} already imported as {s.id}"}
+            w = worker.find_worker_by_session(s.id)
+            if w:
+                await worker.kill_worker(w.worker_id)
+            sess.delete(s.id)
+            await broadcast({
+                "type": "session.deleted",
+                "sessionId": s.id,
+            })
+            break
 
     try:
         if project_dir:
@@ -662,6 +665,7 @@ async def api_cbc_sessions_import(data: dict):
         name=name,
         cbc_session_id=session_id,
         history=history,
+        workdir=str(Path.cwd()),
     )
 
     await broadcast({
@@ -838,7 +842,7 @@ async def api_takeover(worker_id: str):
         proc = subprocess.Popen(
             ["powershell.exe", "-NoExit", "-Command",
              " ".join(adapter_cmd)],
-            cwd=s.workdir,
+            cwd=s.workdir or str(Path.cwd()),
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
         w.takeover_pid = proc.pid

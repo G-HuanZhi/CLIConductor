@@ -264,6 +264,21 @@ function updateTopBar() {
     (document.getElementById('chatName')).textContent =
         s.name || (currentSessionId ?? '').slice(0, 12);
     (document.getElementById('chatModel')).textContent = s.model || defaultModel;
+    const sidsEl = document.getElementById('chatSessionIds');
+    sidsEl.style.display = '';
+    var sesId = s.id || '';
+    var cbcId = s.cbcSessionId;
+    sidsEl.innerHTML =
+        '<span class="sid-item">' +
+            esc(sesId.slice(0, 12)) +
+            '<button class="sid-copy" title="Copy session ID" onclick="copyToClipboard(\'' + sesId + '\')">\u29C9</button>' +
+            '</span>' +
+        (cbcId ?
+            '<span class="sid-item">' +
+            esc(cbcId.slice(0, 8)) +
+            '<button class="sid-copy" title="Copy cbc session ID" onclick="copyToClipboard(\'' + cbcId + '\')">\u29C9</button>' +
+            '</span>'
+            : '');
     const status = s.workerStatus || 'offline';
     (document.getElementById('chatStatus')).textContent =
         status + (currentWorkerId ? ' (' + currentWorkerId + ')' : ' (no worker)');
@@ -316,12 +331,7 @@ function renderMessages(history) {
     }
     grouped.forEach(function (g) {
         if (g.type === 'tool_group') {
-            if (g.items.length === 1) {
-                _renderMsgEl('tool', g.items[0].content);
-            }
-            else {
-                _renderToolGroup(g.items);
-            }
+            _renderToolGroup(g.items);
         }
         else {
             _renderMsgEl(g.role, g.content);
@@ -333,28 +343,67 @@ function renderMessages(history) {
 
 function formatToolContent(content) {
     if (!content)
-        return '';
-    const match = content.match(/^([^(]+)\(([\s\S]*)\)$/);
+        return '\uD83D\uDD27 <em>(empty)</em>';
+    // Legacy "tool call: Name\nargs: {...}" format
+    var legacyMatch = content.match(/^tool call:\s*(.+?)(?:\r?\n|\r)args:\s*([\s\S]*)$/);
+    if (legacyMatch) {
+        var name = legacyMatch[1].trim();
+        var jsonText = legacyMatch[2].trim();
+        var formatted = formatToolArgs(jsonText);
+        if (!formatted || !formatted.trim())
+            return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>';
+        return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>' +
+            '<div class="tool-pre">' + esc(formatted) + '</div>';
+    }
+    // New "Name({...})" format
+    var match = content.match(/^([^(]+)\(([\s\S]*)\)$/);
     if (!match)
-        return '\uD83D\uDD27 ' + esc(content);
-    const name = match[1] || '';
-    const jsonText = match[2] || '';
-    let formatted;
-    try {
-        formatted = JSON.stringify(JSON.parse(jsonText), null, 2);
-    }
-    catch (e) {
-        formatted = jsonText;
-    }
+        return '\uD83D\uDD27 ' + esc(content).replace(/\n/g, '<br>');
+    var name = (match[1] || '').trim();
+    var jsonText = match[2] || '';
+    if (!name)
+        name = 'tool';
+    var formatted = formatToolArgs(jsonText);
+    if (!formatted || !formatted.trim())
+        return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>';
     return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>' +
         '<div class="tool-pre">' + esc(formatted) + '</div>';
 }
 
+function formatToolArgs(jsonText) {
+    try {
+        var parsed = JSON.parse(jsonText);
+        if (parsed && typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            var cleaned = {};
+            Object.keys(parsed).forEach(function (key) {
+                if (key === '_comment' || key === '$comment' || key === '-comment')
+                    return;
+                cleaned[key] = parsed[key];
+            });
+            return JSON.stringify(cleaned, null, 2);
+        }
+        return jsonText;
+    }
+    catch (e) {
+        return jsonText;
+    }
+}
+
 function toolName(content) {
     if (!content)
-        return '';
-    const idx = content.indexOf('(');
-    return idx < 0 ? content : content.slice(0, idx);
+        return '(empty)';
+    // Try "tool call: Name" or "tool result (Name):" patterns
+    var callMatch = content.match(/^tool call:\s*(.+)/);
+    if (callMatch)
+        return callMatch[1].split('\n')[0].trim();
+    var resultMatch = content.match(/^tool result \(([^)]+)\)/);
+    if (resultMatch)
+        return resultMatch[1].trim();
+    // Fallback: extract before first '(' or first line
+    var idx = content.indexOf('(');
+    if (idx >= 0)
+        return content.slice(0, idx).trim();
+    return content.split('\n')[0].trim().slice(0, 30);
 }
 
 function _renderMsgEl(role, content) {
@@ -399,7 +448,7 @@ function _renderMsgEl(role, content) {
 function _renderToolGroup(items) {
     var el = document.getElementById('messages');
     var wrapper = document.createElement('div');
-    wrapper.className = 'tool-group';
+    wrapper.className = 'tool-group collapsed';
     var count = items.length;
     var names = items.map(function (t) { return toolName(t.content); }).slice(0, 3).join(', ');
     if (items.length > 3)
@@ -1021,6 +1070,15 @@ function esc(s) {
     const d = document.createElement('div');
     d.textContent = s;
     return d.innerHTML;
+}
+function copyToClipboard(text) {
+    if (!text)
+        return;
+    navigator.clipboard.writeText(text).then(function () {
+        toast('Copied: ' + text);
+    }).catch(function () {
+        toast('Copy failed');
+    });
 }
 function toast(msg) {
     const el = document.getElementById('toast');

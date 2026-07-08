@@ -173,6 +173,42 @@ body {
   color: #8b949e;
 }
 
+#topBar .chat-sessionids {
+  font-size: .65rem;
+  color: #484f58;
+  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  margin-left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sid-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #161b22;
+  padding: 1px 4px 1px 6px;
+  border-radius: 3px;
+}
+
+.sid-copy {
+  background: none;
+  border: none;
+  color: #484f58;
+  cursor: pointer;
+  font-size: .6rem;
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0.5;
+  transition: opacity .15s;
+}
+
+.sid-copy:hover {
+  opacity: 1;
+  color: #58a6ff;
+}
+
 #topBar .chat-status {
   font-size: .7rem;
   color: #484f58;
@@ -393,6 +429,7 @@ body {
   line-height: 1.45;
   max-width: 100%;
   overflow-x: auto;
+  min-height: 1.5em;
 }
 
 .msg.tool strong {
@@ -408,9 +445,11 @@ body {
   font-family: inherit;
   font-size: inherit;
   color: #c9d1d9;
-  white-space: pre;
+  white-space: pre-wrap;
   line-height: 1.45;
   tab-size: 2;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 /* Tool group wrapper (consecutive tools - default expanded) */
@@ -435,6 +474,7 @@ body {
   user-select: none;
   background: #21262d;
   border-radius: 5px 5px 0 0;
+  min-height: 1.5em;
 }
 
 .tool-group-header:hover {
@@ -446,10 +486,11 @@ body {
   transition: transform .2s;
   font-size: .7rem;
   margin-left: auto;
+  transform: none;
 }
 
 .tool-group.collapsed .toggle-icon {
-  transform: rotate(-90deg);
+  transform: rotate(90deg);
 }
 
 .tool-group-body .msg.tool {
@@ -459,6 +500,12 @@ body {
   background: transparent;
   padding: 4px 12px 4px 14px;
   font-size: .7rem;
+  min-height: 1.2em;
+}
+
+/* TUI: inner tool-group tools must not double the left border */
+#messages.tui-mode .tool-group-body .msg.tool {
+  border-left: none;
 }
 
 .tool-group-body .msg.tool + .msg.tool {
