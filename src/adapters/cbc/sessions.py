@@ -297,7 +297,7 @@ def _event_to_block(event: dict) -> dict | None:
     elif etype == "function_call":
         # Same format as adapter.extract_assistant_blocks tool_use
         name = event.get("name", "?")
-        args_raw = event.get("args") or event.get("input") or {}
+        args_raw = event.get("arguments") or event.get("args") or event.get("input") or {}
         if isinstance(args_raw, dict):
             args_str = json.dumps(args_raw, ensure_ascii=False)[:500]
         else:
