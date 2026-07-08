@@ -349,24 +349,49 @@ function renderMessages(history) {
 function formatToolContent(content) {
     if (!content)
         return '\uD83D\uDD27 <em>(empty)</em>';
-    const match = content.match(/^([^(]+)\(([\s\S]*)\)$/);
+    // Legacy "tool call: Name\nargs: {...}" format
+    var legacyMatch = content.match(/^tool call:\s*(.+?)(?:\r?\n|\r)args:\s*([\s\S]*)$/);
+    if (legacyMatch) {
+        var name = legacyMatch[1].trim();
+        var jsonText = legacyMatch[2].trim();
+        var formatted = formatToolArgs(jsonText);
+        if (!formatted || !formatted.trim())
+            return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>';
+        return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>' +
+            '<div class="tool-pre">' + esc(formatted) + '</div>';
+    }
+    // New "Name({...})" format
+    var match = content.match(/^([^(]+)\(([\s\S]*)\)$/);
     if (!match)
         return '\uD83D\uDD27 ' + esc(content).replace(/\n/g, '<br>');
     var name = (match[1] || '').trim();
     var jsonText = match[2] || '';
     if (!name)
         name = 'tool';
-    var formatted;
-    try {
-        formatted = JSON.stringify(JSON.parse(jsonText), null, 2);
-    }
-    catch (e) {
-        formatted = jsonText;
-    }
+    var formatted = formatToolArgs(jsonText);
     if (!formatted || !formatted.trim())
         return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>';
     return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>' +
         '<div class="tool-pre">' + esc(formatted) + '</div>';
+}
+
+function formatToolArgs(jsonText) {
+    try {
+        var parsed = JSON.parse(jsonText);
+        if (parsed && typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            var cleaned = {};
+            Object.keys(parsed).forEach(function (key) {
+                if (key === '_comment' || key === '$comment' || key === '-comment')
+                    return;
+                cleaned[key] = parsed[key];
+            });
+            return JSON.stringify(cleaned, null, 2);
+        }
+        return jsonText;
+    }
+    catch (e) {
+        return jsonText;
+    }
 }
 
 function toolName(content) {
