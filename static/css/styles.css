@@ -446,11 +446,11 @@ body {
   transition: transform .2s;
   font-size: .7rem;
   margin-left: auto;
-  transform: rotate(90deg);
+  transform: none;
 }
 
 .tool-group.collapsed .toggle-icon {
-  transform: none;
+  transform: rotate(90deg);
 }
 
 .tool-group-body .msg.tool {
