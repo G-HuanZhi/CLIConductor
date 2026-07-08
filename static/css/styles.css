@@ -393,6 +393,7 @@ body {
   line-height: 1.45;
   max-width: 100%;
   overflow-x: auto;
+  min-height: 1.5em;
 }
 
 .msg.tool strong {
@@ -411,6 +412,8 @@ body {
   white-space: pre;
   line-height: 1.45;
   tab-size: 2;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 /* Tool group wrapper (consecutive tools - default expanded) */
@@ -435,6 +438,7 @@ body {
   user-select: none;
   background: #21262d;
   border-radius: 5px 5px 0 0;
+  min-height: 1.5em;
 }
 
 .tool-group-header:hover {
@@ -460,6 +464,7 @@ body {
   background: transparent;
   padding: 4px 12px 4px 14px;
   font-size: .7rem;
+  min-height: 1.2em;
 }
 
 /* TUI: inner tool-group tools must not double the left border */

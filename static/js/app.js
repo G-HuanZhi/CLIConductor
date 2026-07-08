@@ -333,28 +333,42 @@ function renderMessages(history) {
 
 function formatToolContent(content) {
     if (!content)
-        return '';
+        return '\uD83D\uDD27 <em>(empty)</em>';
     const match = content.match(/^([^(]+)\(([\s\S]*)\)$/);
     if (!match)
-        return '\uD83D\uDD27 ' + esc(content);
-    const name = match[1] || '';
-    const jsonText = match[2] || '';
-    let formatted;
+        return '\uD83D\uDD27 ' + esc(content).replace(/\n/g, '<br>');
+    var name = (match[1] || '').trim();
+    var jsonText = match[2] || '';
+    if (!name)
+        name = 'tool';
+    var formatted;
     try {
         formatted = JSON.stringify(JSON.parse(jsonText), null, 2);
     }
     catch (e) {
         formatted = jsonText;
     }
+    if (!formatted || !formatted.trim())
+        return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>';
     return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>' +
         '<div class="tool-pre">' + esc(formatted) + '</div>';
 }
 
 function toolName(content) {
     if (!content)
-        return '';
-    const idx = content.indexOf('(');
-    return idx < 0 ? content : content.slice(0, idx);
+        return '(empty)';
+    // Try "tool call: Name" or "tool result (Name):" patterns
+    var callMatch = content.match(/^tool call:\s*(.+)/);
+    if (callMatch)
+        return callMatch[1].split('\n')[0].trim();
+    var resultMatch = content.match(/^tool result \(([^)]+)\)/);
+    if (resultMatch)
+        return resultMatch[1].trim();
+    // Fallback: extract before first '(' or first line
+    var idx = content.indexOf('(');
+    if (idx >= 0)
+        return content.slice(0, idx).trim();
+    return content.split('\n')[0].trim().slice(0, 30);
 }
 
 function _renderMsgEl(role, content) {
