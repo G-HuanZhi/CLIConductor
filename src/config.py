@@ -9,7 +9,7 @@ DEFAULT_CONFIG: dict = {
     "cbc_import": {
         "min_message_count": 5,
         "max_sessions_shown": 30,
-        "exclude_workdir_patterns": ["-data-workdirs-"],
+        "exclude_workdir_patterns": [],
         "project_dir_exact_match": False,
     }
 }
