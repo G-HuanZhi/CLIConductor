@@ -448,13 +448,12 @@ body {
   font-size: inherit;
   color: #c9d1d9;
   white-space: pre-wrap;
-  word-break: break-word;
+  word-break: break-all;
   overflow-wrap: anywhere;
   line-height: 1.45;
   tab-size: 2;
   overflow-x: auto;
   max-width: 100%;
-  width: 100%;
   min-height: 1.2em;
 }
 
