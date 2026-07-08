@@ -665,6 +665,7 @@ async def api_cbc_sessions_import(data: dict):
         name=name,
         cbc_session_id=session_id,
         history=history,
+        workdir=str(Path.cwd()),
     )
 
     await broadcast({
@@ -841,7 +842,7 @@ async def api_takeover(worker_id: str):
         proc = subprocess.Popen(
             ["powershell.exe", "-NoExit", "-Command",
              " ".join(adapter_cmd)],
-            cwd=s.workdir,
+            cwd=s.workdir or str(Path.cwd()),
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
         w.takeover_pid = proc.pid
