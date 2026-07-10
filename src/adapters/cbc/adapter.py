@@ -15,6 +15,7 @@ class CbcAdapter:
 
     name = "cbc"
     default_model = "deepseek-v4-flash"
+    default_permission_mode = "bypassPermissions"
     supported_models = [
         "glm-5.2", "glm-5.1", "glm-5.0", "glm-5.0-turbo", "glm-5v-turbo", "glm-4.7",
         "minimax-m3-pay", "minimax-m2.7",
@@ -67,9 +68,8 @@ class CbcAdapter:
         return []
 
     def permission_mode_args(self, s: Session) -> list[str]:
-        if s.permission_mode:
-            return ["--permission-mode", s.permission_mode]
-        return []
+        mode = s.permission_mode or self.default_permission_mode
+        return ["--permission-mode", mode]
 
     def resume_args(self, s: Session) -> list[str]:
         if s.cbc_session_id:
