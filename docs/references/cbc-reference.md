@@ -359,7 +359,101 @@ cbc 将每个会话的完整对话记录保存为 JSONL 文件：
 
 ---
 
-## 八、文档来源
+## 八、沙箱与容器
+
+cbc 支持两种沙箱模式：本地容器（Docker/Podman）和云端 E2B。bash 沙箱隔离仅在 macOS/Linux 生效。
+
+### 8.1 CLI 参数
+
+| 参数 | 作用 |
+|------|------|
+| `--sandbox [url]` | 启动沙箱：不带参数/`container`=Docker/Podman；E2B API URL=云端沙箱 |
+| `--sandbox-upload-dir` | 上传当前工作目录到沙箱（仅 E2B） |
+| `--sandbox-new` | 强制创建新沙箱，忽略缓存 |
+| `--sandbox-id <id>` | 连接到指定沙箱 ID 或别名 |
+| `--sandbox-kill` | 退出时终止沙箱（默认保留复用） |
+| `--teleport <value>` | 连接到远程已创建沙箱。格式：`session_{cliSessionId}`、`0010${sandboxId}${random}`(e2b)、`0020...`(cvm) |
+
+### 8.2 子命令 `cbc sandbox`
+
+```
+cbc sandbox list|ls     列出所有沙箱
+cbc sandbox info <id>   查看沙箱信息
+cbc sandbox kill <id>   杀掉运行中的沙箱
+cbc sandbox clean       清理已停止/过期的沙箱状态文件
+```
+
+### 8.3 环境变量
+
+| 变量 | 作用 |
+|------|------|
+| `E2B_API_KEY` | E2B 云端沙箱 API 密钥 |
+| `E2B_TEMPLATE` | E2B 模板 ID（默认 `base`） |
+| `CODEBUDDY_SANDBOX_IMAGE` | 容器沙箱自定义 Docker 镜像 |
+
+### 8.4 settings.json 配置
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "excludedCommands": ["docker", "git"],
+    "allowUnsandboxedCommands": true,
+    "network": {
+      "allowUnixSockets": ["/var/run/docker.sock"],
+      "allowLocalBinding": true,
+      "httpProxyPort": 8080,
+      "socksProxyPort": 8081
+    },
+    "enableWeakerNestedSandbox": false
+  }
+}
+```
+
+| 配置键 | 描述 | 默认 |
+|--------|------|------|
+| `enabled` | 启用 bash 沙箱（仅 macOS/Linux） | `false` |
+| `autoAllowBashIfSandboxed` | 沙箱内的 bash 命令自动批准 | `true` |
+| `excludedCommands` | 必须在沙箱外运行的命令 | `[]` |
+| `allowUnsandboxedCommands` | 是否允许 `dangerouslyDisableSandbox` 逃逸 | `true` |
+| `network.allowUnixSockets` | 沙箱内可访问的 Unix 套接字路径 | `[]` |
+| `network.allowLocalBinding` | 允许绑定 localhost 端口（仅 macOS） | `false` |
+| `network.httpProxyPort` | 自定义 HTTP 代理端口 | 自动 |
+| `network.socksProxyPort` | 自定义 SOCKS5 代理端口 | 自动 |
+| `enableWeakerNestedSandbox` | 无特权 Docker 环境降低安全要求（仅 Linux） | `false` |
+
+### 8.5 使用示例
+
+```bash
+# 容器沙箱（Docker/Podman，自动挂载当前目录）
+codebuddy --sandbox "分析这个项目"
+
+# E2B 云端沙箱（自动复用）
+codebuddy --sandbox https://api.e2b.dev "创建 Python web 应用"
+
+# 强制创建新沙箱
+codebuddy --sandbox --sandbox-new "从头开始"
+
+# 连接到指定沙箱
+codebuddy --sandbox --sandbox-id sb_abc123 "继续工作"
+
+# 退出时清理沙箱
+codebuddy --sandbox --sandbox-kill "临时测试"
+
+# Teleport 模式
+codebuddy --teleport session_abc123XYZ4567890 "连接到远程沙箱"
+```
+
+### 8.6 与本项目的关系
+
+- CLIConductor 当前运行在 **Windows** 上，bash 沙箱（`sandbox.enabled`）在此平台**不支持**。
+- 容器沙箱模式（`--sandbox` / `--sandbox container`）启动的是 cbc 本身的隔离环境，不属于 CLIConductor 管理范围。
+- 若未来迁移到 Linux/macOS，可通过 adapter 的 `build_spawn_args` 注入 `--sandbox` 系列参数。
+
+---
+
+## 九、文档来源
 
 - cbc settings 文档：`D:\node_npm\node_global\node_modules\@tencent-ai\codebuddy-code\dist\web-ui\docs\cn\cli\settings.md`
 - cbc 环境变量文档：`D:\node_npm\node_global\node_modules\@tencent-ai\codebuddy-code\dist\web-ui\docs\cn\cli\env-vars.md`
