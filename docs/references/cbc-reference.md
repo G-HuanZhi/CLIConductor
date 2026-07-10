@@ -300,7 +300,66 @@ custom-local:deepseek-v4-pro
 
 ---
 
-## 七、文档来源
+## 七、JSONL 会话数据格式
+
+cbc 将每个会话的完整对话记录保存为 JSONL 文件：
+`~/.codebuddy/projects/<sanitized-project>/<session_id>.jsonl`
+
+每行一个 JSON 对象，事件类型包括 `message`（用户/助手消息）、`reasoning`、`function_call`、`function_call_result` 等。
+
+### 7.1 用量信息（rawUsage / usage）
+
+每条 assistant message 的 `providerData` 中包含**两份**用量数据：
+
+**rawUsage（详细）**：
+```json
+{
+  "prompt_tokens": 24758,
+  "completion_tokens": 34,
+  "total_tokens": 24792,
+  "completion_tokens_details": { "reasoning_tokens": 24 },
+  "prompt_tokens_details": { "cached_tokens": 0 },
+  "prompt_cache_hit_tokens": 0,
+  "prompt_cache_miss_tokens": 24758,
+  "credit": 1.92
+}
+```
+
+| 字段 | 含义 |
+|---|---|
+| `prompt_tokens` / `completion_tokens` / `total_tokens` | 标准 token 计数 |
+| `completion_tokens_details.reasoning_tokens` | 推理/思考 token 数 |
+| `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` | 缓存命中/未命中 |
+| `credit` | 消耗的 credit 数 |
+
+**usage（简化）**：
+```json
+{
+  "requests": 1,
+  "inputTokens": 24758,
+  "outputTokens": 34,
+  "totalTokens": 24792
+}
+```
+
+**message.usage（第三份副本）**：
+```json
+{
+  "input_tokens": 24758,
+  "output_tokens": 34,
+  "total_tokens": 24792
+}
+```
+
+### 7.2 CLIConductor 的利用方式
+
+- **导入时**：`src/adapters/cbc/sessions.py` 的 `get_raw_usage(session_id)` 解析 JSONL 中所有 assistant message 的 `rawUsage`，存入 `Session.raw_usage[]`。
+- **运行时**：`_read_stdout` 在每轮 `result` 事件后调用 `adapter.enrich_after_result(s)`，`CbcAdapter` 实现为读取 JSONL 文件尾部（约 16KB）获取最新的 `rawUsage`，增量追加到 `Session.raw_usage[]`。
+- **协议层**：`CliAdapter.enrich_after_result(s)` 为可选方法，返回 `dict | None`。不支持或本轮无数据的 adapter 返回 `None`，不影响主路径。
+
+---
+
+## 八、文档来源
 
 - cbc settings 文档：`D:\node_npm\node_global\node_modules\@tencent-ai\codebuddy-code\dist\web-ui\docs\cn\cli\settings.md`
 - cbc 环境变量文档：`D:\node_npm\node_global\node_modules\@tencent-ai\codebuddy-code\dist\web-ui\docs\cn\cli\env-vars.md`
