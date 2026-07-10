@@ -1,6 +1,6 @@
 # cbc (CodeBuddy CLI) 参考文档
 
-**最后更新**: 2026-07-01
+**最后更新**: 2026-07-10
 
 cbc 是 CLIConductor 目前唯一支持的 CLI 工具。本文档记录 cbc 的可接受参数、事件协议、模型清单和适配器实现细节，作为开发和接入新 adapter 的事实依据。
 
@@ -63,25 +63,25 @@ cbc v2.66.0 起 `alwaysThinkingEnabled` 默认为 `true`，关闭时**必须显�
 
 | 值 | 实测结果 | 含义（推断） |
 |---|---|---|
-| `none` | ✅ | 无额外推理 |
-| `off` | ✅ | 关闭增强推理（等同默认快速模式） |
-| `auto` | ✅ | 自动选择推理深度（等同清除 settings.json 中的 `reasoningEffort`） |
-| `low` | ✅ | 简单任务，快速响应 |
-| `medium` | ✅ | 中等复杂度，日常编码推荐 |
-| `high` | ✅ | 多文件重构、复杂 bug |
-| `xhigh` | ✅ | 架构决策、极高推理深度 |
-| `max` | ✅ | 最大推理投入 |
-| `ultracode` | ✅ | 超强推理（ultracode 模式） |
-| `minimal` | ❌ | **cbc 报 `400 invalid parameter value`** |
+| `none` | OK | 无额外推理 |
+| `off` | OK | 关闭增强推理 |
+| `auto` | OK | 自动选择推理深度 |
+| `low` | OK | 简单任务，快速响应 |
+| `medium` | OK | 中等复杂度，日常编码推荐 |
+| `high` | OK | 多文件重构、复杂 bug |
+| `xhigh` | OK | 架构决策、极高推理深度 |
+| `max` | OK | 最大推理投入 |
+| `ultracode` | OK | 超强推理模式 |
+| `minimal` | REJECTED | cbc 报 400 invalid parameter value |
 
-**验证命令**（2026-07-01 执行）：
+注意：cbc --help 声称支持的值为 (minimal, low, medium, high, xhigh, max)，与实际 API 行为不符——minimal 被拒绝，none/off/auto/ultracode 虽不在 help 中但仍被 API 接受。
+
+验证命令（2026-07-10 执行）：
 ```bash
 for val in none off auto low medium high xhigh max ultracode minimal; do
-    echo -n "$val: "; cbc --effort $val -p "say hello" 2>&1 | head -1
+    echo -n "$val: "; cbc --effort $val -p "say hi" 2>&1 | head -1
 done
 ```
-
-只有 `minimal` 被 cbc 拒绝，其余全部通过。
 
 对应 `CbcAdapter.effort_args(s)` → `src/adapters/cbc.py:60`  
 对应 `CbcAdapter.effort_values` → `src/adapters/cbc.py:28`  
@@ -103,6 +103,7 @@ done
 | `bypassPermissions` | 绕过所有权限 | `bypass` |
 | `plan` | 仅规划模式（不执行） | `plan` |
 | `dontAsk` | 不询问确认，直接执行 | `dontAsk` |
+| `auto` | 自动选择权限模式 | `auto` |
 
 来源：cbc `--help` + 前端 options 列表
 
@@ -231,12 +232,11 @@ glm-5.0
 glm-5.0-turbo
 glm-5v-turbo
 glm-4.7
-minimax-m3
+minimax-m3-pay
 minimax-m2.7
 kimi-k2.7
 kimi-k2.6
-kimi-k2.5
-hy3-preview
+hy3
 deepseek-v4-pro
 deepseek-v4-flash    ← 默认模型
 deepseek-v3-2-volc
@@ -287,7 +287,11 @@ custom-local:deepseek-v4-pro
   "permissionModes": [
     {"value": "", "label": "mode…"},
     {"value": "default", "label": "default"},
-    ...
+    {"value": "acceptEdits", "label": "acceptEdits"},
+    {"value": "bypassPermissions", "label": "bypass"},
+    {"value": "plan", "label": "plan"},
+    {"value": "dontAsk", "label": "dontAsk"},
+    {"value": "auto", "label": "auto"},
   ]
 }
 ```
