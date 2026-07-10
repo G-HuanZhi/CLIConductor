@@ -250,25 +250,14 @@ function renderSessionList() {
     });
 }
 function selectSession(id) {
-    console.log('[selectSession] id:', id);
     currentSessionId = id;
     const s = modelData.find((x) => x.id === id);
-    if (!s) {
-        console.warn('[selectSession] session not found in modelData');
+    if (!s)
         return;
-    }
-    console.log('[selectSession] history length:', (s.history || []).length);
     currentWorkerId = s.workerId ?? null;
     renderSessionList();
-    console.log('[selectSession] renderSessionList done');
     updateTopBar();
-    console.log('[selectSession] updateTopBar done');
-    try {
-        renderMessages(s.history || []);
-        console.log('[selectSession] renderMessages done, #children:', document.getElementById('messages').children.length);
-    } catch (e) {
-        console.error('[selectSession] renderMessages ERROR:', e.message, e.stack);
-    }
+    renderMessages(s.history || []);
     const settingsBtn = document.getElementById('settingsBtn');
     settingsBtn.style.display = '';
     // sync panel if it's already open
@@ -290,8 +279,9 @@ function updateTopBar() {
         s.name || (currentSessionId ?? '').slice(0, 12);
     (document.getElementById('chatModel')).textContent = s.model || defaultModel;
     const sidsEl = document.getElementById('chatSessionIds');
-    sidsEl.style.display = '';
-    var sesId = s.id || '';
+    if (sidsEl) {
+        sidsEl.style.display = '';
+        var sesId = s.id || '';
     var cbcId = s.cbcSessionId;
     sidsEl.innerHTML =
         '<span class="sid-item">' +
@@ -304,6 +294,7 @@ function updateTopBar() {
             '<button class="sid-copy" title="Copy cbc session ID" onclick="copyToClipboard(\'' + cbcId + '\')">\u29C9</button>' +
             '</span>'
             : '');
+    }
     const status = s.workerStatus || 'offline';
     (document.getElementById('chatStatus')).textContent =
         status + (currentWorkerId ? ' (' + currentWorkerId + ')' : ' (no worker)');
