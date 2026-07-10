@@ -137,6 +137,14 @@ async def _read_stdout(w: Worker):
                     if not (last and last.get("role") == "assistant"
                             and last.get("content") == result_text):
                         s.history.append({"role": "assistant", "content": result_text})
+                # enrich: 从 CLI 原生存储获取消耗数据（如 raw_usage）
+                enrichment = None
+                try:
+                    enrichment = adapter.enrich_after_result(s)
+                except Exception:
+                    pass
+                if enrichment:
+                    s.raw_usage = (s.raw_usage or []) + [enrichment]
                 await _sess.save_async(s)
 
             await _bcast({

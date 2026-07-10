@@ -176,6 +176,51 @@ def parse_cbc_history(session_id: str, project_cwd: str | None = None, *, projec
     return history
 
 
+def get_raw_usage(session_id: str, project_cwd: str | None = None, *, project_dir: str | None = None) -> list[dict]:
+    """Extract rawUsage info from all assistant messages in a cbc session.
+
+    project_cwd: filesystem path → auto-sanitize to cbc project dir
+    project_dir:  cbc project dir name directly (e.g. "d-project-CLIConductor")
+
+    Returns list of dicts, each containing rawUsage from one assistant message:
+        {"model": str, "rawUsage": dict, "timestamp": str}
+    """
+    if project_dir:
+        proj_dir = Path(os.path.expanduser("~/.codebuddy/projects")) / project_dir
+    else:
+        proj_dir = _project_dir(project_cwd)
+    path = proj_dir / f"{session_id}.jsonl"
+    if not path.exists():
+        return []
+
+    usage_entries: list[dict] = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            if event.get("type") != "message" or event.get("role") != "assistant":
+                continue
+
+            pd = event.get("providerData", {})
+            raw_usage = pd.get("rawUsage")
+            if not raw_usage:
+                continue
+
+            usage_entries.append({
+                "model": pd.get("model", ""),
+                "rawUsage": raw_usage,
+                "timestamp": _ts_to_iso(event.get("timestamp", 0)),
+            })
+
+    return usage_entries
+
+
 # ── internals ──
 
 def _read_meta(proj_dir: Path, session_id: str) -> dict:
