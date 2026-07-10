@@ -142,6 +142,16 @@ def _project_dir_to_path(dir_name: str) -> str:
     return (drive + "/" + rest).upper()
 
 
+def project_dir_to_path(dir_name: str) -> str | None:
+    """Public wrapper: reverse cbc project dir sanitization to a best-guess filesystem path.
+
+    e.g. "d-project-CLIConductor" → "D:/project/CLIConductor"
+    Returns None when reverse can't produce a meaningful path.
+    """
+    result = _project_dir_to_path(dir_name)
+    return result if result else None
+
+
 def parse_cbc_history(session_id: str, project_cwd: str | None = None, *, project_dir: str | None = None) -> list[dict]:
     """Parse cbc session JSONL into CLIConductor history format.
 
