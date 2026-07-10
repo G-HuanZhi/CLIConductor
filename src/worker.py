@@ -373,6 +373,36 @@ async def kill_worker(worker_id: str) -> str | None:
     return None
 
 
+async def cleanup_worker_background(worker_id: str, session_id: str):
+    """Background worker cleanup — always cleans up and broadcasts, even on failure.
+
+    Call via ``asyncio.create_task()`` from delete-session flows to avoid
+    blocking the HTTP response on process termination.
+    """
+    try:
+        w = workers.get(worker_id)
+        if not w:
+            return
+        if w._consume_task:
+            w._consume_task.cancel()
+        if w._stdout_task:
+            w._stdout_task.cancel()
+        await _kill_process_tree(w)
+        await _kill_takeover_terminal(w)
+    except Exception as exc:
+        print(f"[Worker {worker_id}] BG cleanup error: {exc!r}")
+    finally:
+        workers.pop(worker_id, None)
+        try:
+            await _bcast({
+                "type": "worker.destroyed",
+                "workerId": worker_id,
+                "sessionId": session_id,
+            })
+        except Exception as bcast_err:
+            print(f"[Worker {worker_id}] BG cleanup bcast error: {bcast_err!r}")
+
+
 async def _spawn_process(session_id: str,
                          adapter: CliAdapter,
                          extra_args: list[str] | None = None

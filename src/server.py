@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -389,7 +390,9 @@ async def api_delete_session(session_id: str):
     """Delete a session and its worker if running."""
     w = worker.find_worker_by_session(session_id)
     if w:
-        await worker.kill_worker(w.worker_id)
+        asyncio.create_task(
+            worker.cleanup_worker_background(w.worker_id, w.session_id)
+        )
     sess.delete(session_id)
     await broadcast({
         "type": "session.deleted",
