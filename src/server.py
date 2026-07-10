@@ -120,18 +120,21 @@ async def no_cache_api(request: Request, call_next):
 def _session_to_api(s: sess.Session):
     """Convert Session to API response dict."""
     w = worker.find_worker_by_session(s.id)
+    config = load_config().get("cbc", {})
     return {
         "id": s.id,
         "name": s.name,
         "cbcSessionId": s.cbc_session_id,
-        "model": s.model or worker.DEFAULT_MODEL,
-        "permissionMode": s.permission_mode,
+        "model": s.model or config.get("model") or worker.DEFAULT_MODEL,
+        "permissionMode": s.permission_mode or config.get("permission_mode") or None,
         "alwaysThinkingEnabled": s.always_thinking_enabled,
-        "effort": s.effort,
+        "effort": s.effort or config.get("effort", ""),
         "maxThinkingTokens": s.max_thinking_tokens,
         "workdir": s.workdir,
         "history": s.history,
         "lastResult": s.last_result,
+        "rawUsage": s.raw_usage,
+        "totalUsage": s.total_usage,
         "createdAt": s.created_at,
         "updatedAt": s.updated_at,
         "workerStatus": w.status if w else None,
@@ -179,14 +182,15 @@ def _resolve_workdir(workdir_name: str) -> Path:
 
 def _build_session_params(data: dict) -> dict:
     """Extract session creation parameters from request data, with defaults."""
+    config = load_config().get("cbc", {})
     name = data.get("name", "default")
     workdir_name = data.get("workdir") or name
     return {
         "name": name,
-        "model": data.get("model") or worker.DEFAULT_MODEL,
-        "permission_mode": data.get("permissionMode") or None,
-        "always_thinking_enabled": data.get("alwaysThinkingEnabled", False),
-        "effort": data.get("effort", ""),
+        "model": data.get("model") or config.get("model") or worker.DEFAULT_MODEL,
+        "permission_mode": data.get("permissionMode") or config.get("permission_mode") or None,
+        "always_thinking_enabled": data.get("alwaysThinkingEnabled", config.get("always_thinking_enabled", False)),
+        "effort": data.get("effort") or config.get("effort", ""),
         "max_thinking_tokens": data.get("maxThinkingTokens") or None,
         "workdir": str(_resolve_workdir(workdir_name)),
     }
@@ -663,20 +667,23 @@ async def api_cbc_sessions_import(data: dict):
     try:
         if project_dir:
             history = cbc_sessions.parse_cbc_history(session_id, project_dir=project_dir)
-            raw_usage = cbc_sessions.get_raw_usage(session_id, project_dir=project_dir)
+            raw_usage_entries = cbc_sessions.get_raw_usage(session_id, project_dir=project_dir)
         else:
             history = cbc_sessions.parse_cbc_history(session_id, cwd)
-            raw_usage = cbc_sessions.get_raw_usage(session_id, cwd)
+            raw_usage_entries = cbc_sessions.get_raw_usage(session_id, cwd)
     except Exception as e:
         return {"error": f"Failed to parse session history: {e}"}
 
     name = data.get("name", "") or f"cbc-{session_id[:8]}"
+
+    raw_usage = sess.accumulate_raw_usage(None, raw_usage_entries)
 
     s = sess.create(
         name=name,
         cbc_session_id=session_id,
         history=history,
         raw_usage=raw_usage,
+        total_usage=sess.compute_total_usage(raw_usage),
         workdir=cwd,
     )
 

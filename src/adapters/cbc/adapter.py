@@ -12,11 +12,37 @@ class CbcAdapter:
     """cbc (CodeBuddy CLI) 适配器。
 
     实现 CliAdapter 协议。实例无状态，可被多 worker 共享。
+    默认值从 project-root/config.json 读取（无配置文件则使用内置默认值）。
     """
 
     name = "cbc"
-    default_model = "deepseek-v4-flash"
-    default_permission_mode = "bypassPermissions"
+
+    # 内置兜底默认值（config.json 不存在时使用）
+    _DEFAULT_MODEL = "deepseek-v4-flash"
+    _DEFAULT_PERMISSION_MODE = "bypassPermissions"
+    _DEFAULT_ALWAYS_THINKING_ENABLED = False
+    _DEFAULT_EFFORT = ""
+
+    @property
+    def default_model(self) -> str:
+        return self._cbc_config.get("model", self._DEFAULT_MODEL)
+
+    @property
+    def default_permission_mode(self) -> str:
+        return self._cbc_config.get("permission_mode", self._DEFAULT_PERMISSION_MODE)
+
+    @property
+    def default_always_thinking_enabled(self) -> bool:
+        return self._cbc_config.get("always_thinking_enabled", self._DEFAULT_ALWAYS_THINKING_ENABLED)
+
+    @property
+    def default_effort(self) -> str:
+        return self._cbc_config.get("effort", self._DEFAULT_EFFORT)
+
+    @property
+    def _cbc_config(self) -> dict:
+        from src.config import load_config
+        return load_config().get("cbc", {})
     supported_models = [
         "glm-5.2", "glm-5.1", "glm-5.0", "glm-5.0-turbo", "glm-5v-turbo", "glm-4.7",
         "minimax-m3-pay", "minimax-m2.7",

@@ -35,7 +35,8 @@ class Session:
     always_thinking_enabled: bool = False
     effort: str = ""
     max_thinking_tokens: int | None = None
-    raw_usage: list[dict] | None = None
+    raw_usage: dict | None = None
+    total_usage: dict | None = None
     workdir: str = ""
     history: list[dict] = field(default_factory=list)
     last_result: dict | None = None
@@ -60,6 +61,7 @@ class Session:
             "effort": self.effort,
             "max_thinking_tokens": self.max_thinking_tokens,
             "raw_usage": self.raw_usage,
+            "total_usage": self.total_usage,
             "workdir": self.workdir,
             "history": self.history,
             "last_result": self.last_result,
@@ -79,7 +81,8 @@ def create(name: str, model: str | None = None,
            always_thinking_enabled: bool = False,
            effort: str = "",
            max_thinking_tokens: int | None = None,
-           raw_usage: list[dict] | None = None,
+           raw_usage: dict | None = None,
+           total_usage: dict | None = None,
            workdir: str = "",
            cbc_session_id: str | None = None,
            history: list[dict] | None = None) -> Session:
@@ -93,6 +96,7 @@ def create(name: str, model: str | None = None,
         effort=effort,
         max_thinking_tokens=max_thinking_tokens,
         raw_usage=raw_usage,
+        total_usage=total_usage,
         workdir=workdir,
         history=history or [],
     )
@@ -163,6 +167,61 @@ def list_all() -> list[Session]:
         _all_loaded = True
     # after initial load, cache is always current (create/save/delete sync it)
     return sorted(_cache.values(), key=lambda s: s.created_at)
+
+
+def _deep_sum_raw_usage(a: dict, b: dict) -> dict:
+    """递归累加两个 rawUsage dict 中所有数值字段。"""
+    result = dict(a)
+    for k, v in b.items():
+        if k not in result:
+            result[k] = v
+        elif isinstance(v, dict) and isinstance(result[k], dict):
+            result[k] = _deep_sum_raw_usage(result[k], v)
+        elif isinstance(v, (int, float)) and isinstance(result[k], (int, float)):
+            result[k] += v
+    return result
+
+
+def accumulate_raw_usage(existing: dict | None, entries: list[dict]) -> dict:
+    """将 raw_usage 条目按 model 累加，返回 {model: {model, request_count, rawUsage}}。
+
+    existing: 已有的累加结果（dict keyed by model），None 表示无
+    entries:  待合并的条目列表，每项 {"model": str, "rawUsage": dict, ...}
+    """
+    result: dict = dict(existing) if existing else {}
+    for entry in entries:
+        model = entry.get("model", "unknown")
+        ru = entry.get("rawUsage")
+        if not ru:
+            continue
+        if model in result:
+            result[model]["rawUsage"] = _deep_sum_raw_usage(result[model]["rawUsage"], ru)
+            result[model]["request_count"] += 1
+        else:
+            result[model] = {
+                "model": model,
+                "request_count": 1,
+                "rawUsage": ru,
+            }
+    return result
+
+
+def compute_total_usage(raw_usage: dict | None) -> dict | None:
+    """从按模型累加的 raw_usage 汇总累计消耗。
+
+    返回 {"prompt_tokens": int, "cache_hit_tokens": int, "cache_miss_tokens": int, "credit": float}
+    或 None（raw_usage 为空时）。
+    """
+    if not raw_usage:
+        return None
+    total = {"prompt_tokens": 0, "cache_hit_tokens": 0, "cache_miss_tokens": 0, "credit": 0.0}
+    for entry in raw_usage.values():
+        ru = entry.get("rawUsage", {})
+        total["prompt_tokens"] += ru.get("prompt_tokens", 0)
+        total["cache_hit_tokens"] += ru.get("prompt_cache_hit_tokens", 0)
+        total["cache_miss_tokens"] += ru.get("prompt_cache_miss_tokens", 0)
+        total["credit"] += ru.get("credit", 0)
+    return total
 
 
 def clear_cache():

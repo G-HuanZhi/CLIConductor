@@ -298,22 +298,38 @@ custom-local:deepseek-v4-pro
 
 前端 `init()` → `fetch('/api/adapter/config')` → 动态 `buildModelSelect()` / `buildModeSelect()` / `buildEffortSelect()`。
 
+### 6.1 用户侧配置 (config.json)
+
+用户在项目根目录放置 `config.json` 可覆盖 cbc adapter 的默认行为。配置文件由 `src/config.py` 加载，与内置默认值深度合并。
+
+**创建方式：**
+
+```bash
+cp config.example.json config.json
+# 编辑 config.json，保留需要的字段，删除不需要的和 _ 开头的文档键
+```
+
+**有效字段：**
+
+| 字段 | 默认值 | 说明 |
+|------|--------|------|
+| `cbc.model` | `"deepseek-v4-flash"` | 默认模型（新建 Session 且前端未指定时） |
+| `cbc.permission_mode` | `"bypassPermissions"` | 默认权限模式 |
+| `cbc.always_thinking_enabled` | `false` | 默认是否启用 thinking；false 时 effort 不生效 |
+| `cbc.effort` | `""` | 默认 effort 级别；空值不传递 --effort 参数 |
+| `cbc_import.min_message_count` | `5` | 导入列表最少消息数 |
+| `cbc_import.max_sessions_shown` | `30` | 导入列表最大展示数 |
+| `cbc_import.exclude_workdir_patterns` | `[]` | 排除 workdir 含指定子串的 session |
+| `cbc_import.project_dir_exact_match` | `false` | 仅显示与当前项目完全匹配的 session |
+
+**注意：** 所有字段可选。`model` / `permission_mode` / `effort` 的具体可选值参见上方的模型清单、权限模式和 effort 值表格。
+
 ---
 
 ## 七、JSONL 会话数据格式
 
 cbc 将每个会话的完整对话记录保存为 JSONL 文件：
 `~/.codebuddy/projects/<sanitized-project>/<session_id>.jsonl`
-
-> **注意：路径清洗规则与命名的坑**
->
-> cbc 将项目工作目录清洗为纯小写、用 `-` 串联的名称。例如：
-> - `D:\project\CLIConductor` → `d-project-cliconductor`
-> - `/home/user/my-app` → `home-user-my-app`
->
-> 清洗逻辑不可逆：原始路径中的 `-` 会被当作分隔符，丢失原路径的目录分隔语义。
-> **因此 CLIConductor 项目目录最好不要含 `-`**，否则清洗后的目录名会与实际路径结构错位，
-> 导致反向解析（如导入 session 时从 `project_dir` 还原 `cwd`）产生偏差。
 
 每行一个 JSON 对象，事件类型包括 `message`（用户/助手消息）、`reasoning`、`function_call`、`function_call_result` 等。
 
