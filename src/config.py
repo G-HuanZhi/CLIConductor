@@ -11,7 +11,17 @@ DEFAULT_CONFIG: dict = {
         "max_sessions_shown": 30,
         "exclude_workdir_patterns": [],
         "project_dir_exact_match": False,
-    }
+    },
+    "cbc": {
+        # 默认模型。可选值参见 adapter.py 的 supported_models
+        "model": "deepseek-v4-flash",
+        # 默认权限模式："" | "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"
+        "permission_mode": "bypassPermissions",
+        # 默认是否开启 thinking（cbc alwaysThinkingEnabled）
+        "always_thinking_enabled": False,
+        # 默认 effort 级别："" | "none" | "off" | "auto" | "low" | "medium" | "high" | "xhigh" | "max" | "ultracode"
+        "effort": "",
+    },
 }
 
 
