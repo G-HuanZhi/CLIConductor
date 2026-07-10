@@ -97,7 +97,7 @@ function connectWs() {
     ws.onopen = refreshSessions;
     ws.onmessage = onWsMessage;
     ws.onclose = function () {
-        // Reconnect after delay (mobile network changes, sleep, etc.)
+        console.warn('[WS] disconnected, reconnecting in 3s');
         setTimeout(connectWs, 3000);
     };
 }
@@ -185,7 +185,7 @@ function refreshSessions() {
             updateTopBar();
     })
         .catch(function () {
-        // Network/server down — silent retry on next WS event or page action
+        console.warn('[refreshSessions] fetch failed, network issue');
         if (version === _refreshVersion)
             _refreshVersion--;
     });
@@ -250,24 +250,21 @@ function renderSessionList() {
     });
 }
 function selectSession(id) {
+    console.log('[selectSession] id:', id);
     currentSessionId = id;
     const s = modelData.find((x) => x.id === id);
-    if (!s)
+    if (!s) {
+        console.warn('[selectSession] session not found in modelData');
         return;
+    }
+    console.log('[selectSession] history length:', (s.history || []).length);
     currentWorkerId = s.workerId ?? null;
     renderSessionList();
     updateTopBar();
     renderMessages(s.history || []);
+    console.log('[selectSession] renderMessages done, #messages children:', document.getElementById('messages').children.length);
     const settingsBtn = document.getElementById('settingsBtn');
     settingsBtn.style.display = '';
-    // On mobile, close sidebar so user can see the chat
-    const sidebar = document.getElementById('sidebar');
-    if (sidebar && sidebar.classList.contains('open')) {
-        sidebar.classList.remove('open');
-        const overlay = document.getElementById('sidebarOverlay');
-        if (overlay)
-            overlay.classList.remove('show');
-    }
     // sync panel if it's already open
     if (document.getElementById('settingsPanel').classList.contains('open')) {
         syncPanelFromServer();
