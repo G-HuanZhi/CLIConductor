@@ -102,6 +102,7 @@ body {
   max-width: 120px;
 }
 #topBar .chat-status { font-size: .65rem; }
+#topBar .chat-sessionids { display: none !important; }
 #settingsBtn {
   padding: 6px 10px; min-height: 36px;
   min-width: 36px; font-size: .85rem;
@@ -155,6 +156,7 @@ body {
     <span class="chat-empty" id="emptyHint">Select a session</span>
     <span class="chat-name" id="chatName" style="display:none"></span>
     <span class="chat-model" id="chatModel" style="display:none"></span>
+    <span id="chatSessionIds" class="chat-sessionids" style="display:none"></span>
     <span id="chatStatus" class="chat-status"></span>
     <button id="viewToggleBtn" onclick="toggleView()" title="Toggle Bubble/TUI view">💬</button>
     <button id="settingsBtn" onclick="toggleSettings()" style="display:none">⚙</button>
