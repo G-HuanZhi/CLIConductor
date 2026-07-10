@@ -187,7 +187,7 @@ def _build_session_params(data: dict) -> dict:
         "permission_mode": data.get("permissionMode") or None,
         "always_thinking_enabled": data.get("alwaysThinkingEnabled", False),
         "effort": data.get("effort", ""),
-        "max_thinking_tokens": data.get("maxThinkingTokens", 16000),
+        "max_thinking_tokens": data.get("maxThinkingTokens") or None,
         "workdir": str(_resolve_workdir(workdir_name)),
     }
 
@@ -657,8 +657,10 @@ async def api_cbc_sessions_import(data: dict):
     try:
         if project_dir:
             history = cbc_sessions.parse_cbc_history(session_id, project_dir=project_dir)
+            raw_usage = cbc_sessions.get_raw_usage(session_id, project_dir=project_dir)
         else:
             history = cbc_sessions.parse_cbc_history(session_id, cwd)
+            raw_usage = cbc_sessions.get_raw_usage(session_id, cwd)
     except Exception as e:
         return {"error": f"Failed to parse session history: {e}"}
 
@@ -668,6 +670,7 @@ async def api_cbc_sessions_import(data: dict):
         name=name,
         cbc_session_id=session_id,
         history=history,
+        raw_usage=raw_usage,
         workdir=str(Path.cwd()),
     )
 

@@ -32,3 +32,5 @@ spike-python/
 myTODO.md
 prompt.md
 /.playwright-cli/
+# config
+config.json

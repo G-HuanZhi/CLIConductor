@@ -72,11 +72,11 @@ cbc v2.66.0 起 `alwaysThinkingEnabled` 默认为 `true`，关闭时**必须显�
 | `xhigh` | OK | 架构决策、极高推理深度 |
 | `max` | OK | 最大推理投入 |
 | `ultracode` | OK | 超强推理模式 |
-| `minimal` | REJECTED | cbc 报 400 invalid parameter value |
+| `minimal` | **REJECTED** | cbc 报 `400 invalid parameter value` |
 
-注意：cbc --help 声称支持的值为 (minimal, low, medium, high, xhigh, max)，与实际 API 行为不符——minimal 被拒绝，none/off/auto/ultracode 虽不在 help 中但仍被 API 接受。
+注意：`cbc --help` 声称支持的值为 `(minimal, low, medium, high, xhigh, max)`，与实际 API 行为不符——`minimal` 被拒绝，`none`/`off`/`auto`/`ultracode` 虽不在 help 中但仍被 API 接受。
 
-验证命令（2026-07-10 执行）：
+**验证命令**（2026-07-10 执行）：
 ```bash
 for val in none off auto low medium high xhigh max ultracode minimal; do
     echo -n "$val: "; cbc --effort $val -p "say hi" 2>&1 | head -1

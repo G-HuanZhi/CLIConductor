@@ -90,9 +90,18 @@ function toggleView() {
 }
 // ── WebSocket ──
 const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
-const ws = new WebSocket(wsProtocol + location.host + '/ws');
-ws.onopen = refreshSessions;
-ws.onmessage = onWsMessage;
+var ws;
+var _wsUrl = wsProtocol + location.host + '/ws';
+function connectWs() {
+    ws = new WebSocket(_wsUrl);
+    ws.onopen = refreshSessions;
+    ws.onmessage = onWsMessage;
+    ws.onclose = function () {
+        console.warn('[WS] disconnected, reconnecting in 3s');
+        setTimeout(connectWs, 3000);
+    };
+}
+connectWs();
 function onWsMessage(e) {
     const d = JSON.parse(e.data);
     switch (d.type) {
@@ -174,6 +183,11 @@ function refreshSessions() {
         }
         if (currentSessionId)
             updateTopBar();
+    })
+        .catch(function () {
+        console.warn('[refreshSessions] fetch failed, network issue');
+        if (version === _refreshVersion)
+            _refreshVersion--;
     });
 }
 async function fetchCbcProjects() {
@@ -265,7 +279,7 @@ function updateTopBar() {
         s.name || (currentSessionId ?? '').slice(0, 12);
     (document.getElementById('chatModel')).textContent = s.model || defaultModel;
     const sidsEl = document.getElementById('chatSessionIds');
-    sidsEl.style.display = '';
+    sidsEl.style.display = 'flex';
     var sesId = s.id || '';
     var cbcId = s.cbcSessionId;
     sidsEl.innerHTML =
@@ -290,6 +304,7 @@ function showEmpty() {
     (document.getElementById('emptyHint')).style.display = '';
     (document.getElementById('chatName')).style.display = 'none';
     (document.getElementById('chatModel')).style.display = 'none';
+    (document.getElementById('chatSessionIds')).style.display = 'none';
     (document.getElementById('chatStatus')).textContent = '';
     const dot = document.getElementById('mobileWorkerDot');
     if (dot)
@@ -842,29 +857,32 @@ function newSession() {
         .then((d) => {
         if (d.error) {
             toast(d.error);
+            refreshSessions();
             return;
         }
         modelData.push(d);
         selectSession(d.id);
-        refreshSessions();
     });
 }
 function deleteSession(id) {
     if (!confirm('Delete session ' + id.slice(0, 12) + '\u2026?'))
         return;
+    // Optimistic UI: remove immediately, recover on failure
+    modelData = modelData.filter(function (s) { return s.id !== id; });
+    if (currentSessionId === id) {
+        currentSessionId = null;
+        currentWorkerId = null;
+        showEmpty();
+    }
+    renderSessionList();
+    updateTopBar();
     fetch('/api/sessions/' + id, { method: 'DELETE' })
         .then((r) => r.json())
         .then((d) => {
         if (d.error) {
             toast(d.error);
-            return;
+            refreshSessions();
         }
-        if (currentSessionId === id) {
-            currentSessionId = null;
-            currentWorkerId = null;
-            showEmpty();
-        }
-        refreshSessions();
     });
 }
 // ── Init ──
@@ -882,6 +900,9 @@ function init() {
         _adapterConfigReady = true;
         if (document.getElementById('settingsPanel').classList.contains('open'))
             syncPanelFromServer();
+    })
+        .catch(function () {
+        // Server unavailable — will retry on settings panel open
     });
     refreshSessions();
     // ── Import Modal ──

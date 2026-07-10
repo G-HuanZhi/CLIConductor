@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from src.session import Session
 
 
@@ -15,11 +16,12 @@ class CbcAdapter:
 
     name = "cbc"
     default_model = "deepseek-v4-flash"
+    default_permission_mode = "bypassPermissions"
     supported_models = [
         "glm-5.2", "glm-5.1", "glm-5.0", "glm-5.0-turbo", "glm-5v-turbo", "glm-4.7",
-        "minimax-m3", "minimax-m2.7",
-        "kimi-k2.7", "kimi-k2.6", "kimi-k2.5",
-        "hy3-preview",
+        "minimax-m3-pay", "minimax-m2.7",
+        "kimi-k2.7", "kimi-k2.6",
+        "hy3",
         "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v3-2-volc",
         "custom-local:deepseek-v4-pro",
     ]
@@ -33,6 +35,7 @@ class CbcAdapter:
         {"value": "bypassPermissions", "label": "bypass"},
         {"value": "plan", "label": "plan"},
         {"value": "dontAsk", "label": "dontAsk"},
+        {"value": "auto", "label": "auto"},
     ]
 
     _CBC_PATH = os.environ.get(
@@ -66,9 +69,8 @@ class CbcAdapter:
         return []
 
     def permission_mode_args(self, s: Session) -> list[str]:
-        if s.permission_mode:
-            return ["--permission-mode", s.permission_mode]
-        return []
+        mode = s.permission_mode or self.default_permission_mode
+        return ["--permission-mode", mode]
 
     def resume_args(self, s: Session) -> list[str]:
         if s.cbc_session_id:
@@ -157,3 +159,71 @@ class CbcAdapter:
         if not s.cbc_session_id:
             return []
         return ["cbc", "--resume", s.cbc_session_id]
+
+    # ── enrich ──
+
+    def enrich_after_result(self, s: Session) -> dict | None:
+        """从 JSONL 读取本轮对话最新的 raw_usage。
+
+        从文件尾部向前扫描，找到第一条 assistant message 的 raw_usage。
+        失败时静默返回 None，不影响主路径。
+        """
+        if not s.cbc_session_id:
+            return None
+        try:
+            return _read_jsonl_latest_raw_usage(s.cbc_session_id)
+        except Exception:
+            return None
+
+
+def _read_jsonl_latest_raw_usage(cbc_session_id: str) -> dict | None:
+    """从 cbc session JSONL 文件尾部读取最新 raw_usage。"""
+    import re
+    base = Path(os.path.expanduser("~/.codebuddy/projects"))
+    # 尝试常见 project dir 名
+    for child in base.iterdir():
+        if not child.is_dir():
+            continue
+        fpath = child / f"{cbc_session_id}.jsonl"
+        if not fpath.exists():
+            continue
+
+        # 从后向前读取约 16KB，应覆盖最近几条 assistant message
+        try:
+            tail = _tail_bytes(str(fpath), 16 * 1024)
+        except OSError:
+            return None
+        lines = tail.split(b"\n")
+        last_raw_usage = None
+        for raw_line in reversed(lines):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("type") == "message" and event.get("role") == "assistant":
+                pd = event.get("providerData", {})
+                ru = pd.get("rawUsage")
+                if ru:
+                    last_raw_usage = ru
+                    return {
+                        "model": pd.get("model", ""),
+                        "rawUsage": ru,
+                        "timestamp": event.get("timestamp", 0),
+                    }
+        return last_raw_usage
+
+    return None
+
+
+def _tail_bytes(filepath: str, size: int) -> bytes:
+    """读取文件尾部约 size 字节。"""
+    with open(filepath, "rb") as f:
+        from os import SEEK_END
+        f.seek(0, SEEK_END)
+        file_size = f.tell()
+        read_size = min(file_size, size)
+        f.seek(-read_size, SEEK_END)
+        return f.read()
