@@ -25,6 +25,7 @@ data/
 privatenote.md
 devNote.md
 testoutcome.md
+archive/
 # spike residues (may be locked by running processes)
 spike-node/
 spike-python/
@@ -34,3 +35,4 @@ prompt.md
 /.playwright-cli/
 # config
 config.json
+
