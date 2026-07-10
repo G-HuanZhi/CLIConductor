@@ -186,7 +186,7 @@ def _build_session_params(data: dict) -> dict:
         "permission_mode": data.get("permissionMode") or None,
         "always_thinking_enabled": data.get("alwaysThinkingEnabled", False),
         "effort": data.get("effort", ""),
-        "max_thinking_tokens": data.get("maxThinkingTokens", 16000),
+        "max_thinking_tokens": data.get("maxThinkingTokens") or None,
         "workdir": str(_resolve_workdir(workdir_name)),
     }
 
