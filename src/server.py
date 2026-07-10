@@ -643,6 +643,12 @@ async def api_cbc_sessions_import(data: dict):
     project_dir = data.get("project_dir")
     cwd = data.get("cwd") or str(Path.cwd())
 
+    # When frontend sends project_dir but not cwd, resolve the actual filesystem path
+    if not data.get("cwd") and project_dir:
+        resolved = cbc_sessions.project_dir_to_path(project_dir)
+        if resolved:
+            cwd = resolved
+
     # If already imported, delete the existing session and re-import
     for s in sess.list_all():
         if s.cbc_session_id == session_id:
