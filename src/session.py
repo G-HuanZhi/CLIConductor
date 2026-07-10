@@ -35,6 +35,7 @@ class Session:
     always_thinking_enabled: bool = False
     effort: str = ""
     max_thinking_tokens: int | None = None
+    raw_usage: list[dict] | None = None
     workdir: str = ""
     history: list[dict] = field(default_factory=list)
     last_result: dict | None = None
@@ -58,6 +59,7 @@ class Session:
             "always_thinking_enabled": self.always_thinking_enabled,
             "effort": self.effort,
             "max_thinking_tokens": self.max_thinking_tokens,
+            "raw_usage": self.raw_usage,
             "workdir": self.workdir,
             "history": self.history,
             "last_result": self.last_result,
@@ -77,6 +79,7 @@ def create(name: str, model: str | None = None,
            always_thinking_enabled: bool = False,
            effort: str = "",
            max_thinking_tokens: int | None = None,
+           raw_usage: list[dict] | None = None,
            workdir: str = "",
            cbc_session_id: str | None = None,
            history: list[dict] | None = None) -> Session:
@@ -89,6 +92,7 @@ def create(name: str, model: str | None = None,
         always_thinking_enabled=always_thinking_enabled,
         effort=effort,
         max_thinking_tokens=max_thinking_tokens,
+        raw_usage=raw_usage,
         workdir=workdir,
         history=history or [],
     )

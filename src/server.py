@@ -654,8 +654,10 @@ async def api_cbc_sessions_import(data: dict):
     try:
         if project_dir:
             history = cbc_sessions.parse_cbc_history(session_id, project_dir=project_dir)
+            raw_usage = cbc_sessions.get_raw_usage(session_id, project_dir=project_dir)
         else:
             history = cbc_sessions.parse_cbc_history(session_id, cwd)
+            raw_usage = cbc_sessions.get_raw_usage(session_id, cwd)
     except Exception as e:
         return {"error": f"Failed to parse session history: {e}"}
 
@@ -665,6 +667,7 @@ async def api_cbc_sessions_import(data: dict):
         name=name,
         cbc_session_id=session_id,
         history=history,
+        raw_usage=raw_usage,
         workdir=str(Path.cwd()),
     )
 
