@@ -305,6 +305,16 @@ custom-local:deepseek-v4-pro
 cbc 将每个会话的完整对话记录保存为 JSONL 文件：
 `~/.codebuddy/projects/<sanitized-project>/<session_id>.jsonl`
 
+> **注意：路径清洗规则与命名的坑**
+>
+> cbc 将项目工作目录清洗为纯小写、用 `-` 串联的名称。例如：
+> - `D:\project\CLIConductor` → `d-project-cliconductor`
+> - `/home/user/my-app` → `home-user-my-app`
+>
+> 清洗逻辑不可逆：原始路径中的 `-` 会被当作分隔符，丢失原路径的目录分隔语义。
+> **因此 CLIConductor 项目目录最好不要含 `-`**，否则清洗后的目录名会与实际路径结构错位，
+> 导致反向解析（如导入 session 时从 `project_dir` 还原 `cwd`）产生偏差。
+
 每行一个 JSON 对象，事件类型包括 `message`（用户/助手消息）、`reasoning`、`function_call`、`function_call_result` 等。
 
 ### 7.1 用量信息（rawUsage / usage）
