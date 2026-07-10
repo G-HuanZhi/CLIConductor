@@ -36,6 +36,7 @@ class Session:
     effort: str = ""
     max_thinking_tokens: int | None = None
     raw_usage: list[dict] | None = None
+    total_usage: dict | None = None
     workdir: str = ""
     history: list[dict] = field(default_factory=list)
     last_result: dict | None = None
@@ -60,6 +61,7 @@ class Session:
             "effort": self.effort,
             "max_thinking_tokens": self.max_thinking_tokens,
             "raw_usage": self.raw_usage,
+            "total_usage": self.total_usage,
             "workdir": self.workdir,
             "history": self.history,
             "last_result": self.last_result,
@@ -80,6 +82,7 @@ def create(name: str, model: str | None = None,
            effort: str = "",
            max_thinking_tokens: int | None = None,
            raw_usage: list[dict] | None = None,
+           total_usage: dict | None = None,
            workdir: str = "",
            cbc_session_id: str | None = None,
            history: list[dict] | None = None) -> Session:
@@ -93,6 +96,7 @@ def create(name: str, model: str | None = None,
         effort=effort,
         max_thinking_tokens=max_thinking_tokens,
         raw_usage=raw_usage,
+        total_usage=total_usage,
         workdir=workdir,
         history=history or [],
     )
@@ -163,6 +167,23 @@ def list_all() -> list[Session]:
         _all_loaded = True
     # after initial load, cache is always current (create/save/delete sync it)
     return sorted(_cache.values(), key=lambda s: s.created_at)
+
+
+def compute_total_usage(raw_usage: list[dict] | None) -> dict | None:
+    """从 raw_usage 列表汇总累计消耗。
+
+    返回 {"cache_hit_tokens": int, "cache_miss_tokens": int, "credit": float}
+    或 None（raw_usage 为空时）。
+    """
+    if not raw_usage:
+        return None
+    total = {"cache_hit_tokens": 0, "cache_miss_tokens": 0, "credit": 0.0}
+    for entry in raw_usage:
+        ru = entry.get("rawUsage", {})
+        total["cache_hit_tokens"] += ru.get("prompt_cache_hit_tokens", 0)
+        total["cache_miss_tokens"] += ru.get("prompt_cache_miss_tokens", 0)
+        total["credit"] += ru.get("credit", 0)
+    return total
 
 
 def clear_cache():
