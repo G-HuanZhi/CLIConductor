@@ -90,9 +90,18 @@ function toggleView() {
 }
 // ── WebSocket ──
 const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
-const ws = new WebSocket(wsProtocol + location.host + '/ws');
-ws.onopen = refreshSessions;
-ws.onmessage = onWsMessage;
+var ws;
+var _wsUrl = wsProtocol + location.host + '/ws';
+function connectWs() {
+    ws = new WebSocket(_wsUrl);
+    ws.onopen = refreshSessions;
+    ws.onmessage = onWsMessage;
+    ws.onclose = function () {
+        // Reconnect after delay (mobile network changes, sleep, etc.)
+        setTimeout(connectWs, 3000);
+    };
+}
+connectWs();
 function onWsMessage(e) {
     const d = JSON.parse(e.data);
     switch (d.type) {
@@ -174,6 +183,11 @@ function refreshSessions() {
         }
         if (currentSessionId)
             updateTopBar();
+    })
+        .catch(function () {
+        // Network/server down — silent retry on next WS event or page action
+        if (version === _refreshVersion)
+            _refreshVersion--;
     });
 }
 async function fetchCbcProjects() {
@@ -882,6 +896,9 @@ function init() {
         _adapterConfigReady = true;
         if (document.getElementById('settingsPanel').classList.contains('open'))
             syncPanelFromServer();
+    })
+        .catch(function () {
+        // Server unavailable — will retry on settings panel open
     });
     refreshSessions();
     // ── Import Modal ──
