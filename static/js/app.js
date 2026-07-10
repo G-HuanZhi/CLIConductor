@@ -304,6 +304,7 @@ function showEmpty() {
     (document.getElementById('emptyHint')).style.display = '';
     (document.getElementById('chatName')).style.display = 'none';
     (document.getElementById('chatModel')).style.display = 'none';
+    (document.getElementById('chatSessionIds')).style.display = 'none';
     (document.getElementById('chatStatus')).textContent = '';
     const dot = document.getElementById('mobileWorkerDot');
     if (dot)
