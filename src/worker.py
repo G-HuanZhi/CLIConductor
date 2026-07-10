@@ -144,7 +144,7 @@ async def _read_stdout(w: Worker):
                 except Exception:
                     pass
                 if enrichment:
-                    s.raw_usage = (s.raw_usage or []) + [enrichment]
+                    s.raw_usage = _sess.accumulate_raw_usage(s.raw_usage, [enrichment])
                     s.total_usage = _sess.compute_total_usage(s.raw_usage)
                 await _sess.save_async(s)
 
