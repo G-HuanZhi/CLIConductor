@@ -260,9 +260,15 @@ function selectSession(id) {
     console.log('[selectSession] history length:', (s.history || []).length);
     currentWorkerId = s.workerId ?? null;
     renderSessionList();
+    console.log('[selectSession] renderSessionList done');
     updateTopBar();
-    renderMessages(s.history || []);
-    console.log('[selectSession] renderMessages done, #messages children:', document.getElementById('messages').children.length);
+    console.log('[selectSession] updateTopBar done');
+    try {
+        renderMessages(s.history || []);
+        console.log('[selectSession] renderMessages done, #children:', document.getElementById('messages').children.length);
+    } catch (e) {
+        console.error('[selectSession] renderMessages ERROR:', e.message, e.stack);
+    }
     const settingsBtn = document.getElementById('settingsBtn');
     settingsBtn.style.display = '';
     // sync panel if it's already open
