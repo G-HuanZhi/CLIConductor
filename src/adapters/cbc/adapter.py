@@ -17,9 +17,9 @@ class CbcAdapter:
     default_model = "deepseek-v4-flash"
     supported_models = [
         "glm-5.2", "glm-5.1", "glm-5.0", "glm-5.0-turbo", "glm-5v-turbo", "glm-4.7",
-        "minimax-m3", "minimax-m2.7",
-        "kimi-k2.7", "kimi-k2.6", "kimi-k2.5",
-        "hy3-preview",
+        "minimax-m3-pay", "minimax-m2.7",
+        "kimi-k2.7", "kimi-k2.6",
+        "hy3",
         "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v3-2-volc",
         "custom-local:deepseek-v4-pro",
     ]
@@ -33,6 +33,7 @@ class CbcAdapter:
         {"value": "bypassPermissions", "label": "bypass"},
         {"value": "plan", "label": "plan"},
         {"value": "dontAsk", "label": "dontAsk"},
+        {"value": "auto", "label": "auto"},
     ]
 
     _CBC_PATH = os.environ.get(
