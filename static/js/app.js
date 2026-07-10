@@ -279,9 +279,8 @@ function updateTopBar() {
         s.name || (currentSessionId ?? '').slice(0, 12);
     (document.getElementById('chatModel')).textContent = s.model || defaultModel;
     const sidsEl = document.getElementById('chatSessionIds');
-    if (sidsEl) {
-        sidsEl.style.display = '';
-        var sesId = s.id || '';
+    sidsEl.style.display = 'flex';
+    var sesId = s.id || '';
     var cbcId = s.cbcSessionId;
     sidsEl.innerHTML =
         '<span class="sid-item">' +
@@ -294,7 +293,6 @@ function updateTopBar() {
             '<button class="sid-copy" title="Copy cbc session ID" onclick="copyToClipboard(\'' + cbcId + '\')">\u29C9</button>' +
             '</span>'
             : '');
-    }
     const status = s.workerStatus || 'offline';
     (document.getElementById('chatStatus')).textContent =
         status + (currentWorkerId ? ' (' + currentWorkerId + ')' : ' (no worker)');
