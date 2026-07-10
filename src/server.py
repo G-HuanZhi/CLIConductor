@@ -132,6 +132,8 @@ def _session_to_api(s: sess.Session):
         "workdir": s.workdir,
         "history": s.history,
         "lastResult": s.last_result,
+        "rawUsage": s.raw_usage,
+        "totalUsage": s.total_usage,
         "createdAt": s.created_at,
         "updatedAt": s.updated_at,
         "workerStatus": w.status if w else None,
