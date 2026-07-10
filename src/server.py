@@ -676,7 +676,7 @@ async def api_cbc_sessions_import(data: dict):
         history=history,
         raw_usage=raw_usage,
         total_usage=sess.compute_total_usage(raw_usage),
-        workdir=str(Path.cwd()),
+        workdir=cwd,
     )
 
     await broadcast({
