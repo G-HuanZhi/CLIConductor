@@ -260,6 +260,14 @@ function selectSession(id) {
     renderMessages(s.history || []);
     const settingsBtn = document.getElementById('settingsBtn');
     settingsBtn.style.display = '';
+    // On mobile, close sidebar so user can see the chat
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && sidebar.classList.contains('open')) {
+        sidebar.classList.remove('open');
+        const overlay = document.getElementById('sidebarOverlay');
+        if (overlay)
+            overlay.classList.remove('show');
+    }
     // sync panel if it's already open
     if (document.getElementById('settingsPanel').classList.contains('open')) {
         syncPanelFromServer();
