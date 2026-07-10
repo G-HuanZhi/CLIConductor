@@ -857,29 +857,32 @@ function newSession() {
         .then((d) => {
         if (d.error) {
             toast(d.error);
+            refreshSessions();
             return;
         }
         modelData.push(d);
         selectSession(d.id);
-        refreshSessions();
     });
 }
 function deleteSession(id) {
     if (!confirm('Delete session ' + id.slice(0, 12) + '\u2026?'))
         return;
+    // Optimistic UI: remove immediately, recover on failure
+    modelData = modelData.filter(function (s) { return s.id !== id; });
+    if (currentSessionId === id) {
+        currentSessionId = null;
+        currentWorkerId = null;
+        showEmpty();
+    }
+    renderSessionList();
+    updateTopBar();
     fetch('/api/sessions/' + id, { method: 'DELETE' })
         .then((r) => r.json())
         .then((d) => {
         if (d.error) {
             toast(d.error);
-            return;
+            refreshSessions();
         }
-        if (currentSessionId === id) {
-            currentSessionId = null;
-            currentWorkerId = null;
-            showEmpty();
-        }
-        refreshSessions();
     });
 }
 // ── Init ──
