@@ -38,3 +38,4 @@ config.json
 start_cliconductor.bat
 # compiled from ts/app.ts — do not edit directly
 static/js/app.js
+CODEBUDDY.md
