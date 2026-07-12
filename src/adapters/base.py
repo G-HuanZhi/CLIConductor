@@ -39,6 +39,11 @@ class CliAdapter(Protocol):
         ...
 
     @property
+    def default_permission_mode(self) -> str:
+        """默认权限模式值。"""
+        ...
+
+    @property
     def supports_resume(self) -> bool: ...
 
     @property

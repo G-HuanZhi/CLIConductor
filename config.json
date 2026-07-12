@@ -1,8 +1,0 @@
-{
-  "cbc_import": {
-    "min_message_count": 0,
-    "max_sessions_shown": 30,
-    "project_dir_exact_match": false,
-    "exclude_workdir_patterns": []
-  }
-}

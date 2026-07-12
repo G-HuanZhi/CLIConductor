@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -76,33 +78,42 @@ def list_cbc_sessions(project_cwd: str | None = None, *, project_dir: str | None
 
 
 
-def list_cbc_projects() -> list[dict]:
+def list_cbc_projects(recent_days: int = 0, min_resume_bytes: int = 0) -> list[dict]:
     """Scan ~/.codebuddy/projects/ and return available project directories.
 
-    Returns list of dicts with keys: project_dir, session_count, path_hint,
-    drive, short_label.
+    recent_days: only include sessions modified within this many days (0 = no filter).
+    min_resume_bytes: file must be at least this size to count as resumable.
+    Returns list of dicts with keys: project_dir, session_count, resumable_count,
+    path_hint, drive, short_label. Projects with 0 resumable sessions are excluded.
     """
     base = Path(os.path.expanduser("~/.codebuddy/projects"))
     if not base.exists():
         return []
 
+    cutoff = datetime.now() - timedelta(days=recent_days) if recent_days > 0 else None
+
     projects: list[dict] = []
     for child in sorted(base.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if not child.is_dir():
             continue
-        # Count jsonl files (not agent.jsonl, not subagent dirs)
-        session_count = 0
+        total_count = 0
+        resumable_count = 0
         for f in child.iterdir():
             if f.suffix == ".jsonl" and f.stem != "agent" and f.is_file():
-                session_count += 1
-        if session_count == 0:
+                total_count += 1
+                if cutoff and datetime.fromtimestamp(f.stat().st_mtime) < cutoff:
+                    continue
+                if _can_resume(f, min_resume_bytes):
+                    resumable_count += 1
+        if resumable_count == 0:
             continue
 
         drive, short_label = _parse_project_label(child.name)
 
         projects.append({
             "project_dir": child.name,
-            "session_count": session_count,
+            "session_count": total_count,
+            "resumable_count": resumable_count,
             "path_hint": _project_dir_to_path(child.name),
             "drive": drive,
             "short_label": short_label,
@@ -241,6 +252,14 @@ def _read_meta(proj_dir: Path, session_id: str) -> dict:
         except (json.JSONDecodeError, OSError):
             pass
     return {}
+
+
+def _can_resume(fpath: Path, min_bytes: int = 0) -> bool:
+    """Quick check: is this JSONL large enough to be a valid session?"""
+    try:
+        return fpath.stat().st_size >= (min_bytes or 1)
+    except OSError:
+        return False
 
 
 def _parse_summary(fpath: Path) -> tuple[str, int, str, str, str]:

@@ -421,6 +421,7 @@ async def api_adapter_config():
         "defaultModel": a.default_model,
         "effortValues": list(a.effort_values),
         "permissionModes": a.permission_modes,
+        "defaultPermissionMode": a.default_permission_mode,
     }
 
 
@@ -571,7 +572,13 @@ async def api_list():
 @app.get("/api/cbc/projects")
 async def api_cbc_projects():
     """List cbc project directories that have resumable sessions."""
-    projects = cbc_sessions.list_cbc_projects()
+    config = load_config()
+    ci = config.get("cbc_import", {})
+    recent_days = ci.get("import_recent_days", 30)
+    min_resume_bytes = ci.get("min_resume_bytes", 200)
+    projects = cbc_sessions.list_cbc_projects(
+        recent_days=recent_days, min_resume_bytes=min_resume_bytes
+    )
     return {"projects": projects}
 
 

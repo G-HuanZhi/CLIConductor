@@ -39,11 +39,15 @@
       "min_message_count": "最少消息数，低于此值不在导入列表显示（默认 5）",
       "max_sessions_shown": "导入列表最多显示数量（默认 30）",
       "exclude_workdir_patterns": "排除 workdir 含指定子串的 session，project_dir_exact_match=false 时生效",
-      "project_dir_exact_match": "仅显示与当前项目路径完全匹配的 session"
+      "project_dir_exact_match": "仅显示与当前项目路径完全匹配的 session",
+      "import_recent_days": "只显示最近N天修改过的session（默认 30，0=不限）",
+      "min_resume_bytes": "JSONL文件至少多大才算可resume（默认 200）"
     },
     "min_message_count": 5,
     "max_sessions_shown": 30,
     "exclude_workdir_patterns": [],
-    "project_dir_exact_match": false
+    "project_dir_exact_match": false,
+    "import_recent_days": 30,
+    "min_resume_bytes": 200
   }
 }

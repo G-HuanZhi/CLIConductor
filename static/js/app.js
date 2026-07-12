@@ -5,6 +5,7 @@ let allModels = [];
 let defaultModel = 'deepseek-v4-flash';
 let effortValues = [];
 let permissionModes = [];
+let defaultPermissionMode = '';
 let _adapterConfigReady = false;
 let currentSessionId = null;
 let currentWorkerId = null;
@@ -127,12 +128,11 @@ function onWsMessage(e) {
         case 'worker.status':
             _applyWorkerUpdate(d.sessionId, d.workerId, d.status ?? 'idle');
             break;
-        case 'session.created':
         case 'session.renamed':
         case 'session.updated':
-        case 'session.deleted':
             refreshSessions();
             break;
+        // session.created / session.deleted: 乐观UI已处理，不触发WS刷新
         case 'error':
             toast(d.message ?? 'Unknown error');
             break;
@@ -218,6 +218,8 @@ function renderSessionList() {
             const target = e.target;
             if (target.closest('.sess-del'))
                 return;
+            if (s.id.indexOf('__pending_') === 0)
+                return; // Placeholder — not a real session yet
             selectSession(s.id);
         };
         let lastMsg = '';
@@ -228,6 +230,7 @@ function renderSessionList() {
             if (lastMsg.length > 40)
                 lastMsg = lastMsg.slice(0, 40) + '\u2026';
         }
+        const totalCredit = totalUsageCredit(s);
         div.innerHTML =
             '<div style="display:flex;justify-content:space-between;align-items:start">' +
                 '<div class="sess-name"><span class="s-dot ' +
@@ -245,9 +248,17 @@ function renderSessionList() {
                 '</span>' +
                 '<span>' +
                 (s.history || []).length +
-                ' msgs</span></div>';
+                ' msgs</span>' +
+                (totalCredit != null ? '<span class="sess-credit">' + totalCredit.toFixed(2) + ' credits</span>' : '') +
+                '</div>';
         el.appendChild(div);
     });
+}
+function totalUsageCredit(s) {
+    // Pre-computed total_usage from server (by-model accumulated + summed)
+    if (s.totalUsage && typeof s.totalUsage.credit === 'number')
+        return s.totalUsage.credit;
+    return null;
 }
 function selectSession(id) {
     currentSessionId = id;
@@ -550,7 +561,7 @@ function syncPanelFromServer() {
     const model = s.model || defaultModel;
     sel.value = allModels.indexOf(model) >= 0 ? model : '';
     document.getElementById('settingMode').value =
-        s.permissionMode || '';
+        s.permissionMode || defaultPermissionMode;
     document.getElementById('settingThinking').checked =
         s.alwaysThinkingEnabled || false;
     document.getElementById('settingEffort').value =
@@ -848,6 +859,15 @@ function newSession() {
         name = 'session-' + (modelData.length + n);
         n++;
     }
+    // Optimistic UI: placeholder immediately, no data needed from server
+    var placeholder = {
+        id: '__pending_' + name,
+        name: '...',
+        model: defaultModel,
+        history: [],
+    };
+    modelData.push(placeholder);
+    selectSession(placeholder.id);
     fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -860,11 +880,25 @@ function newSession() {
             refreshSessions();
             return;
         }
-        modelData.push(d);
-        selectSession(d.id);
+        // Replace placeholder with real data
+        for (var i = 0; i < modelData.length; i++) {
+            if (modelData[i].id === placeholder.id) {
+                modelData[i] = d;
+                break;
+            }
+        }
+        if (currentSessionId === placeholder.id) {
+            currentSessionId = d.id;
+            updateTopBar();
+        }
+        renderSessionList();
     });
 }
 function deleteSession(id) {
+    if (id.indexOf('__pending_') === 0) {
+        toast('Wait for session to be created first');
+        return;
+    }
     if (!confirm('Delete session ' + id.slice(0, 12) + '\u2026?'))
         return;
     // Optimistic UI: remove immediately, recover on failure
@@ -894,6 +928,7 @@ function init() {
         defaultModel = data.defaultModel || 'deepseek-v4-flash';
         effortValues = data.effortValues || [];
         permissionModes = data.permissionModes || [];
+        defaultPermissionMode = data.defaultPermissionMode || 'default';
         buildModelSelect();
         buildModeSelect();
         buildEffortSelect();
@@ -921,7 +956,7 @@ function init() {
         cbcDriveSelect.innerHTML = '<option value="">Drive</option>';
         drives.forEach((d) => {
             const total = allProjects.filter((p) => p.drive === d)
-                .reduce((sum, p) => sum + p.session_count, 0);
+                .reduce((sum, p) => sum + (p.resumable_count || p.session_count), 0);
             const opt = document.createElement('option');
             opt.value = d;
             opt.textContent = `${d} (${total} sessions)`;
@@ -937,9 +972,10 @@ function init() {
         projects.sort((a, b) => a.short_label.localeCompare(b.short_label));
         cbcProjectSelect.innerHTML = '<option value="">Project</option>';
         projects.forEach((p) => {
+            const rCount = p.resumable_count || p.session_count;
             const opt = document.createElement('option');
             opt.value = p.project_dir;
-            opt.textContent = p.short_label;
+            opt.textContent = `${p.short_label} (${rCount})`;
             cbcProjectSelect.appendChild(opt);
         });
         if (projects.length > 0) {
@@ -1046,10 +1082,6 @@ function init() {
 function buildModelSelect() {
     const sel = document.getElementById('settingModel');
     sel.innerHTML = '';
-    const blank = document.createElement('option');
-    blank.value = '';
-    blank.textContent = '\u2014 model \u2014';
-    sel.appendChild(blank);
     allModels.forEach((m) => {
         const opt = document.createElement('option');
         opt.value = m;

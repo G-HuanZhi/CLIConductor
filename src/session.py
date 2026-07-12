@@ -114,6 +114,7 @@ def get(session_id: str) -> Session | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         s = Session(**data)
+        _migrate_session_usage(s)
         _cache[session_id] = s
         return s
     except (json.JSONDecodeError, OSError):
@@ -161,7 +162,9 @@ def list_all() -> list[Session]:
                         # 不覆盖已缓存的 Session（worker 可能在 _read_stdout
                         # 里 append 了 history 但还没 save，磁盘版本更旧）
                         if sid and sid not in _cache:
-                            _cache[sid] = Session(**data)
+                            s = Session(**data)
+                            _migrate_session_usage(s)
+                            _cache[sid] = s
                     except (json.JSONDecodeError, OSError):
                         pass
         _all_loaded = True
@@ -222,6 +225,14 @@ def compute_total_usage(raw_usage: dict | None) -> dict | None:
         total["cache_miss_tokens"] += ru.get("prompt_cache_miss_tokens", 0)
         total["credit"] += ru.get("credit", 0)
     return total
+
+
+def _migrate_session_usage(s: Session):
+    """Migrate legacy list-format raw_usage to dict + compute total_usage."""
+    if isinstance(s.raw_usage, list):
+        s.raw_usage = accumulate_raw_usage(None, s.raw_usage)
+    if s.total_usage is None and isinstance(s.raw_usage, dict):
+        s.total_usage = compute_total_usage(s.raw_usage)
 
 
 def clear_cache():

@@ -11,6 +11,8 @@ DEFAULT_CONFIG: dict = {
         "max_sessions_shown": 30,
         "exclude_workdir_patterns": [],
         "project_dir_exact_match": False,
+        "import_recent_days": 30,
+        "min_resume_bytes": 200,
     },
     "cbc": {
         # 默认模型。可选值参见 adapter.py 的 supported_models
