@@ -12,9 +12,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
 from nonebot import get_driver, on_message
@@ -22,7 +24,15 @@ from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent, Pr
 
 # ── 配置 ──
 
-CLICONDUCTOR_URL = os.getenv("CLICONDUCTOR_URL", "http://127.0.0.1:8767")
+def _default_port():
+    try:
+        config_path = Path(__file__).parent.parent / "config.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        return config.get("port", 8767)
+    except Exception:
+        return 8767
+
+CLICONDUCTOR_URL = os.getenv("CLICONDUCTOR_URL", f"http://127.0.0.1:{_default_port()}")
 POLL_INTERVAL = 1.5
 MAX_POLL_TIME = 120
 

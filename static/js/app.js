@@ -798,16 +798,15 @@ function send() {
         toast('Connection lost. Please refresh the page.');
     }
     if (!currentWorkerId) {
-        const model = getSettingModel();
-        const mode = document.getElementById('settingMode').value;
-        const body = {
-            sessionId: currentSessionId,
-            model: model,
-        };
-        if (mode)
-            body.permissionMode = mode;
-        body.alwaysThinkingEnabled = document.getElementById('settingThinking').checked;
-        body.effort = document.getElementById('settingEffort').value;
+        const body = { sessionId: currentSessionId };
+        if (hasPendingChanges()) {
+            body.model = getSettingModel();
+            const mode = document.getElementById('settingMode').value;
+            if (mode)
+                body.permissionMode = mode;
+            body.alwaysThinkingEnabled = document.getElementById('settingThinking').checked;
+            body.effort = document.getElementById('settingEffort').value;
+        }
         fetch('/api/spawn', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

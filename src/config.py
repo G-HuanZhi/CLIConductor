@@ -24,6 +24,8 @@ DEFAULT_CONFIG: dict = {
         # 默认 effort 级别："" | "none" | "off" | "auto" | "low" | "medium" | "high" | "xhigh" | "max" | "ultracode"
         "effort": "",
     },
+    # 服务端口（环境变量 CLICONDUCTOR_PORT 可覆盖）
+    "port": 8767,
 }
 
 
