@@ -19,6 +19,7 @@ interface Session {
   workerId?: string | null;
   history: Message[];
   lastResult?: Record<string, unknown> | null;
+  totalUsage?: Record<string, number> | null;
 }
 
 interface WorkerEventContent {
@@ -96,13 +97,94 @@ let currentSessionId: string | null = null;
 let currentWorkerId: string | null = null;
 let modelData: Session[] = [];
 let lastSyncedSettings: SyncedSettings | null = null;
+let defaultPermissionMode: string = '';
+let bubbleViewEnabled: boolean = true;
+let currentHistory: Message[] = [];
+let toolGroupOpen: boolean = false;
+
+// ── Markdown / LaTeX rendering ──
+if (typeof (window as any).marked !== 'undefined') {
+  (window as any).marked.setOptions({ breaks: true, gfm: true });
+}
+
+function renderMarkdown(text: string): string {
+  if (!text) return '';
+
+  const mathStore: Array<{ key: string; latex: string; display: boolean }> = [];
+  let mathIndex = 0;
+  function saveMath(latex: string, display: boolean): string {
+    const key = `[[MATH_PLACEHOLDER_${mathIndex++}]]`;
+    mathStore.push({ key, latex: latex.trim(), display });
+    return key;
+  }
+
+  let t = text;
+  t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, latex) => saveMath(latex, true));
+  t = t.replace(/\$([^$\n]+?)\$/g, (_, latex) => saveMath(latex, false));
+
+  let html: string;
+  if (typeof (window as any).marked !== 'undefined') {
+    html = (window as any).marked.parse(t);
+  } else {
+    html = esc(t).replace(/\n/g, '<br>');
+  }
+
+  if (typeof (window as any).katex !== 'undefined') {
+    mathStore.forEach(function (item) {
+      try {
+        const rendered = (window as any).katex.renderToString(item.latex, {
+          displayMode: item.display,
+          throwOnError: false,
+        });
+        html = html.split(item.key).join(rendered);
+      } catch (e) {
+        html = html.split(item.key).join('<code>' + esc(item.latex) + '</code>');
+      }
+    });
+  }
+
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  if (typeof (window as any).hljs !== 'undefined') {
+    tmp.querySelectorAll('pre code').forEach(function (block) {
+      (window as any).hljs.highlightElement(block);
+    });
+  }
+  return tmp.innerHTML;
+}
+
+// ── View toggle ──
+function toggleView(): void {
+  bubbleViewEnabled = !bubbleViewEnabled;
+  const btn = document.getElementById('viewToggleBtn')!;
+  const msgs = document.getElementById('messages')!;
+  if (bubbleViewEnabled) {
+    btn.innerHTML = '\uD83D\uDCAC';
+    btn.title = 'Switch to TUI view';
+    msgs.classList.remove('tui-mode');
+  } else {
+    btn.innerHTML = '\uD83D\uDDA5\uFE0F';
+    btn.title = 'Switch to Bubble view';
+    msgs.classList.add('tui-mode');
+  }
+  renderMessages(currentHistory);
+}
 
 // ── WebSocket ──
-
 const wsProtocol = location.protocol === 'https:' ? 'wss://' : 'ws://';
-const ws: WebSocket = new WebSocket(wsProtocol + location.host + '/ws');
-ws.onopen = refreshSessions;
-ws.onmessage = onWsMessage;
+var ws: any;
+var _wsUrl: string = wsProtocol + location.host + '/ws';
+
+function connectWs(): void {
+  ws = new WebSocket(_wsUrl);
+  ws.onopen = refreshSessions;
+  ws.onmessage = onWsMessage;
+  ws.onclose = function () {
+    console.warn('[WS] disconnected, reconnecting in 3s');
+    setTimeout(connectWs, 3000);
+  };
+}
+connectWs();
 
 function onWsMessage(e: MessageEvent): void {
   const d: StreamEvent = JSON.parse(e.data);
@@ -275,6 +357,12 @@ function renderSessionList(): void {
   });
 }
 
+function totalUsageCredit(s: Session): number | null {
+  if (s.totalUsage && typeof (s.totalUsage as any).credit === 'number')
+    return (s.totalUsage as any).credit;
+  return null;
+}
+
 function selectSession(id: string): void {
   currentSessionId = id;
   const s = modelData.find((x: Session) => x.id === id);
@@ -330,72 +418,178 @@ function showEmpty(): void {
 // ── Messages ──
 
 function renderMessages(history: Message[]): void {
+  currentHistory = history || [];
   const el = document.getElementById('messages')!;
   el.innerHTML = '';
-  if (!history || history.length === 0) {
+  if (!currentHistory || currentHistory.length === 0) {
     el.innerHTML =
       '<div class="empty-chat">No messages yet. Start a conversation.</div>';
+    toolGroupOpen = false;
     return;
   }
-  history.forEach((h: Message) => {
-    addMessage(h.role, h.content);
+  const grouped: Array<{ type?: string; items?: Message[] } & Partial<Message>> = [];
+  let toolGroup: any = null;
+  for (let i = 0; i < currentHistory.length; i++) {
+    const h = currentHistory[i];
+    if (h.role === 'tool') {
+      if (!toolGroup) {
+        toolGroup = { type: 'tool_group', items: [] };
+        grouped.push(toolGroup);
+      }
+      toolGroup.items!.push(h);
+    } else {
+      toolGroup = null;
+      grouped.push(h);
+    }
+  }
+  grouped.forEach(function (g: any) {
+    if (g.type === 'tool_group') {
+      _renderToolGroup(g.items!);
+    } else {
+      _renderMsgEl(g.role, g.content);
+    }
   });
   el.scrollTop = el.scrollHeight;
+  toolGroupOpen = false;
 }
 
-function addMessage(role: string, content: string): void {
+function formatToolContent(content: string): string {
+  if (!content)
+    return '\uD83D\uDD27 <em>(empty)</em>';
+  let legacyMatch = content.match(/^tool call:\s*(.+?)(?:\r?\n|\r)args:\s*([\s\S]*)$/);
+  if (legacyMatch) {
+    const name = legacyMatch[1].trim();
+    const jsonText = legacyMatch[2].trim();
+    const formatted = formatToolArgs(jsonText);
+    if (!formatted || !formatted.trim())
+      return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>';
+    return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>' +
+      '<div class="tool-pre">' + esc(formatted) + '</div>';
+  }
+  const match = content.match(/^([^(]+)\(([\s\S]*)\)$/);
+  if (!match)
+    return '\uD83D\uDD27 ' + esc(content).replace(/\n/g, '<br>');
+  let name = (match[1] || '').trim();
+  const jsonText = match[2] || '';
+  if (!name) name = 'tool';
+  const formatted = formatToolArgs(jsonText);
+  if (!formatted || !formatted.trim())
+    return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>';
+  return '\uD83D\uDD27 <strong>' + esc(name) + '</strong>' +
+    '<div class="tool-pre">' + esc(formatted) + '</div>';
+}
+
+function formatToolArgs(jsonText: string): string {
+  try {
+    const parsed = JSON.parse(jsonText);
+    if (parsed && typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      const cleaned: Record<string, unknown> = {};
+      Object.keys(parsed).forEach(function (key: string) {
+        if (key === '_comment' || key === '$comment' || key === '-comment') return;
+        cleaned[key] = parsed[key];
+      });
+      return JSON.stringify(cleaned, null, 2);
+    }
+    return jsonText;
+  } catch (e) {
+    return jsonText;
+  }
+}
+
+function toolName(content: string): string {
+  if (!content) return '(empty)';
+  const callMatch = content.match(/^tool call:\s*(.+)/);
+  if (callMatch) return callMatch[1].split('\n')[0].trim();
+  const resultMatch = content.match(/^tool result \(([^)]+)\)/);
+  if (resultMatch) return resultMatch[1].trim();
+  const idx = content.indexOf('(');
+  if (idx >= 0) return content.slice(0, idx).trim();
+  return content.split('\n')[0].trim().slice(0, 30);
+}
+
+function _renderMsgEl(role: string, content: string): void {
   const el = document.getElementById('messages')!;
   const div = document.createElement('div');
-
   if (role === 'user') {
     div.className = 'msg user';
-    div.textContent = content;
+    div.innerHTML = '<div class="msg-content">' + renderMarkdown(content) + '</div>';
   } else if (role === 'assistant') {
     div.className = 'msg assistant';
-    const display = content.replace(/🔧.*(\n|$)/g, '').trim();
-    div.textContent = display || '(tool call only)';
+    div.innerHTML = '<div class="msg-content">' + renderMarkdown(content) + '</div>';
   } else if (role === 'thinking') {
     div.className = 'msg thinking';
     div.innerHTML =
-      '💭 <span class="thinking-toggle">show thinking</span><div class="thinking-body">' +
-      esc(content) +
-      '</div>';
+      '\uD83D\uDCAD <span class="thinking-toggle">show thinking</span>' +
+      '<div class="thinking-body">' + esc(content) + '</div>';
     div.onclick = function () {
-      const body = div.querySelector('.thinking-body');
-      const toggle = div.querySelector('.thinking-toggle');
+      const body = div.querySelector('.thinking-body') as HTMLElement;
+      const toggle = div.querySelector('.thinking-toggle') as HTMLElement;
       if (!body || !toggle) return;
       body.classList.toggle('open');
-      toggle.textContent = body.classList.contains('open')
-        ? 'hide thinking'
-        : 'show thinking';
+      toggle.textContent = body.classList.contains('open') ? 'hide thinking' : 'show thinking';
     };
   } else if (role === 'tool') {
     div.className = 'msg tool';
-    div.textContent = '🔧 ' + content;
+    div.innerHTML = formatToolContent(content);
   } else {
     div.className = 'msg system';
     div.textContent = content || '';
   }
-
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
+}
+
+function _renderToolGroup(items: Message[]): void {
+  const el = document.getElementById('messages')!;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tool-group collapsed';
+  const count = items.length;
+  let names = items.map(function (t) { return toolName(t.content); }).slice(0, 3).join(', ');
+  if (items.length > 3) names += ', \u2026';
+  wrapper.innerHTML =
+    '<div class="tool-group-header">' +
+    '\uD83D\uDD27 <strong>' + count + ' tools:</strong> ' +
+    esc(names) +
+    ' <span class="toggle-icon">\u25BC</span>' +
+    '</div>' +
+    '<div class="tool-group-body"></div>';
+  const body = wrapper.querySelector('.tool-group-body')!;
+  items.forEach(function (t) {
+    const toolDiv = document.createElement('div');
+    toolDiv.className = 'msg tool';
+    toolDiv.innerHTML = formatToolContent(t.content);
+    body.appendChild(toolDiv);
+  });
+  (wrapper.querySelector('.tool-group-header') as HTMLElement).onclick = function () {
+    wrapper.classList.toggle('collapsed');
+  };
+  el.appendChild(wrapper);
+  el.scrollTop = el.scrollHeight;
+}
+
+function addMessage(role: string, content: string): void {
+  currentHistory.push({ role: role, content: content });
+  _renderMsgEl(role, content);
 }
 
 function appendEvent(event: WorkerEvent): void {
   const t = event.type;
   if (t === 'system' && event.subtype === 'init') return;
   if (t === 'result') return;
-
   if (t === 'assistant') {
     const content = (event.message && event.message.content) || [];
     content.forEach((b: WorkerEventContent) => {
-      if (b.type === 'text') addMessage('assistant', b.text ?? '');
-      else if (b.type === 'thinking') addMessage('thinking', b.thinking ?? '');
-      else if (b.type === 'tool_use')
-        addMessage(
-          'tool',
-          (b.name ?? '') + '(' + JSON.stringify(b.input || {}) + ')'
-        );
+      if (b.type === 'text') {
+        currentHistory.push({ role: 'assistant', content: b.text || '' });
+        _renderMsgEl('assistant', b.text || '');
+      } else if (b.type === 'thinking') {
+        currentHistory.push({ role: 'thinking', content: b.thinking || '' });
+        _renderMsgEl('thinking', b.thinking || '');
+      } else if (b.type === 'tool_use') {
+        const c = (b.name || '') + '(' + JSON.stringify(b.input || {}) + ')';
+        currentHistory.push({ role: 'tool', content: c });
+        _renderMsgEl('tool', c);
+      }
     });
   }
 }
@@ -686,17 +880,18 @@ function send(): void {
   }
 
   if (!currentWorkerId) {
-    const model = getSettingModel();
-    const mode = (document.getElementById('settingMode') as HTMLSelectElement).value;
     const body: Record<string, unknown> = {
       sessionId: currentSessionId,
-      model: model,
     };
-    if (mode) body.permissionMode = mode;
-    body.alwaysThinkingEnabled = (
-      document.getElementById('settingThinking') as HTMLInputElement
-    ).checked;
-    body.effort = (document.getElementById('settingEffort') as HTMLSelectElement).value;
+    if (hasPendingChanges()) {
+      body.model = getSettingModel();
+      const mode = (document.getElementById('settingMode') as HTMLSelectElement).value;
+      if (mode) body.permissionMode = mode;
+      body.alwaysThinkingEnabled = (
+        document.getElementById('settingThinking') as HTMLInputElement
+      ).checked;
+      body.effort = (document.getElementById('settingEffort') as HTMLSelectElement).value;
+    }
     fetch('/api/spawn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1005,6 +1200,14 @@ function esc<T extends HTMLElement | string>(s: T): string {
   return d.innerHTML;
 }
 
+function copyToClipboard(text: string): void {
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(function () {
+    toast('Copied: ' + text);
+  }).catch(function () {
+    toast('Copy failed');
+  });
+}
 function toast(msg: string): void {
   const el = document.getElementById('toast')!;
   el.textContent = msg;
