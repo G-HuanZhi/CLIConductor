@@ -1,6 +1,6 @@
 # CLIConductor 全局规划
 
-> 最后更新：2026-07-01
+> 最后更新：2026-07-13
 
 ---
 
@@ -206,3 +206,90 @@ Dashboard 发消息时若 Workers 不存在，自动 spawn。Restart 按钮同�
 | 5 | 系统重启后，Session 可从本地存储恢复，Worker 按需 spawn | ✅ |
 | 6 | Meta-Agent 通过专用 WS 通道接收事件 + 派发任务 | ✅ |
 | 7 | Worker 和 Session 概念分离，kill 不删 Session | ✅ |
+
+---
+
+## 九、Phase 1 实施记录
+
+（合并自 `current.md`，原文件已删除）
+
+### 9.1 已完成功能清单
+
+| 功能 | 状态 |
+|------|:----:|
+| 项目重构为模块化（`src/worker.py`, `src/server.py`, `src/session.py`） | ✅ |
+| Worker 生命周期（spawn / list / kill / restart / branch） | ✅ |
+| Session 独立管理（UUID 持久化，死 Worker 不删 Session） | ✅ |
+| cbc stdin stream-json 集成（长驻进程） | ✅ |
+| 消息队列（asyncio.Queue + consumer 循环，一次一条） | ✅ |
+| 中断机制（`/interrupt` 端点 → kill + --resume 重启） | ✅ |
+| Session 持久化（JSON 文件，每次 result 保存） | ✅ |
+| Dashboard 重写（左栏 session 列表 + 聊天式消息区） | ✅ |
+| Worker 独立工作目录（`data/workdirs/{name}/`） | ✅ |
+| 全部 API 端点 | ✅ |
+| WebSocket 双向通信（`/ws` + `/ws/agent` 双通道） | ✅ |
+| 命令来源辨別（`source` 参数 + 独立 WS 通道） | ✅ |
+| 优雅关闭（lifespan handler，kill 所有子进程） | ✅ |
+| cbc --resume 重放去重（_replaying 标志） | ✅ |
+| Dashboard 无 Worker 自动 spawn | ✅ |
+| 设置面板（单 Apply 按钮，差异显隐） | ✅ |
+| 设置端点 `/api/worker/{id}/settings` | ✅ |
+| 进程树清理（taskkill /F /T） | ✅ |
+| Favicon | ✅ |
+
+### 9.2 当前代码结构
+
+```
+CLIConductor/
+├── main.py                  入口
+├── src/
+│   ├── server.py            FastAPI 路由 + WS
+│   ├── worker.py            Worker 数据类 + 生命周期管理
+│   ├── session.py           Session 存储
+│   └── config.py            配置系统
+├── ts/
+│   └── app.ts               Dashboard 前端（TypeScript 源文件）
+├── static/
+│   └── app.js               Dashboard 前端（编译产物，gitignored）
+├── qq-bridge/
+│   ├── bot.py               NoneBot2 入口
+│   ├── plugin.py            桥接插件
+│   └── .env                 QQ Bridge 配置
+├── data/
+│   ├── sessions/            Session JSON 文件
+│   └── workdirs/            Worker 工作目录
+├── docs/
+│   └── ...
+└── scripts/
+    └── pre-commit           Git 预提交 hook
+```
+
+### 9.3 待决策 TODOs
+
+| # | 事项 | 说明 |
+|---|------|------|
+| 1 | 中间输出实时保存 | 目前只在 result 时保存 session |
+| 2 | 按价值选择存储策略 | 有价值 session 存完整 history，普通 session 只存元数据 |
+| 3 | History 加载分页 | 长对话分批加载 |
+| 4 | Workdir 清理机制 | kill Worker 不删 workdir，需清理无效目录 |
+| 5 | 权限控制 | 目前通过 `source` 参数辨别来源，未实现真正的权限限制 |
+| 6 | 崩溃自动恢复 | Worker 进程崩溃后自动检测并恢复 |
+| 7 | 发布前移除缓存规避方案 | 临时 URL 版本号改为内容哈希方案 |
+
+### 9.4 QQ 集成
+
+架构：`QQ 用户 → NapCat → NoneBot2 → qq-bridge/plugin.py → CLIConductor HTTP API → Worker`
+
+| 组件 | 用途 |
+|------|------|
+| NapCat | QQ 协议实现，OneBot v11 WS 服务端 |
+| NoneBot2 | 异步 Python 聊天机器人框架 |
+| `qq-bridge/` | CLIConductor 自带插件 + 配置 |
+
+参见 `docs/architecture/qq-bridge.md` 获取完整架构文档。
+
+| 端口 | 服务 |
+|------|------|
+| 8767/8768 | CLIConductor（main/test） |
+| 8080 | NoneBot2 HTTP |
+| 3001 | NapCat WS |
