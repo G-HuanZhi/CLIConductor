@@ -1081,6 +1081,10 @@ function init() {
 function buildModelSelect() {
     const sel = document.getElementById('settingModel');
     sel.innerHTML = '';
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = '\u2014 model \u2014';
+    sel.appendChild(blank);
     allModels.forEach((m) => {
         const opt = document.createElement('option');
         opt.value = m;
