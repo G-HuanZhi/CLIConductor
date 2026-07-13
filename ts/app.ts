@@ -324,6 +324,7 @@ function renderSessionList(): void {
     div.onclick = function (e: MouseEvent) {
       const target = e.target as HTMLElement;
       if (target.closest('.sess-del')) return;
+      if (s.id.indexOf('__pending_') === 0) return; // Placeholder — not a real session yet
       selectSession(s.id);
     };
 
@@ -944,6 +945,17 @@ function newSession(): void {
     name = 'session-' + (modelData.length + n);
     n++;
   }
+  // Optimistic UI: placeholder immediately, no data needed from server
+  const placeholder: Session = {
+    id: '__pending_' + name,
+    name: '...',
+    model: defaultModel,
+    history: [],
+    alwaysThinkingEnabled: false,
+    effort: '',
+  };
+  modelData.push(placeholder);
+  selectSession(placeholder.id);
   fetch('/api/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -953,16 +965,38 @@ function newSession(): void {
     .then((d: Session & ApiGenericResponse) => {
       if (d.error) {
         toast(d.error);
+        refreshSessions();
         return;
       }
-      modelData.push(d as Session);
-      selectSession(d.id);
-      refreshSessions();
+      // Replace placeholder with real data
+      for (let i = 0; i < modelData.length; i++) {
+        if (modelData[i].id === placeholder.id) {
+          modelData[i] = d as Session;
+          break;
+        }
+      }
+      if (currentSessionId === placeholder.id) {
+        currentSessionId = d.id;
+        updateTopBar();
+      }
+      renderSessionList();
     });
 }
 
 function deleteSession(id: string): void {
+  if (id.indexOf('__pending_') === 0) {
+    toast('Wait for session to be created first');
+    return;
+  }
   if (!confirm('Delete session ' + id.slice(0, 12) + '\u2026?')) return;
+  // Optimistic UI: remove immediately, recover on failure
+  modelData = modelData.filter(function (s) { return s.id !== id; });
+  if (currentSessionId === id) {
+    currentSessionId = null;
+    currentWorkerId = null;
+    showEmpty();
+  }
+  renderSessionList();
   fetch('/api/sessions/' + id, { method: 'DELETE' })
     .then((r: Response) => r.json())
     .then((d: ApiGenericResponse) => {
