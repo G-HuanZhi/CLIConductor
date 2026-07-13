@@ -210,12 +210,11 @@ function onWsMessage(e: MessageEvent): void {
     case 'worker.status':
       _applyWorkerUpdate(d.sessionId, d.workerId, d.status ?? 'idle');
       break;
-    case 'session.created':
     case 'session.renamed':
     case 'session.updated':
-    case 'session.deleted':
       refreshSessions();
       break;
+    // session.created / session.deleted: 乐观UI已处理，不触发WS刷新
     case 'error':
       toast(d.message ?? 'Unknown error');
       break;
@@ -270,6 +269,11 @@ function refreshSessions(): void {
         }
       }
       if (currentSessionId) updateTopBar();
+    })
+    .catch(function () {
+      console.warn('[refreshSessions] fetch failed, network issue');
+      if (version === _refreshVersion)
+        _refreshVersion--;
     });
 }
 
@@ -289,6 +293,7 @@ interface CbcSessionItem {
 interface CbcProject {
   project_dir: string;
   session_count: number;
+  resumable_count?: number;
   path_hint: string;
   drive: string;
   short_label: string;
@@ -336,6 +341,7 @@ function renderSessionList(): void {
       if (lastMsg.length > 40) lastMsg = lastMsg.slice(0, 40) + '\u2026';
     }
 
+    const totalCredit = totalUsageCredit(s);
     div.innerHTML =
       '<div style="display:flex;justify-content:space-between;align-items:start">' +
       '<div class="sess-name"><span class="s-dot ' +
@@ -353,7 +359,9 @@ function renderSessionList(): void {
       '</span>' +
       '<span>' +
       (s.history || []).length +
-      ' msgs</span></div>';
+      ' msgs</span>' +
+      (totalCredit != null ? '<span class="sess-credit">' + totalCredit.toFixed(2) + ' credits</span>' : '') +
+      '</div>';
     el.appendChild(div);
   });
 }
@@ -396,6 +404,21 @@ function updateTopBar(): void {
   (document.getElementById('chatName')!).textContent =
     s.name || (currentSessionId ?? '').slice(0, 12);
   (document.getElementById('chatModel')!).textContent = s.model || defaultModel;
+  const sidsEl = document.getElementById('chatSessionIds')!;
+  sidsEl.style.display = 'flex';
+  var sesId = s.id || '';
+  var cbcId = s.cbcSessionId;
+  sidsEl.innerHTML =
+    '<span class="sid-item">' +
+    esc(sesId.slice(0, 12)) +
+    '<button class="sid-copy" title="Copy session ID" onclick="copyToClipboard(\'' + sesId + '\')">\u29C9</button>' +
+    '</span>' +
+    (cbcId ?
+      '<span class="sid-item">' +
+      esc(cbcId.slice(0, 8)) +
+      '<button class="sid-copy" title="Copy cbc session ID" onclick="copyToClipboard(\'' + cbcId + '\')">\u29C9</button>' +
+      '</span>'
+      : '');
   const status = s.workerStatus || 'offline';
   (document.getElementById('chatStatus')!).textContent =
     status + (currentWorkerId ? ' (' + currentWorkerId + ')' : ' (no worker)');
@@ -407,6 +430,7 @@ function showEmpty(): void {
   (document.getElementById('emptyHint')!).style.display = '';
   (document.getElementById('chatName')!).style.display = 'none';
   (document.getElementById('chatModel')!).style.display = 'none';
+  (document.getElementById('chatSessionIds')!).style.display = 'none';
   (document.getElementById('chatStatus')!).textContent = '';
   const dot = document.getElementById('mobileWorkerDot');
   if (dot) dot.className = 's-dot offline';
@@ -414,6 +438,8 @@ function showEmpty(): void {
   (document.getElementById('settingsPanel')!).className = '';
   (document.getElementById('messages')!).innerHTML =
     '<div class="empty-chat">Select a session to start</div>';
+  currentHistory = [];
+  toolGroupOpen = false;
 }
 
 // ── Messages ──
@@ -629,7 +655,7 @@ function syncPanelFromServer(): void {
   sel.value = allModels.indexOf(model) >= 0 ? model : '';
 
   (document.getElementById('settingMode') as HTMLSelectElement).value =
-    s.permissionMode || '';
+    s.permissionMode || defaultPermissionMode;
   (document.getElementById('settingThinking') as HTMLInputElement).checked =
     s.alwaysThinkingEnabled || false;
   (document.getElementById('settingEffort') as HTMLSelectElement).value =
@@ -1023,12 +1049,16 @@ function init(): void {
       defaultModel = data.defaultModel || 'deepseek-v4-flash';
       effortValues = data.effortValues || [];
       permissionModes = data.permissionModes || [];
+      defaultPermissionMode = (data as any).defaultPermissionMode || 'default';
       buildModelSelect();
       buildModeSelect();
       buildEffortSelect();
       _adapterConfigReady = true;
       if (document.getElementById('settingsPanel')!.classList.contains('open'))
         syncPanelFromServer();
+    })
+    .catch(function () {
+      // Server unavailable — will retry on settings panel open
     });
   refreshSessions();
 
@@ -1050,7 +1080,7 @@ function init(): void {
     cbcDriveSelect.innerHTML = '<option value="">Drive</option>';
     drives.forEach((d: string) => {
       const total = allProjects.filter((p: CbcProject) => p.drive === d)
-        .reduce((sum: number, p: CbcProject) => sum + p.session_count, 0);
+        .reduce((sum: number, p: CbcProject) => sum + (p.resumable_count || p.session_count), 0);
       const opt = document.createElement('option');
       opt.value = d;
       opt.textContent = `${d} (${total} sessions)`;
@@ -1067,9 +1097,10 @@ function init(): void {
     projects.sort((a: CbcProject, b: CbcProject) => a.short_label.localeCompare(b.short_label));
     cbcProjectSelect.innerHTML = '<option value="">Project</option>';
     projects.forEach((p: CbcProject) => {
+      const rCount = p.resumable_count || p.session_count;
       const opt = document.createElement('option');
       opt.value = p.project_dir;
-      opt.textContent = p.short_label;
+      opt.textContent = `${p.short_label} (${rCount})`;
       cbcProjectSelect.appendChild(opt);
     });
     if (projects.length > 0) {
