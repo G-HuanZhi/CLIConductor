@@ -264,7 +264,9 @@ def _can_resume(fpath: Path, min_bytes: int = 0) -> bool:
 
 def _parse_summary(fpath: Path) -> tuple[str, int, str, str, str]:
     """Extract title, count, timestamps and model from a JSONL file."""
-    title = ""
+    custom_title = ""
+    ai_title = ""
+    user_title = ""
     msg_count = 0
     first_ts = ""
     last_ts = ""
@@ -291,22 +293,41 @@ def _parse_summary(fpath: Path) -> tuple[str, int, str, str, str]:
             if not model and event.get("providerData", {}).get("model"):
                 model = event["providerData"]["model"]
 
-            if not title:
-                if event.get("type") == "custom-title":
-                    title = _strip_html(event.get("customTitle", ""))
-                elif event.get("type") == "ai-title":
-                    title = _strip_html(event.get("aiTitle", ""))
-                elif event.get("type") == "message" and event.get("role") == "user":
-                    content = event.get("content") or []
-                    if isinstance(content, list):
-                        for block in content:
-                            if isinstance(block, dict) and block.get("type") in ("input_text", "text"):
-                                t = block.get("text", "").strip()
-                                if t:
-                                    title = _strip_html(t)[:80]
-                                    break
+            # Title priority: custom-title > ai-title > user message
+            # Track explicitly set titles separately from the user-message
+            # fallback so they can override it even when appearing later.
+            etype = event.get("type")
+            if etype == "custom-title":
+                custom_title = _strip_html(event.get("customTitle", ""))
+            elif etype == "ai-title" and not custom_title:
+                ai_title = _strip_html(event.get("aiTitle", ""))
+            elif not user_title and etype == "message" and event.get("role") == "user":
+                content = event.get("content") or []
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") in ("input_text", "text"):
+                            t = block.get("text", "").strip()
+                            if t:
+                                user_title = _strip_html(t)[:80]
+                                break
 
-    return title, msg_count, first_ts, last_ts, model
+    return custom_title or ai_title or user_title, msg_count, first_ts, last_ts, model
+
+
+def get_session_title(session_id: str, cwd: str | None = None,
+                      project_dir: str | None = None) -> str:
+    """Extract the title that cbc assigned to a session (custom-title > ai-title)."""
+    if project_dir:
+        proj_dir = Path(os.path.expanduser("~/.codebuddy/projects")) / project_dir
+    elif cwd:
+        proj_dir = _project_dir(cwd)
+    else:
+        return ""
+    path = proj_dir / f"{session_id}.jsonl"
+    if not path.exists():
+        return ""
+    title, _, _, _, _ = _parse_summary(path)
+    return title
 
 
 def _strip_html(text: str) -> str:

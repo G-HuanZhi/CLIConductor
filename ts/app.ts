@@ -101,6 +101,7 @@ let defaultPermissionMode: string = '';
 let bubbleViewEnabled: boolean = true;
 let currentHistory: Message[] = [];
 let toolGroupOpen: boolean = false;
+let _currentToolGroupStart: number = -1;
 
 // ── Markdown / LaTeX rendering ──
 if (typeof (window as any).marked !== 'undefined') {
@@ -349,9 +350,9 @@ function renderSessionList(): void {
       '"></span>' +
       esc(s.name) +
       '</div>' +
-      '<button class="sess-del" onclick="deleteSession(\'' +
+      '<button class="sess-del" onclick="toggleSessMenu(event,\'' +
       s.id +
-      '\')" title="Delete session" style="background:none;border:none;color:#484f58;cursor:pointer;font-size:.85rem;padding:0 2px">\u2699</button>' +
+      '\')" title="Session actions" style="background:none;border:none;color:#484f58;cursor:pointer;font-size:.85rem;padding:0 2px">\u2699</button>' +
       '</div>' +
       (lastMsg ? '<div class="sess-preview">' + esc(lastMsg) + '</div>' : '') +
       '<div class="sess-meta"><span class="sess-model">' +
@@ -446,6 +447,7 @@ function showEmpty(): void {
 
 function renderMessages(history: Message[]): void {
   currentHistory = history || [];
+  _currentToolGroupStart = -1;
   const el = document.getElementById('messages')!;
   el.innerHTML = '';
   if (!currentHistory || currentHistory.length === 0) {
@@ -535,6 +537,8 @@ function toolName(content: string): string {
 }
 
 function _renderMsgEl(role: string, content: string): void {
+  // a non-tool message closes any open streaming tool-group
+  if (role !== 'tool') _currentToolGroupStart = -1;
   const el = document.getElementById('messages')!;
   const div = document.createElement('div');
   if (role === 'user') {
@@ -567,7 +571,15 @@ function _renderMsgEl(role: string, content: string): void {
 }
 
 function _renderToolGroup(items: Message[]): void {
+  const wrapper = _createToolGroupEl(items);
   const el = document.getElementById('messages')!;
+  el.appendChild(wrapper);
+  el.scrollTop = el.scrollHeight;
+}
+
+/** Build a tool-group element (header + body) for the given items.
+ *  Used by both full re-render (renderMessages) and live streaming (appendEvent). */
+function _createToolGroupEl(items: Message[]): HTMLElement {
   const wrapper = document.createElement('div');
   wrapper.className = 'tool-group collapsed';
   const count = items.length;
@@ -581,17 +593,32 @@ function _renderToolGroup(items: Message[]): void {
     '</div>' +
     '<div class="tool-group-body"></div>';
   const body = wrapper.querySelector('.tool-group-body')!;
+  _fillToolGroupBody(body, items);
+  (wrapper.querySelector('.tool-group-header') as HTMLElement).onclick = function () {
+    wrapper.classList.toggle('collapsed');
+  };
+  return wrapper;
+}
+
+/** Append tool message divs into an existing tool-group body. */
+function _fillToolGroupBody(body: Element, items: Message[]): void {
   items.forEach(function (t) {
     const toolDiv = document.createElement('div');
     toolDiv.className = 'msg tool';
     toolDiv.innerHTML = formatToolContent(t.content);
     body.appendChild(toolDiv);
   });
-  (wrapper.querySelector('.tool-group-header') as HTMLElement).onclick = function () {
-    wrapper.classList.toggle('collapsed');
-  };
-  el.appendChild(wrapper);
-  el.scrollTop = el.scrollHeight;
+}
+
+/** Find the currently-open streaming tool-group (last tool-group in #messages,
+ *  created by appendEvent). Returns null if the last child isn't a tool-group. */
+function _lastToolGroupEl(): HTMLElement | null {
+  const el = document.getElementById('messages')!;
+  const children = el.children;
+  if (children.length === 0) return null;
+  const last = children[children.length - 1];
+  if (last.classList.contains('tool-group')) return last as HTMLElement;
+  return null;
 }
 
 function addMessage(role: string, content: string): void {
@@ -615,10 +642,43 @@ function appendEvent(event: WorkerEvent): void {
       } else if (b.type === 'tool_use') {
         const c = (b.name || '') + '(' + JSON.stringify(b.input || {}) + ')';
         currentHistory.push({ role: 'tool', content: c });
-        _renderMsgEl('tool', c);
+        _appendToolMessage(c);
       }
     });
   }
+}
+
+/** Render a tool message during live streaming, grouped under a
+ *  tool-group-header so the header is always shown alongside the blocks.
+ *  Consecutive tool blocks are appended into the same open tool-group;
+ *  a non-tool message closes the current group. */
+function _appendToolMessage(content: string): void {
+  const el = document.getElementById('messages')!;
+  const lastGroup = _lastToolGroupEl();
+  if (lastGroup) {
+    // append into the existing streaming group
+    const body = lastGroup.querySelector('.tool-group-body')!;
+    const count = body.children.length + 1;
+    _fillToolGroupBody(body, [{ role: 'tool', content: content }]);
+    // refresh header count + names
+    const names = currentHistory
+      .slice(_currentToolGroupStart)
+      .filter((m: Message) => m.role === 'tool')
+      .map(function (m) { return toolName(m.content); })
+      .slice(0, 3).join(', ');
+    const headerHtml =
+      '\uD83D\uDD27 <strong>' + count + ' tools:</strong> ' +
+      esc(names) + (count > 3 ? ', \u2026' : '') +
+      ' <span class="toggle-icon">\u25BC</span>';
+    (lastGroup.querySelector('.tool-group-header') as HTMLElement).innerHTML = headerHtml;
+    el.scrollTop = el.scrollHeight;
+    return;
+  }
+  // start a new tool-group
+  _currentToolGroupStart = currentHistory.length - 1;
+  const wrapper = _createToolGroupEl([{ role: 'tool', content: content }]);
+  el.appendChild(wrapper);
+  el.scrollTop = el.scrollHeight;
 }
 
 function appendResult(d: StreamEvent): void {
@@ -962,16 +1022,10 @@ function send(): void {
   doSend();
 }
 
-// ── New Session ──
+// ── New Session (modal) ──
 
-function newSession(): void {
-  let name = 'session-' + (modelData.length + 1);
-  let n = 1;
-  while (modelData.find((s: Session) => s.name === name)) {
-    name = 'session-' + (modelData.length + n);
-    n++;
-  }
-  // Optimistic UI: placeholder immediately, no data needed from server
+function _doCreateSession(name: string, workdir: string | null): void {
+  // Optimistic UI: placeholder immediately
   const placeholder: Session = {
     id: '__pending_' + name,
     name: '...',
@@ -982,10 +1036,12 @@ function newSession(): void {
   };
   modelData.push(placeholder);
   selectSession(placeholder.id);
+  const body: Record<string, string> = { name: name };
+  if (workdir) body.workdir = workdir;
   fetch('/api/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: name }),
+    body: JSON.stringify(body),
   })
     .then((r: Response) => r.json())
     .then((d: Session & ApiGenericResponse) => {
@@ -1007,6 +1063,26 @@ function newSession(): void {
       }
       renderSessionList();
     });
+}
+
+function quickNewSession(): void {
+  let name = 'session-' + (modelData.length + 1);
+  let n = 1;
+  while (modelData.find((s: Session) => s.name === name)) {
+    name = 'session-' + (modelData.length + n);
+    n++;
+  }
+  _doCreateSession(name, null);
+}
+
+function newSession(): void {
+  const modal = document.getElementById('newSessionModal') as HTMLElement;
+  const nameInput = document.getElementById('nsNameInput') as HTMLInputElement;
+  const workdirInput = document.getElementById('nsWorkdirInput') as HTMLInputElement;
+  nameInput.value = '';
+  workdirInput.value = '';
+  modal.classList.add('open');
+  nameInput.focus();
 }
 
 function deleteSession(id: string): void {
@@ -1036,6 +1112,83 @@ function deleteSession(id: string): void {
         showEmpty();
       }
       refreshSessions();
+    });
+}
+
+// ── Session gear menu ──
+
+function closeSessMenu(): void {
+  const m = document.getElementById('sessMenu');
+  if (m) m.remove();
+}
+
+function toggleSessMenu(e: MouseEvent, id: string): void {
+  e.stopPropagation();
+  e.preventDefault();
+  const existing = document.getElementById('sessMenu');
+  if (existing) { existing.remove(); return; }
+
+  const s = modelData.find((x: Session) => x.id === id);
+  if (!s) return;
+
+  const menu = document.createElement('div');
+  menu.className = 'sess-menu';
+  menu.id = 'sessMenu';
+  menu.innerHTML =
+    '<div class="sess-menu-item" onclick="closeSessMenu();renameSession(\'' + id + '\')">\u270E Rename</div>' +
+    (s.cbcSessionId
+      ? '<div class="sess-menu-item" onclick="closeSessMenu();reimportSession(\'' + id + '\')">\u21BB Reimport</div>'
+      : '') +
+    '<div class="sess-menu-item sess-menu-danger" onclick="closeSessMenu();deleteSession(\'' + id + '\')">\u2715 Delete</div>';
+
+  const btn = e.currentTarget as HTMLElement;
+  btn.parentElement!.appendChild(menu);
+
+  setTimeout(() => document.addEventListener('click', closeSessMenu, { once: true }), 0);
+}
+
+function renameSession(id: string): void {
+  const newName = (prompt('New session name:') || '').trim();
+  if (!newName) return;
+  fetch('/api/sessions/' + id + '/rename', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: newName }),
+  })
+    .then((r: Response) => r.json())
+    .then((d: ApiGenericResponse & { status?: string }) => {
+      if (d.error) { toast(d.error); return; }
+      refreshSessions();
+    });
+}
+
+function reimportSession(id: string): void {
+  const s = modelData.find((x: Session) => x.id === id);
+  if (!s || !s.cbcSessionId) return;
+  const cwd = s.workdir || '';
+  const body: Record<string, string> = { session_id: s.cbcSessionId };
+  if (cwd) body.cwd = cwd;
+  fetch('/api/cbc/sessions/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then((r: Response) => r.json())
+    .then((d: Session & ApiGenericResponse) => {
+      if (d.error) { toast(d.error); return; }
+      // Replace old session with new in modelData
+      for (let i = 0; i < modelData.length; i++) {
+        if (modelData[i].id === id) {
+          modelData[i] = d as Session;
+          break;
+        }
+      }
+      if (currentSessionId === id) {
+        currentSessionId = d.id;
+        updateTopBar();
+        renderMessages(d.history || []);
+      }
+      renderSessionList();
     });
 }
 
@@ -1208,6 +1361,45 @@ function init(): void {
   importModal.addEventListener('click', (e: MouseEvent) => {
     if (e.target === importModal) {
       importModal.classList.remove('open');
+    }
+  });
+
+  // ── New Session Modal ──
+  const newSessionModal = document.getElementById('newSessionModal') as HTMLElement;
+  const closeNewSessionModal = document.getElementById('closeNewSessionModal') as HTMLElement;
+  const nsCreateBtn = document.getElementById('nsCreateBtn') as HTMLElement;
+  const nsNameInput = document.getElementById('nsNameInput') as HTMLInputElement;
+  const nsWorkdirInput = document.getElementById('nsWorkdirInput') as HTMLInputElement;
+
+  closeNewSessionModal.addEventListener('click', () => {
+    newSessionModal.classList.remove('open');
+  });
+  newSessionModal.addEventListener('click', (e: MouseEvent) => {
+    if (e.target === newSessionModal) {
+      newSessionModal.classList.remove('open');
+    }
+  });
+  nsCreateBtn.addEventListener('click', () => {
+    let name = nsNameInput.value.trim();
+    if (!name) {
+      let n = 1;
+      do {
+        name = 'session-' + (modelData.length + n);
+        n++;
+      } while (modelData.find((s: Session) => s.name === name || s.id === '__pending_' + name));
+    }
+    const workdir = nsWorkdirInput.value.trim() || null;
+    newSessionModal.classList.remove('open');
+    _doCreateSession(name, workdir);
+  });
+  nsNameInput.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      nsCreateBtn.click();
+    }
+  });
+  nsWorkdirInput.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      nsCreateBtn.click();
     }
   });
 }

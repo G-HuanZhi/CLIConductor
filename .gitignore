@@ -25,7 +25,6 @@ data/
 privatenote.md
 devNote.md
 testoutcome.md
-archive/
 # spike residues (may be locked by running processes)
 spike-node/
 spike-python/
@@ -41,4 +40,4 @@ scripts/stop_*.bat
 # compiled from ts/app.ts — do not edit directly
 static/js/app.js
 static/js/app.js.map
-CODEBUDDY.md
+docs/

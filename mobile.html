@@ -144,7 +144,10 @@ body {
 <div id="sidebar">
   <h1>CLIConductor</h1>
   <div class="sess-actions">
-    <button id="newSessBtn" onclick="newSession()">+ New</button>
+    <div class="ns-quick-group">
+      <button class="ns-quick-btn" onclick="quickNewSession()">+ New</button>
+      <button class="ns-gear-btn" onclick="newSession()" title="New with custom settings">&#9881;</button>
+    </div>
     <button id="importCbcBtn">Import</button>
   </div>
   <div id="sessionList"><div class="sidebar-loading">Loading…</div></div>
@@ -196,6 +199,23 @@ body {
 </div>
 
 <div id="toast" class="toast"></div>
+
+<!-- New Session Modal -->
+<div id="newSessionModal">
+  <div class="ns-panel">
+    <div class="ns-header">
+      <span class="ns-heading">New Session</span>
+      <button id="closeNewSessionModal" class="ns-close">&times;</button>
+    </div>
+    <div class="ns-body">
+      <label class="ns-label" for="nsNameInput">Session Name</label>
+      <input id="nsNameInput" class="ns-input" type="text" placeholder="auto-generate if empty" maxlength="64">
+      <label class="ns-label" for="nsWorkdirInput">Working Directory</label>
+      <input id="nsWorkdirInput" class="ns-input" type="text" placeholder="D:\project\my-app (leave empty for default)">
+      <button id="nsCreateBtn" class="ns-create">Create</button>
+    </div>
+  </div>
+</div>
 
 <!-- Import cbc Session Modal -->
 <div id="importModal">

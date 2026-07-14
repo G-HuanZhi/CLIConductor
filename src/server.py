@@ -142,7 +142,7 @@ def _session_to_api(s: sess.Session):
     }
 
 
-_NAME_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
+_NAME_RE = re.compile(r"^\S+$")  # session name: any non-whitespace chars
 _MAX_NAME_LEN = 64
 _MAX_TEXT_LEN = 10000
 
@@ -154,7 +154,7 @@ def _check_session_name(name: str) -> str | None:
     if len(name) > _MAX_NAME_LEN:
         return f"Session name too long (max {_MAX_NAME_LEN})"
     if not _NAME_RE.match(name):
-        return "Session name can only contain letters, digits, underscores and hyphens"
+        return "Session name cannot contain spaces"
     for s in sess.list_all():
         if s.name == name:
             return f"Session name '{name}' already exists"
@@ -163,13 +163,37 @@ def _check_session_name(name: str) -> str | None:
 
 _WORKDIR_NAME_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
 
+# Reserved for future path restriction — set in config.json to limit
+# workdir to specific base directories (e.g. ["d:/project"]).
+_ALLOWED_WORKDIR_ROOTS: list[Path] | None = None
+
 
 def _resolve_workdir(workdir_name: str) -> Path:
-    """Resolve a workdir name to a Path under WORKDIRS_DIR, creating it.
+    """Resolve a workdir name to a Path, creating it.
 
-    Only alphanumeric, underscores and hyphens are allowed — prevents
-    path traversal attacks (e.g. ../../../etc/foo).
+    - Absolute paths (e.g. D:\\project\\foo) are used directly.
+    - Simple names (e.g. my-session) are placed under WORKDIRS_DIR.
+    - Optional path restriction: set _ALLOWED_WORKDIR_ROOTS in the
+      caller to reject paths outside allowed base directories.
     """
+    p = Path(workdir_name)
+    if p.is_absolute():
+        if _ALLOWED_WORKDIR_ROOTS is not None:
+            for root in _ALLOWED_WORKDIR_ROOTS:
+                try:
+                    p.resolve().relative_to(root.resolve())
+                    break
+                except ValueError:
+                    pass
+            else:
+                raise ValueError(
+                    f"Workdir {workdir_name!r} is outside allowed roots: "
+                    f"{[str(r) for r in _ALLOWED_WORKDIR_ROOTS]}"
+                )
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    # Slug name — resolve under WORKDIRS_DIR (original behaviour)
     if not _WORKDIR_NAME_RE.match(workdir_name):
         raise ValueError(
             f"Invalid workdir name: {workdir_name!r} "
@@ -387,6 +411,37 @@ async def api_update_session(session_id: str, data: dict):
         "sessionId": s.id,
     })
     return _session_to_api(s)
+
+
+@app.post("/api/sessions/{session_id}/rename")
+async def api_rename_session(session_id: str, data: dict):
+    """Rename a session by its internal ID (no worker required)."""
+    new_name = (data.get("name") or "").strip()
+    if not new_name:
+        return {"error": "name is required"}
+
+    s = sess.get(session_id)
+    if not s:
+        return {"error": "Session not found"}
+
+    # Same name — nothing to do
+    if s.name == new_name:
+        return {"sessionId": s.id, "name": new_name, "status": "unchanged"}
+
+    err = _check_session_name(new_name)
+    if err:
+        return {"error": err}
+
+    old_name = s.name
+    s.name = new_name
+    sess.save(s)
+    await broadcast({
+        "type": "session.renamed",
+        "sessionId": s.id,
+        "oldName": old_name,
+        "newName": new_name,
+    })
+    return {"sessionId": s.id, "name": new_name, "status": "renamed"}
 
 
 @app.delete("/api/sessions/{session_id}")
@@ -658,19 +713,7 @@ async def api_cbc_sessions_import(data: dict):
         if resolved:
             cwd = resolved
 
-    # If already imported, delete the existing session and re-import
-    for s in sess.list_all():
-        if s.cbc_session_id == session_id:
-            w = worker.find_worker_by_session(s.id)
-            if w:
-                await worker.kill_worker(w.worker_id)
-            sess.delete(s.id)
-            await broadcast({
-                "type": "session.deleted",
-                "sessionId": s.id,
-            })
-            break
-
+    # Parse cbc data first (needed regardless of new vs reimport)
     try:
         if project_dir:
             history = cbc_sessions.parse_cbc_history(session_id, project_dir=project_dir)
@@ -681,16 +724,44 @@ async def api_cbc_sessions_import(data: dict):
     except Exception as e:
         return {"error": f"Failed to parse session history: {e}"}
 
-    name = data.get("name", "") or f"cbc-{session_id[:8]}"
-
     raw_usage = sess.accumulate_raw_usage(None, raw_usage_entries)
+    total_usage = sess.compute_total_usage(raw_usage)
+
+    # If already imported — update in-place (preserve name, model, settings)
+    existing = None
+    for s in sess.list_all():
+        if s.cbc_session_id == session_id:
+            existing = s
+            break
+
+    if existing:
+        w = worker.find_worker_by_session(existing.id)
+        if w:
+            await worker.kill_worker(w.worker_id)
+        existing.history = history
+        existing.raw_usage = raw_usage
+        existing.total_usage = total_usage
+        existing.last_result = None
+        sess.save(existing)
+        await broadcast({
+            "type": "session.updated",
+            "sessionId": existing.id,
+        })
+        return _session_to_api(existing)
+
+    # New session
+    name = (
+        data.get("name", "")
+        or cbc_sessions.get_session_title(session_id, project_dir=project_dir, cwd=cwd)
+        or f"cbc-{session_id[:8]}"
+    )
 
     s = sess.create(
         name=name,
         cbc_session_id=session_id,
         history=history,
         raw_usage=raw_usage,
-        total_usage=sess.compute_total_usage(raw_usage),
+        total_usage=total_usage,
         workdir=cwd,
     )
 

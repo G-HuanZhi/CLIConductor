@@ -53,8 +53,9 @@ body {
   margin: 8px 10px;
 }
 
-.sess-actions button {
+.sess-actions > button {
   flex: 1;
+  min-width: 0;
   padding: 6px 0;
   border: 1px dashed #30363d;
   border-radius: 6px;
@@ -64,8 +65,50 @@ body {
   font-size: .8rem;
 }
 
-.sess-actions button:hover {
+.sess-actions > button:hover {
   border-color: #58a6ff;
+  color: #58a6ff;
+  background: #58a6ff08;
+}
+
+/* Split new-session button: quick-create (4) + gear (1) */
+.ns-quick-group {
+  display: flex;
+  flex: 1;
+  border: 1px dashed #30363d;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ns-quick-btn {
+  flex: 4;
+  padding: 6px 0;
+  border: none;
+  border-right: 1px dashed #30363d;
+  background: transparent;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: .8rem;
+}
+
+.ns-quick-btn:hover {
+  color: #58a6ff;
+  background: #58a6ff08;
+}
+
+.ns-gear-btn {
+  flex: 1;
+  padding: 6px 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: .8rem;
+  line-height: 1;
+}
+
+.ns-gear-btn:hover {
   color: #58a6ff;
   background: #58a6ff08;
 }
@@ -83,6 +126,7 @@ body {
 }
 
 .sess-item {
+  position: relative;
   padding: 8px 14px;
   cursor: pointer;
   border-left: 3px solid transparent;
@@ -993,4 +1037,139 @@ body {
   color: #484f58;
   padding: 24px;
   font-size: .85rem;
+}
+
+/* ── New Session Modal ── */
+
+#newSessionModal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 2001;
+  align-items: center;
+  justify-content: center;
+}
+
+#newSessionModal.open {
+  display: flex;
+}
+
+.ns-panel {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 0;
+  width: min(90vw, 420px);
+  display: flex;
+  flex-direction: column;
+}
+
+.ns-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid #21262d;
+  flex-shrink: 0;
+}
+
+.ns-heading {
+  font-size: .95rem;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.ns-close {
+  background: none;
+  border: none;
+  color: #8b949e;
+  cursor: pointer;
+  font-size: 20px;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.ns-close:hover {
+  color: #e6edf3;
+}
+
+.ns-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ns-label {
+  font-size: .8rem;
+  color: #8b949e;
+}
+
+.ns-input {
+  padding: 6px 10px;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  background: #0d1117;
+  color: #e6edf3;
+  font-size: .85rem;
+}
+
+.ns-input::placeholder {
+  color: #484f58;
+}
+
+.ns-input:focus {
+  outline: none;
+  border-color: #58a6ff;
+}
+
+.ns-create {
+  margin-top: 8px;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  background: #238636;
+  color: #fff;
+  cursor: pointer;
+  font-size: .85rem;
+}
+
+.ns-create:hover {
+  background: #2ea043;
+}
+
+/* ── Session gear context menu ── */
+
+.sess-menu {
+  position: absolute;
+  right: 14px;
+  top: 28px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  min-width: 130px;
+  padding: 4px 0;
+}
+
+.sess-menu-item {
+  padding: 6px 14px;
+  font-size: .8rem;
+  color: #e6edf3;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sess-menu-item:hover {
+  background: #1c2128;
+}
+
+.sess-menu-danger {
+  color: #f85149;
+}
+
+.sess-menu-danger:hover {
+  background: #2d1216;
 }
