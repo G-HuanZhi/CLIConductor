@@ -117,11 +117,20 @@ async def no_cache_api(request: Request, call_next):
 
 # ── helpers ──
 
-def _session_to_api(s: sess.Session):
-    """Convert Session to API response dict."""
+HISTORY_TRUNCATE = 50  # max history items per session in list endpoint
+
+def _session_to_api(s: sess.Session, truncate_history: bool = False):
+    """Convert Session to API response dict.
+    When truncate_history=True (list endpoint), only include last N messages
+    and set historyTruncated flag."""
     w = worker.find_worker_by_session(s.id)
     config = load_config().get("cbc", {})
-    return {
+    history = s.history
+    history_truncated = False
+    if truncate_history and len(history) > HISTORY_TRUNCATE:
+        history = history[-HISTORY_TRUNCATE:]
+        history_truncated = True
+    result = {
         "id": s.id,
         "name": s.name,
         "cbcSessionId": s.cbc_session_id,
@@ -131,7 +140,8 @@ def _session_to_api(s: sess.Session):
         "effort": s.effort or config.get("effort", ""),
         "maxThinkingTokens": s.max_thinking_tokens,
         "workdir": s.workdir,
-        "history": s.history,
+        "history": history,
+        "historyTruncated": history_truncated,
         "lastResult": s.last_result,
         "rawUsage": s.raw_usage,
         "totalUsage": s.total_usage,
@@ -140,6 +150,7 @@ def _session_to_api(s: sess.Session):
         "workerStatus": w.status if w else None,
         "workerId": w.worker_id if w else None,
     }
+    return result
 
 
 _NAME_RE = re.compile(r"^\S+$")  # session name: any non-whitespace chars
@@ -367,9 +378,10 @@ async def ws_agent_endpoint(ws: WebSocket):
 
 @app.get("/api/sessions")
 async def api_list_sessions():
-    """List all sessions (includes worker status if active)."""
+    """List all sessions (includes worker status if active).
+    History is truncated — full history available via /api/sessions/{id}/history."""
     sessions = sess.list_all()
-    return {"sessions": [_session_to_api(s) for s in sessions]}
+    return {"sessions": [_session_to_api(s, truncate_history=True) for s in sessions]}
 
 
 @app.post("/api/sessions")
@@ -396,6 +408,27 @@ async def api_get_session(session_id: str):
     if not s:
         return {"error": "Session not found"}
     return _session_to_api(s)
+
+
+@app.get("/api/sessions/{session_id}/history")
+async def api_get_session_history(session_id: str, before: int = -1, limit: int = 50):
+    """Paginate session history. Returns messages before the given index.
+    before=-1 means load from the end.  e.g. before=100 loads messages [50..99]."""
+    s = sess.get(session_id)
+    if not s:
+        return {"error": "Session not found"}
+    total = len(s.history)
+    if before < 0 or before > total:
+        before = total
+    start = max(0, before - limit)
+    messages = s.history[start:before]
+    return {
+        "messages": messages,
+        "start": start,
+        "end": before,
+        "total": total,
+        "hasMore": start > 0,
+    }
 
 
 @app.patch("/api/sessions/{session_id}")

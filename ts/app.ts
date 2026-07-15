@@ -18,6 +18,7 @@ interface Session {
   workerStatus?: string | null;
   workerId?: string | null;
   history: Message[];
+  historyTruncated?: boolean;
   lastResult?: Record<string, unknown> | null;
   totalUsage?: Record<string, number> | null;
 }
@@ -102,14 +103,22 @@ let bubbleViewEnabled: boolean = true;
 let currentHistory: Message[] = [];
 let toolGroupOpen: boolean = false;
 let _currentToolGroupStart: number = -1;
+let _historyLoading: boolean = false;
+let _historyLoadEnd: number = 0;   // index of oldest loaded message in session history
 
 // ── Markdown / LaTeX rendering ──
 if (typeof (window as any).marked !== 'undefined') {
   (window as any).marked.setOptions({ breaks: true, gfm: true });
 }
 
+// Markdown cache — avoids re-parsing the same content on session switches
+const _mdCache: Map<string, string> = new Map();
+const _MD_CACHE_MAX = 2000;
+
 function renderMarkdown(text: string): string {
   if (!text) return '';
+  const cached = _mdCache.get(text);
+  if (cached !== undefined) return cached;
 
   const mathStore: Array<{ key: string; latex: string; display: boolean }> = [];
   let mathIndex = 0;
@@ -151,7 +160,14 @@ function renderMarkdown(text: string): string {
       (window as any).hljs.highlightElement(block);
     });
   }
-  return tmp.innerHTML;
+  const result = tmp.innerHTML;
+  _mdCache.set(text, result);
+  if (_mdCache.size > _MD_CACHE_MAX) {
+    // delete oldest entry (Map is insertion-ordered)
+    const first = _mdCache.keys().next().value as string;
+    _mdCache.delete(first);
+  }
+  return result;
 }
 
 // ── View toggle ──
@@ -251,6 +267,7 @@ let _refreshVersion: number = 0;
 function refreshSessions(): void {
   _refreshVersion++;
   const version = _refreshVersion;
+  document.getElementById('sessionList')!.innerHTML = '<div class="sidebar-loading">Loading...</div>';
   fetch('/api/sessions')
     .then((r: Response) => r.json())
     .then((data: ApiSessionsResponse) => {
@@ -380,6 +397,8 @@ function selectSession(id: string): void {
   if (!s) return;
 
   currentWorkerId = s.workerId ?? null;
+  _historyLoading = false;
+  _historyLoadEnd = (s.history || []).length;
 
   renderSessionList();
   updateTopBar();
@@ -390,6 +409,62 @@ function selectSession(id: string): void {
   if (document.getElementById('settingsPanel')!.classList.contains('open')) {
     syncPanelFromServer();
   }
+  // Load additional history if truncated
+  if (s.historyTruncated) {
+    loadOlderMessages();
+  }
+}
+
+/** Fetch and prepend older messages for the current session. */
+function loadOlderMessages(): void {
+  if (_historyLoading || _historyLoadEnd <= 0 || !currentSessionId) return;
+  _historyLoading = true;
+  const sid = currentSessionId;
+  const limit = 50;
+  fetch('/api/sessions/' + sid + '/history?before=' + _historyLoadEnd + '&limit=' + limit)
+    .then((r: Response) => r.json())
+    .then((d: any) => {
+      _historyLoading = false;
+      if (currentSessionId !== sid) return;
+      if (d.error) return;
+      const msgs: Message[] = d.messages || [];
+      if (msgs.length === 0) return;
+      _historyLoadEnd = d.start;
+      // Prepend messages to the top of the container
+      const frag = document.createDocumentFragment();
+      const grouped: Array<{ type?: string; items?: Message[] } & Partial<Message>> = [];
+      let toolGroup: any = null;
+      for (let i = 0; i < msgs.length; i++) {
+        const h = msgs[i];
+        if (h.role === 'tool') {
+          if (!toolGroup) {
+            toolGroup = { type: 'tool_group', items: [] };
+            grouped.push(toolGroup);
+          }
+          toolGroup.items!.push(h);
+        } else {
+          toolGroup = null;
+          grouped.push(h);
+        }
+      }
+      for (let i = 0; i < grouped.length; i++) {
+        const g = grouped[i];
+        if (g.type === 'tool_group') {
+          _renderToolGroup(g.items!, frag);
+        } else {
+          _renderMsgEl(g.role || '', g.content || '', frag);
+        }
+      }
+      const el = document.getElementById('messages')!;
+      const firstChild = el.firstChild;
+      el.insertBefore(frag, firstChild);
+      // Update modelData
+      const s = modelData.find((x: Session) => x.id === sid);
+      if (s) {
+        s.history = msgs.concat(s.history);
+        if (d.start <= 0) s.historyTruncated = false;
+      }
+    });
 }
 
 // ── Top bar ──
@@ -446,6 +521,9 @@ function showEmpty(): void {
 
 // ── Messages ──
 
+let _renderVersion: number = 0;
+const RENDER_CHUNK = 30;
+
 function renderMessages(history: Message[]): void {
   currentHistory = history || [];
   _currentToolGroupStart = -1;
@@ -472,15 +550,76 @@ function renderMessages(history: Message[]): void {
       grouped.push(h);
     }
   }
-  grouped.forEach(function (g: any) {
-    if (g.type === 'tool_group') {
-      _renderToolGroup(g.items!);
-    } else {
-      _renderMsgEl(g.role, g.content);
+  // Fast path: small sessions render synchronously
+  if (grouped.length <= RENDER_CHUNK) {
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < grouped.length; i++) {
+      const g = grouped[i];
+      if (g.type === 'tool_group') {
+        _renderToolGroup(g.items!, frag);
+      } else {
+        _renderMsgEl(g.role || '', g.content || '', frag);
+      }
     }
-  });
+    el.appendChild(frag);
+    el.scrollTop = el.scrollHeight;
+    toolGroupOpen = false;
+    return;
+  }
+  // Chunked path: first chunk sync, rest via timeout
+  _renderVersion++;
+  const version = _renderVersion;
+  let index = 0;
+
+  function renderNextChunk(): void {
+    if (version !== _renderVersion) return;
+    const end = Math.min(index + RENDER_CHUNK, grouped.length);
+    const frag = document.createDocumentFragment();
+    for (let i = index; i < end; i++) {
+      const g = grouped[i];
+      if (g.type === 'tool_group') {
+        _renderToolGroup(g.items!, frag);
+      } else {
+        _renderMsgEl(g.role || '', g.content || '', frag);
+      }
+    }
+    el.appendChild(frag);
+    el.scrollTop = el.scrollHeight;
+    index = end;
+    if (index < grouped.length) {
+      setTimeout(renderNextChunk, 0);
+    } else {
+      toolGroupOpen = false;
+    }
+  }
+
+  // First chunk renders synchronously for immediate visibility
+  {
+    const end = Math.min(RENDER_CHUNK, grouped.length);
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < end; i++) {
+      const g = grouped[i];
+      if (g.type === 'tool_group') {
+        _renderToolGroup(g.items!, frag);
+      } else {
+        _renderMsgEl(g.role || '', g.content || '', frag);
+      }
+    }
+    el.appendChild(frag);
+    el.scrollTop = el.scrollHeight;
+    index = end;
+  }
+
+  if (index < grouped.length) {
+    setTimeout(renderNextChunk, 0);
+  } else {
+    toolGroupOpen = false;
+  }
+}
+
+function scrollMessages(): void {
+  const el = document.getElementById('messages')!;
   el.scrollTop = el.scrollHeight;
-  toolGroupOpen = false;
 }
 
 function formatToolContent(content: string): string {
@@ -537,10 +676,10 @@ function toolName(content: string): string {
   return content.split('\n')[0].trim().slice(0, 30);
 }
 
-function _renderMsgEl(role: string, content: string): void {
+function _renderMsgEl(role: string, content: string, parent?: Node): void {
   // a non-tool message closes any open streaming tool-group
   if (role !== 'tool') _currentToolGroupStart = -1;
-  const el = document.getElementById('messages')!;
+  const el = parent || document.getElementById('messages')!;
   const div = document.createElement('div');
   if (role === 'user') {
     div.className = 'msg user';
@@ -568,14 +707,12 @@ function _renderMsgEl(role: string, content: string): void {
     div.textContent = content || '';
   }
   el.appendChild(div);
-  el.scrollTop = el.scrollHeight;
 }
 
-function _renderToolGroup(items: Message[]): void {
+function _renderToolGroup(items: Message[], parent?: Node): void {
   const wrapper = _createToolGroupEl(items);
-  const el = document.getElementById('messages')!;
+  const el = parent || document.getElementById('messages')!;
   el.appendChild(wrapper);
-  el.scrollTop = el.scrollHeight;
 }
 
 /** Build a tool-group element (header + body) for the given items.
@@ -625,6 +762,7 @@ function _lastToolGroupEl(): HTMLElement | null {
 function addMessage(role: string, content: string): void {
   currentHistory.push({ role: role, content: content });
   _renderMsgEl(role, content);
+  scrollMessages();
 }
 
 function appendEvent(event: WorkerEvent): void {
@@ -646,6 +784,7 @@ function appendEvent(event: WorkerEvent): void {
         _appendToolMessage(c);
       }
     });
+    scrollMessages();
   }
 }
 
@@ -1216,6 +1355,14 @@ function init(): void {
       // Server unavailable — will retry on settings panel open
     });
   refreshSessions();
+
+  // Lazy-load older messages on scroll
+  document.getElementById('messages')!.addEventListener('scroll', function () {
+    const el = this as HTMLElement;
+    if (el.scrollTop <= 200) {
+      loadOlderMessages();
+    }
+  });
 
   // ── Import Modal ──
   const importCbcBtn = document.getElementById('importCbcBtn') as HTMLButtonElement;
