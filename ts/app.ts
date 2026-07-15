@@ -105,6 +105,9 @@ let toolGroupOpen: boolean = false;
 let _currentToolGroupStart: number = -1;
 let _historyLoading: boolean = false;
 let _historyLoadEnd: number = 0;   // index of oldest loaded message in session history
+const MAX_MESSAGE_NODES = 500;     // cap DOM nodes; trim far end beyond this
+let _spacerTopHeight: number = 0;
+let _spacerBottomHeight: number = 0;
 
 // ── Markdown / LaTeX rendering ──
 if (typeof (window as any).marked !== 'undefined') {
@@ -430,7 +433,7 @@ function loadOlderMessages(): void {
       const msgs: Message[] = d.messages || [];
       if (msgs.length === 0) return;
       _historyLoadEnd = d.start;
-      // Prepend messages to the top of the container
+      // Prepend messages to the top, after top-spacer
       const frag = document.createDocumentFragment();
       const grouped: Array<{ type?: string; items?: Message[] } & Partial<Message>> = [];
       let toolGroup: any = null;
@@ -456,14 +459,27 @@ function loadOlderMessages(): void {
         }
       }
       const el = document.getElementById('messages')!;
-      const firstChild = el.firstChild;
-      el.insertBefore(frag, firstChild);
+      const topSpacer = el.querySelector('.msg-spacer-top');
+      // Preserve scroll position: remember a reference element before inserting
+      const ref = topSpacer ? topSpacer.nextElementSibling : el.firstElementChild;
+      const scrollRefTop = ref ? ref.getBoundingClientRect().top : 0;
+      const insertBefore = ref || el.querySelector('.msg-spacer-bottom') || el.firstChild;
+      if (insertBefore) {
+        el.insertBefore(frag, insertBefore);
+      } else {
+        el.appendChild(frag);
+      }
+      // Restore scroll so the reference element stays put
+      if (ref) {
+        el.scrollTop += ref.getBoundingClientRect().top - scrollRefTop;
+      }
       // Update modelData
       const s = modelData.find((x: Session) => x.id === sid);
       if (s) {
         s.history = msgs.concat(s.history);
         if (d.start <= 0) s.historyTruncated = false;
       }
+      trimExcess('bottom');
     });
 }
 
@@ -527,6 +543,8 @@ const RENDER_CHUNK = 30;
 function renderMessages(history: Message[]): void {
   currentHistory = history || [];
   _currentToolGroupStart = -1;
+  _spacerTopHeight = 0;
+  _spacerBottomHeight = 0;
   const el = document.getElementById('messages')!;
   el.innerHTML = '';
   if (!currentHistory || currentHistory.length === 0) {
@@ -535,6 +553,8 @@ function renderMessages(history: Message[]): void {
     toolGroupOpen = false;
     return;
   }
+  ensureSpacers();
+  const botSpacer = el.querySelector('.msg-spacer-bottom')!;
   const grouped: Array<{ type?: string; items?: Message[] } & Partial<Message>> = [];
   let toolGroup: any = null;
   for (let i = 0; i < currentHistory.length; i++) {
@@ -561,7 +581,7 @@ function renderMessages(history: Message[]): void {
         _renderMsgEl(g.role || '', g.content || '', frag);
       }
     }
-    el.appendChild(frag);
+    el.insertBefore(frag, botSpacer);
     el.scrollTop = el.scrollHeight;
     toolGroupOpen = false;
     return;
@@ -583,13 +603,14 @@ function renderMessages(history: Message[]): void {
         _renderMsgEl(g.role || '', g.content || '', frag);
       }
     }
-    el.appendChild(frag);
+    el.insertBefore(frag, botSpacer);
     el.scrollTop = el.scrollHeight;
     index = end;
     if (index < grouped.length) {
       setTimeout(renderNextChunk, 0);
     } else {
       toolGroupOpen = false;
+      trimExcess('bottom');
     }
   }
 
@@ -605,7 +626,7 @@ function renderMessages(history: Message[]): void {
         _renderMsgEl(g.role || '', g.content || '', frag);
       }
     }
-    el.appendChild(frag);
+    el.insertBefore(frag, botSpacer);
     el.scrollTop = el.scrollHeight;
     index = end;
   }
@@ -614,12 +635,92 @@ function renderMessages(history: Message[]): void {
     setTimeout(renderNextChunk, 0);
   } else {
     toolGroupOpen = false;
+    trimExcess('bottom');
   }
 }
 
 function scrollMessages(): void {
   const el = document.getElementById('messages')!;
   el.scrollTop = el.scrollHeight;
+}
+
+// ── Windowed rendering helpers ──
+
+/** Ensure spacer-top and spacer-bottom exist in #messages. */
+function ensureSpacers(): void {
+  const el = document.getElementById('messages')!;
+  if (!el.querySelector('.msg-spacer-top')) {
+    const top = document.createElement('div');
+    top.className = 'msg-spacer msg-spacer-top';
+    top.style.cssText = 'height:0;overflow:hidden;flex-shrink:0';
+    el.insertBefore(top, el.firstChild);
+  }
+  if (!el.querySelector('.msg-spacer-bottom')) {
+    const bot = document.createElement('div');
+    bot.className = 'msg-spacer msg-spacer-bottom';
+    bot.style.cssText = 'height:0;overflow:hidden;flex-shrink:0';
+    el.appendChild(bot);
+  }
+}
+
+/** Count non-spacer child elements of #messages. */
+function _msgNodeCount(): number {
+  const el = document.getElementById('messages')!;
+  let count = 0;
+  for (let i = 0; i < el.children.length; i++) {
+    if (!el.children[i].classList.contains('msg-spacer')) count++;
+  }
+  return count;
+}
+
+/** Remove `count` oldest rendered nodes from the TOP, increasing top-spacer height. */
+function trimMessagesTop(count: number): void {
+  const el = document.getElementById('messages')!;
+  const topSpacer = el.querySelector('.msg-spacer-top');
+  let removed = 0;
+  let h = 0;
+  let next = topSpacer ? topSpacer.nextElementSibling : el.firstElementChild;
+  while (next && removed < count) {
+    const node = next;
+    next = node.nextElementSibling;
+    if (node.classList.contains('msg-spacer')) continue;
+    h += (node as HTMLElement).offsetHeight;
+    el.removeChild(node);
+    removed++;
+  }
+  _spacerTopHeight += h;
+  if (topSpacer) (topSpacer as HTMLElement).style.height = _spacerTopHeight + 'px';
+}
+
+/** Remove `count` newest rendered nodes from the BOTTOM, increasing bottom-spacer height. */
+function trimMessagesBottom(count: number): void {
+  const el = document.getElementById('messages')!;
+  const botSpacer = el.querySelector('.msg-spacer-bottom');
+  let removed = 0;
+  let h = 0;
+  let prev = botSpacer ? botSpacer.previousElementSibling : el.lastElementChild;
+  while (prev && removed < count) {
+    const node = prev;
+    prev = node.previousElementSibling;
+    if (node.classList.contains('msg-spacer')) continue;
+    h += (node as HTMLElement).offsetHeight;
+    el.removeChild(node);
+    removed++;
+  }
+  _spacerBottomHeight += h;
+  if (botSpacer) (botSpacer as HTMLElement).style.height = _spacerBottomHeight + 'px';
+}
+
+/** Trim excess message nodes from the specified end if over MAX_MESSAGE_NODES. */
+function trimExcess(from: 'top' | 'bottom'): void {
+  const count = _msgNodeCount();
+  if (count <= MAX_MESSAGE_NODES) return;
+  const excess = count - MAX_MESSAGE_NODES;
+  if (from === 'top') {
+    trimMessagesTop(excess);
+  } else {
+    trimMessagesBottom(excess);
+  }
 }
 
 function formatToolContent(content: string): string {
@@ -680,6 +781,7 @@ function _renderMsgEl(role: string, content: string, parent?: Node): void {
   // a non-tool message closes any open streaming tool-group
   if (role !== 'tool') _currentToolGroupStart = -1;
   const el = parent || document.getElementById('messages')!;
+  const useSpacer = !parent;  // inserting directly into #messages
   const div = document.createElement('div');
   if (role === 'user') {
     div.className = 'msg user';
@@ -706,13 +808,26 @@ function _renderMsgEl(role: string, content: string, parent?: Node): void {
     div.className = 'msg system';
     div.textContent = content || '';
   }
-  el.appendChild(div);
+  if (useSpacer) {
+    const msgEl = el as HTMLElement;
+    const bot = msgEl.querySelector('.msg-spacer-bottom');
+    if (bot) { el.insertBefore(div, bot); } else { el.appendChild(div); }
+  } else {
+    el.appendChild(div);
+  }
 }
 
 function _renderToolGroup(items: Message[], parent?: Node): void {
   const wrapper = _createToolGroupEl(items);
   const el = parent || document.getElementById('messages')!;
-  el.appendChild(wrapper);
+  const useSpacer = !parent;
+  if (useSpacer) {
+    const msgEl = el as HTMLElement;
+    const bot = msgEl.querySelector('.msg-spacer-bottom');
+    if (bot) { el.insertBefore(wrapper, bot); } else { el.appendChild(wrapper); }
+  } else {
+    el.appendChild(wrapper);
+  }
 }
 
 /** Build a tool-group element (header + body) for the given items.
@@ -763,6 +878,7 @@ function addMessage(role: string, content: string): void {
   currentHistory.push({ role: role, content: content });
   _renderMsgEl(role, content);
   scrollMessages();
+  trimExcess('top');
 }
 
 function appendEvent(event: WorkerEvent): void {
@@ -785,6 +901,7 @@ function appendEvent(event: WorkerEvent): void {
       }
     });
     scrollMessages();
+    trimExcess('top');
   }
 }
 
@@ -817,8 +934,11 @@ function _appendToolMessage(content: string): void {
   // start a new tool-group
   _currentToolGroupStart = currentHistory.length - 1;
   const wrapper = _createToolGroupEl([{ role: 'tool', content: content }]);
-  el.appendChild(wrapper);
+  // insert before bottom-spacer
+  const bot = el.querySelector('.msg-spacer-bottom');
+  if (bot) { el.insertBefore(wrapper, bot); } else { el.appendChild(wrapper); }
   el.scrollTop = el.scrollHeight;
+  trimExcess('top');
 }
 
 function appendResult(d: StreamEvent): void {
