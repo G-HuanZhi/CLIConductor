@@ -331,6 +331,7 @@ function renderSessionList(): void {
       const target = e.target as HTMLElement;
       if (target.closest('.sess-del')) return;
       if (s.id.indexOf('__pending_') === 0) return; // Placeholder — not a real session yet
+      if (document.getElementById('sessMenu')) { closeSessMenu(); return; }
       selectSession(s.id);
     };
 
@@ -1189,6 +1190,7 @@ function reimportSession(id: string): void {
         renderMessages(d.history || []);
       }
       renderSessionList();
+      toast('Session reimported.');
     });
 }
 
