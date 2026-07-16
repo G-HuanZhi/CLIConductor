@@ -444,6 +444,121 @@ async def api_rename_session(session_id: str, data: dict):
     return {"sessionId": s.id, "name": new_name, "status": "renamed"}
 
 
+@app.post("/api/sessions/{session_id}/branch")
+async def api_branch_session(session_id: str, data: dict):
+    """Branch from a session — fork cbc, import new session, preserve settings."""
+    s = sess.get(session_id)
+    if not s:
+        return {"error": "Session not found"}
+    if not s.cbc_session_id:
+        return {"error": "Session has no cbc session ID — cannot branch"}
+
+    name = (data.get("name") or "").strip()
+    if not name:
+        name = f"{s.name}-branch"
+
+    err = _check_session_name(name)
+    if err:
+        return {"error": err}
+
+    adapter = get_adapter(s.adapter)
+    if not adapter:
+        return {"error": f"Unknown adapter: {s.adapter}"}
+
+    # Build fork args: --resume <old_cbc_id> --fork-session
+    args = adapter.base_args()
+    args.extend(adapter.model_args(s))
+    args.extend(adapter.permission_mode_args(s))
+    args.extend(adapter.effort_args(s))
+    args.extend(adapter.thinking_args(s))
+    args.extend(adapter.resume_args(s))
+    args.extend(adapter.fork_args(s))
+
+    proc = None
+    new_cbc_id = None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+
+        # Send a minimal prompt to trigger session creation + history write
+        stdin_data = adapter.encode_user_message("summarize the conversation in one sentence")
+        proc.stdin.write(stdin_data + b"\n")
+        await proc.stdin.drain()
+        proc.stdin.close()
+
+        # Read stdout — capture new session ID from init event, discard rest
+        async for line in proc.stdout:
+            decoded = line.decode("utf-8", errors="replace").strip()
+            if not decoded:
+                continue
+            try:
+                event = adapter.parse_event(decoded)
+            except Exception:
+                continue
+            if adapter.is_init_event(event):
+                new_cbc_id = adapter.extract_session_id(event)
+            # drain remaining lines — need the process to finish for complete JSONL
+
+        await asyncio.wait_for(proc.wait(), timeout=30)
+    except asyncio.TimeoutError:
+        return {"error": "Branch fork timed out after 30s"}
+    except Exception as e:
+        return {"error": f"Fork process error: {e}"}
+    finally:
+        if proc is not None and proc.returncode is None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+    if not new_cbc_id:
+        return {"error": "Failed to get new session ID from cbc fork"}
+
+    # Parse the forked session's JSONL
+    cwd = s.workdir or ""
+    try:
+        history = cbc_sessions.parse_cbc_history(new_cbc_id, cwd)
+        raw_usage_entries = cbc_sessions.get_raw_usage(new_cbc_id, cwd)
+    except Exception as e:
+        return {"error": f"Failed to parse forked session: {e}"}
+
+    raw_usage = sess.accumulate_raw_usage(None, raw_usage_entries)
+    total_usage = sess.compute_total_usage(raw_usage)
+
+    # Create CLIConductor session with user's name and parent's settings
+    new_s = sess.create(
+        name=name,
+        cbc_session_id=new_cbc_id,
+        model=s.model,
+        permission_mode=s.permission_mode,
+        always_thinking_enabled=s.always_thinking_enabled,
+        effort=s.effort,
+        max_thinking_tokens=s.max_thinking_tokens,
+        raw_usage=raw_usage,
+        total_usage=total_usage,
+        workdir=s.workdir,
+        history=history,
+    )
+
+    # Write custom-title to the forked session's JSONL (best-effort)
+    try:
+        cbc_sessions.write_custom_title(new_cbc_id, name, cwd)
+    except Exception:
+        pass
+
+    await broadcast({
+        "type": "session.created",
+        "sessionId": new_s.id,
+        "name": new_s.name,
+    })
+
+    return _session_to_api(new_s)
+
+
 @app.delete("/api/sessions/{session_id}")
 async def api_delete_session(session_id: str):
     """Delete a session and its worker if running."""
