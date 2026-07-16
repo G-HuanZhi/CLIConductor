@@ -444,6 +444,68 @@ async def api_rename_session(session_id: str, data: dict):
     return {"sessionId": s.id, "name": new_name, "status": "renamed"}
 
 
+@app.post("/api/sessions/{session_id}/branch")
+async def api_branch_session(session_id: str, data: dict):
+    """Branch from a session — copy cbc JSONL, import new session, preserve settings."""
+    s = sess.get(session_id)
+    if not s:
+        return {"error": "Session not found"}
+    if not s.cbc_session_id:
+        return {"error": "Session has no cbc session ID — cannot branch"}
+
+    name = (data.get("name") or "").strip()
+    if not name:
+        name = f"{s.name}-branch"
+
+    err = _check_session_name(name)
+    if err:
+        return {"error": err}
+
+    # Fork via pure file operations — no cbc process spawned
+    cwd = s.workdir or ""
+    try:
+        new_cbc_id_str = cbc_sessions.fork_cbc_session(
+            s.cbc_session_id, name, cwd or None,
+        )
+    except FileNotFoundError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        return {"error": f"Fork failed: {e}"}
+
+    # Import the forked session's JSONL
+    try:
+        history = cbc_sessions.parse_cbc_history(new_cbc_id_str, cwd)
+        raw_usage_entries = cbc_sessions.get_raw_usage(new_cbc_id_str, cwd)
+    except Exception as e:
+        return {"error": f"Failed to parse forked session: {e}"}
+
+    raw_usage = sess.accumulate_raw_usage(None, raw_usage_entries)
+    total_usage = sess.compute_total_usage(raw_usage)
+
+    # Create CLIConductor session with user's name and parent's settings
+    new_s = sess.create(
+        name=name,
+        cbc_session_id=new_cbc_id_str,
+        model=s.model,
+        permission_mode=s.permission_mode,
+        always_thinking_enabled=s.always_thinking_enabled,
+        effort=s.effort,
+        max_thinking_tokens=s.max_thinking_tokens,
+        raw_usage=raw_usage,
+        total_usage=total_usage,
+        workdir=s.workdir,
+        history=history,
+    )
+
+    await broadcast({
+        "type": "session.created",
+        "sessionId": new_s.id,
+        "name": new_s.name,
+    })
+
+    return _session_to_api(new_s)
+
+
 @app.delete("/api/sessions/{session_id}")
 async def api_delete_session(session_id: str):
     """Delete a session and its worker if running."""
@@ -695,6 +757,15 @@ async def api_cbc_sessions(project_dir: str = "", cwd: str = "", all: int = 0):
         "total": total,
         "shown": len(filtered),
     }
+
+
+@app.get("/api/cbc/browse")
+async def api_cbc_browse(path: str = "", limit: int = 30, offset: int = 0, q: str = ""):
+    """Browse cbc sessions as a file-tree (breadcrumb + folders + paginated sessions)."""
+    result = cbc_sessions.browse_cbc_tree(
+        path=path, limit=limit, offset=offset, query=q,
+    )
+    return result
 
 
 @app.post("/api/cbc/sessions/import")

@@ -102,6 +102,16 @@ let bubbleViewEnabled: boolean = true;
 let currentHistory: Message[] = [];
 let toolGroupOpen: boolean = false;
 let _currentToolGroupStart: number = -1;
+const _inputDrafts: Map<string, string> = new Map();
+/** Per-session set of unread thinking/tool content hashes */
+const _sessionUnread: Map<string, Set<string>> = new Map();
+
+function _getUnread(): Set<string> {
+  if (!currentSessionId) return new Set();
+  let s = _sessionUnread.get(currentSessionId);
+  if (!s) { s = new Set(); _sessionUnread.set(currentSessionId, s); }
+  return s;
+}
 
 // ── Markdown / LaTeX rendering ──
 if (typeof (window as any).marked !== 'undefined') {
@@ -251,6 +261,7 @@ let _refreshVersion: number = 0;
 function refreshSessions(): void {
   _refreshVersion++;
   const version = _refreshVersion;
+  document.getElementById('sessionList')!.innerHTML = '<div class="sidebar-loading">Loading...</div>';
   fetch('/api/sessions')
     .then((r: Response) => r.json())
     .then((data: ApiSessionsResponse) => {
@@ -291,25 +302,25 @@ interface CbcSessionItem {
   forked_from: string | null;
 }
 
-interface CbcProject {
-  project_dir: string;
-  session_count: number;
-  resumable_count?: number;
-  path_hint: string;
-  drive: string;
-  short_label: string;
+interface CbcBrowseResult {
+  breadcrumbs: { label: string; path: string }[];
+  folders: { name: string; path: string; session_count: number }[];
+  sessions: CbcSessionItem[];
+  total: number;
+  has_more: boolean;
 }
 
-async function fetchCbcProjects(): Promise<CbcProject[]> {
-  const resp = await fetch('/api/cbc/projects');
-  const data = await resp.json();
-  return data.projects || [];
-}
+let _cbcBrowsePath: string = '';
+let _cbcBrowseOffset: number = 0;
 
-async function fetchCbcSessions(projectDir: string): Promise<CbcSessionItem[]> {
-  const resp = await fetch(`/api/cbc/sessions?project_dir=${encodeURIComponent(projectDir)}`);
-  const data = await resp.json();
-  return data.sessions || [];
+async function fetchCbcBrowse(path: string, offset: number, query: string): Promise<CbcBrowseResult> {
+  const params = new URLSearchParams();
+  if (path) params.set('path', path);
+  params.set('offset', String(offset));
+  params.set('limit', '30');
+  if (query) params.set('q', query);
+  const resp = await fetch('/api/cbc/browse?' + params.toString());
+  return await resp.json();
 }
 
 async function importCbcSession(sessionId: string, projectDir: string): Promise<any> {
@@ -331,6 +342,7 @@ function renderSessionList(): void {
       const target = e.target as HTMLElement;
       if (target.closest('.sess-del')) return;
       if (s.id.indexOf('__pending_') === 0) return; // Placeholder — not a real session yet
+      if (document.getElementById('sessMenu')) { closeSessMenu(); return; }
       selectSession(s.id);
     };
 
@@ -374,6 +386,13 @@ function totalUsageCredit(s: Session): number | null {
 }
 
 function selectSession(id: string): void {
+  // Save current input draft before switching
+  const input = document.getElementById('chatInput') as HTMLInputElement;
+  if (currentSessionId && input.value.trim()) {
+    _inputDrafts.set(currentSessionId, input.value);
+  } else if (currentSessionId) {
+    _inputDrafts.delete(currentSessionId);
+  }
   currentSessionId = id;
   const s = modelData.find((x: Session) => x.id === id);
   if (!s) return;
@@ -383,6 +402,8 @@ function selectSession(id: string): void {
   renderSessionList();
   updateTopBar();
   renderMessages(s.history || []);
+  // Restore input draft for this session
+  input.value = _inputDrafts.get(id) || '';
   const settingsBtn = document.getElementById('settingsBtn')!;
   settingsBtn.style.display = '';
   // sync panel if it's already open
@@ -551,13 +572,18 @@ function _renderMsgEl(role: string, content: string): void {
     div.className = 'msg thinking';
     div.innerHTML =
       '\uD83D\uDCAD <span class="thinking-toggle">show thinking</span>' +
+      ' <span class="toggle-icon">\u25BC</span>' +
+      (_getUnread().has(content) ? '<span class="unread-badge"></span>' : '') +
       '<div class="thinking-body">' + esc(content) + '</div>';
     div.onclick = function () {
       const body = div.querySelector('.thinking-body') as HTMLElement;
       const toggle = div.querySelector('.thinking-toggle') as HTMLElement;
+      const badge = div.querySelector('.unread-badge') as HTMLElement;
       if (!body || !toggle) return;
       body.classList.toggle('open');
+      div.classList.toggle('open');
       toggle.textContent = body.classList.contains('open') ? 'hide thinking' : 'show thinking';
+      if (badge) { badge.style.display = 'none'; _getUnread().delete(content); }
     };
   } else if (role === 'tool') {
     div.className = 'msg tool';
@@ -585,17 +611,26 @@ function _createToolGroupEl(items: Message[]): HTMLElement {
   const count = items.length;
   let names = items.map(function (t) { return toolName(t.content); }).slice(0, 3).join(', ');
   if (items.length > 3) names += ', \u2026';
+  const hasUnread = items.some(function (t: Message) { return _getUnread().has(t.content); });
   wrapper.innerHTML =
     '<div class="tool-group-header">' +
     '\uD83D\uDD27 <strong>' + count + ' tools:</strong> ' +
     esc(names) +
     ' <span class="toggle-icon">\u25BC</span>' +
+    (hasUnread ? '<span class="unread-badge"></span>' : '') +
     '</div>' +
     '<div class="tool-group-body"></div>';
+  wrapper.setAttribute('data-tool-contents', JSON.stringify(items.map(function (t: Message) { return t.content; })));
   const body = wrapper.querySelector('.tool-group-body')!;
   _fillToolGroupBody(body, items);
   (wrapper.querySelector('.tool-group-header') as HTMLElement).onclick = function () {
     wrapper.classList.toggle('collapsed');
+    const badge = wrapper.querySelector('.unread-badge') as HTMLElement;
+    if (badge) { badge.style.display = 'none'; }
+    try {
+      const contents: string[] = JSON.parse(wrapper.getAttribute('data-tool-contents') || '[]');
+      contents.forEach(function (c: string) { _getUnread().delete(c); });
+    } catch (e) { /* ignore */ }
   };
   return wrapper;
 }
@@ -623,6 +658,7 @@ function _lastToolGroupEl(): HTMLElement | null {
 
 function addMessage(role: string, content: string): void {
   currentHistory.push({ role: role, content: content });
+  if (role === 'thinking' || role === 'tool') _getUnread().add(content);
   _renderMsgEl(role, content);
 }
 
@@ -638,10 +674,12 @@ function appendEvent(event: WorkerEvent): void {
         _renderMsgEl('assistant', b.text || '');
       } else if (b.type === 'thinking') {
         currentHistory.push({ role: 'thinking', content: b.thinking || '' });
+        _getUnread().add(b.thinking || '');
         _renderMsgEl('thinking', b.thinking || '');
       } else if (b.type === 'tool_use') {
         const c = (b.name || '') + '(' + JSON.stringify(b.input || {}) + ')';
         currentHistory.push({ role: 'tool', content: c });
+        _getUnread().add(c);
         _appendToolMessage(c);
       }
     });
@@ -660,17 +698,18 @@ function _appendToolMessage(content: string): void {
     const body = lastGroup.querySelector('.tool-group-body')!;
     const count = body.children.length + 1;
     _fillToolGroupBody(body, [{ role: 'tool', content: content }]);
-    // refresh header count + names
-    const names = currentHistory
+    // refresh header count + names, always show badge for new streaming tool
+    const allTools = currentHistory
       .slice(_currentToolGroupStart)
-      .filter((m: Message) => m.role === 'tool')
-      .map(function (m) { return toolName(m.content); })
-      .slice(0, 3).join(', ');
+      .filter((m: Message) => m.role === 'tool');
+    const names = allTools.map(function (m) { return toolName(m.content); }).slice(0, 3).join(', ');
     const headerHtml =
       '\uD83D\uDD27 <strong>' + count + ' tools:</strong> ' +
       esc(names) + (count > 3 ? ', \u2026' : '') +
-      ' <span class="toggle-icon">\u25BC</span>';
+      ' <span class="toggle-icon">\u25BC</span>' +
+      '<span class="unread-badge"></span>';
     (lastGroup.querySelector('.tool-group-header') as HTMLElement).innerHTML = headerHtml;
+    lastGroup.setAttribute('data-tool-contents', JSON.stringify(allTools.map(function (m: Message) { return m.content; })));
     el.scrollTop = el.scrollHeight;
     return;
   }
@@ -941,6 +980,7 @@ function send(): void {
     return;
   }
   input.value = '';
+  _inputDrafts.delete(currentSessionId);
 
   addMessage('user', text);
 
@@ -1137,7 +1177,8 @@ function toggleSessMenu(e: MouseEvent, id: string): void {
   menu.innerHTML =
     '<div class="sess-menu-item" onclick="closeSessMenu();renameSession(\'' + id + '\')">\u270E Rename</div>' +
     (s.cbcSessionId
-      ? '<div class="sess-menu-item" onclick="closeSessMenu();reimportSession(\'' + id + '\')">\u21BB Reimport</div>'
+      ? '<div class="sess-menu-item" onclick="closeSessMenu();reimportSession(\'' + id + '\')">\u21BB Reimport</div>' +
+        '<div class="sess-menu-item" onclick="closeSessMenu();branchSession(\'' + id + '\')">\u2442 Branch</div>'
       : '') +
     '<div class="sess-menu-item sess-menu-danger" onclick="closeSessMenu();deleteSession(\'' + id + '\')">\u2715 Delete</div>';
 
@@ -1189,6 +1230,25 @@ function reimportSession(id: string): void {
         renderMessages(d.history || []);
       }
       renderSessionList();
+      toast('Session reimported.');
+    });
+}
+
+function branchSession(id: string): void {
+  const s = modelData.find((x: Session) => x.id === id);
+  if (!s || !s.cbcSessionId) return;
+  const defaultName = s.name ? s.name + '-branch' : '';
+  const newName = (prompt('Branch session name:', defaultName) || '').trim();
+  if (!newName) return;
+  fetch('/api/sessions/' + id + '/branch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: newName }),
+  })
+    .then((r: Response) => r.json())
+    .then((d: Session & ApiGenericResponse) => {
+      if (d.error) { toast(d.error); return; }
+      refreshSessions();
     });
 }
 
@@ -1215,143 +1275,145 @@ function init(): void {
     });
   refreshSessions();
 
-  // ── Import Modal ──
+  // ── Import Modal (file-explorer style) ──
   const importCbcBtn = document.getElementById('importCbcBtn') as HTMLButtonElement;
   const importModal = document.getElementById('importModal') as HTMLDivElement;
   const closeImportModal = document.getElementById('closeImportModal') as HTMLButtonElement;
-  const cbcDriveSelect = document.getElementById('cbcDriveSelect') as HTMLSelectElement;
-  const cbcProjectSelect = document.getElementById('cbcProjectSelect') as HTMLSelectElement;
-  const cbcSessionListEl = document.getElementById('cbcSessionList') as HTMLDivElement;
-  const cbcSessionCountEl = document.getElementById('cbcSessionCount') as HTMLDivElement;
+  const cbcBreadcrumb = document.getElementById('cbcBreadcrumb') as HTMLDivElement;
+  const cbcContent = document.getElementById('cbcContent') as HTMLDivElement;
+  const cbcFooter = document.getElementById('cbcFooter') as HTMLDivElement;
+  const cbcSearch = document.getElementById('cbcSearch') as HTMLInputElement;
 
-  let allProjects: CbcProject[] = [];
-  let currentProjectDir = '';
-
-  // Group projects by drive letter
-  function buildDriveSelect(): void {
-    const drives = [...new Set(allProjects.map((p: CbcProject) => p.drive))].sort();
-    cbcDriveSelect.innerHTML = '<option value="">Drive</option>';
-    drives.forEach((d: string) => {
-      const total = allProjects.filter((p: CbcProject) => p.drive === d)
-        .reduce((sum: number, p: CbcProject) => sum + (p.resumable_count || p.session_count), 0);
-      const opt = document.createElement('option');
-      opt.value = d;
-      opt.textContent = `${d} (${total} sessions)`;
-      cbcDriveSelect.appendChild(opt);
-    });
-    if (drives.length === 1) {
-      cbcDriveSelect.value = drives[0];
-      cbcDriveSelect.dispatchEvent(new Event('change'));
-    }
-  }
-
-  function buildProjectSelect(drive: string): void {
-    const projects = allProjects.filter((p: CbcProject) => p.drive === drive);
-    projects.sort((a: CbcProject, b: CbcProject) => a.short_label.localeCompare(b.short_label));
-    cbcProjectSelect.innerHTML = '<option value="">Project</option>';
-    projects.forEach((p: CbcProject) => {
-      const rCount = p.resumable_count || p.session_count;
-      const opt = document.createElement('option');
-      opt.value = p.project_dir;
-      opt.textContent = `${p.short_label} (${rCount})`;
-      cbcProjectSelect.appendChild(opt);
-    });
-    if (projects.length > 0) {
-      cbcProjectSelect.value = projects[0].project_dir;
-      currentProjectDir = projects[0].project_dir;
-    }
-  }
-
-  function renderCbcSessions(sessions: CbcSessionItem[]): void {
-    if (sessions.length === 0) {
-      cbcSessionListEl.innerHTML = '<div class="im-loading">No sessions to import.</div>';
-      cbcSessionCountEl.textContent = '';
+  function renderBreadcrumb(crumbs: { label: string; path: string }[]): void {
+    if (crumbs.length === 0) {
+      cbcBreadcrumb.innerHTML = '';
       return;
     }
-    cbcSessionCountEl.textContent = `${sessions.length} session(s) found`;
-    cbcSessionListEl.innerHTML = sessions.map((s: CbcSessionItem) => {
-      const ts = s.last_timestamp ? new Date(s.last_timestamp).toLocaleString() : '';
-      const forkBadge = s.forked_from ? ' \uD83D\uDD00' : '';
-      return `
-        <div class="im-item" data-session-id="${esc(s.session_id)}">
-          <div class="im-title">${esc(s.title || 'Untitled')}${forkBadge}</div>
-          <div class="im-meta">
-            ${s.message_count} msgs \u00B7 ${esc(s.model || '?')} \u00B7 ${esc(ts)}
-          </div>
-        </div>`;
+    cbcBreadcrumb.innerHTML = crumbs.map((c, i) => {
+      const label = esc(c.label);
+      if (i === crumbs.length - 1) {
+        return `<span>${label}</span>`;
+      }
+      return `<a href="#" data-cbc-path="${esc(c.path)}">${label}</a> <span>/</span> `;
     }).join('');
-
-    cbcSessionListEl.querySelectorAll<HTMLElement>('.im-item').forEach((el: HTMLElement) => {
-      el.addEventListener('click', async () => {
-        const sid = el.dataset.sessionId!;
-        el.style.opacity = '0.5';
-        el.style.pointerEvents = 'none';
-        const result = await importCbcSession(sid, currentProjectDir);
-        if (result.error) {
-          toast(result.error);
-          el.style.opacity = '1';
-          el.style.pointerEvents = '';
-          return;
-        }
-        importModal.classList.remove('open');
-        await refreshSessions();
-        selectSession(result.id);
-        toast('Session imported');
+    cbcBreadcrumb.querySelectorAll('a').forEach((a: HTMLAnchorElement) => {
+      a.addEventListener('click', (e: Event) => {
+        e.preventDefault();
+        const p = a.dataset['cbcPath'];
+        if (p !== undefined) navigateTo(p);
       });
     });
   }
 
-  async function loadCbcSessions(projectDir: string): Promise<void> {
-    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
-    cbcSessionCountEl.textContent = '';
+  function renderFolders(folders: { name: string; path: string; session_count: number }[]): string {
+    if (folders.length === 0) return '';
+    return '<div class="im-section-label">Folders</div>' + folders.map((f) => {
+      return `<div class="im-folder" data-cbc-path="${esc(f.path)}">
+        <span class="im-folder-icon">\uD83D\uDCC1</span>
+        <span class="im-folder-name">${esc(f.name)}</span>
+        <span class="im-folder-count">${f.session_count} sessions</span>
+      </div>`;
+    }).join('');
+  }
+
+  function renderSessionItems(sessions: CbcSessionItem[]): string {
+    if (sessions.length === 0) return '';
+    return '<div class="im-section-label">Sessions</div>' + sessions.map((s) => {
+      const ts = s.last_timestamp ? new Date(s.last_timestamp).toLocaleString() : '';
+      const forkBadge = s.forked_from ? ' \uD83D\uDD00' : '';
+      return `<div class="im-item" data-sid="${esc(s.session_id)}" data-pd="${esc(s.project_dir)}">
+        <div class="im-title">${esc(s.title || 'Untitled')}${forkBadge}</div>
+        <div class="im-meta">${s.message_count} msgs \u00B7 ${esc(s.model || '?')} \u00B7 ${esc(ts)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  async function navigateTo(path: string): Promise<void> {
+    _cbcBrowsePath = path;
+    _cbcBrowseOffset = 0;
+    cbcSearch.value = '';
+    await loadBrowse();
+  }
+
+  async function loadBrowse(append: boolean = false): Promise<void> {
+    if (!append) {
+      cbcContent.innerHTML = '<div class="im-loading">Loading...</div>';
+      cbcFooter.textContent = '';
+    }
     try {
-      const sessions = await fetchCbcSessions(projectDir);
-      renderCbcSessions(sessions);
+      const data = await fetchCbcBrowse(_cbcBrowsePath, _cbcBrowseOffset, cbcSearch.value.trim());
+      renderBreadcrumb(data.breadcrumbs);
+
+      let html = renderFolders(data.folders);
+      html += renderSessionItems(data.sessions);
+      if (!html && !append) {
+        html = '<div class="im-loading">No sessions found.</div>';
+      }
+      if (append) {
+        cbcContent.insertAdjacentHTML('beforeend', html);
+      } else {
+        cbcContent.innerHTML = html || '<div class="im-loading">No sessions found.</div>';
+      }
+
+      if (data.has_more) {
+        cbcFooter.innerHTML = `<a href="#" id="cbcLoadMore" style="color:#58a6ff;cursor:pointer">Load more (${data.total - _cbcBrowseOffset - 30} remaining)</a>`;
+        document.getElementById('cbcLoadMore')!.addEventListener('click', (e: Event) => {
+          e.preventDefault();
+          _cbcBrowseOffset += 30;
+          loadBrowse(true);
+        });
+      } else if (data.total > 0) {
+        cbcFooter.textContent = `${data.total} session(s)`;
+      } else {
+        cbcFooter.textContent = '';
+      }
+
+      // Attach folder click handlers
+      cbcContent.querySelectorAll<HTMLElement>('.im-folder').forEach((el) => {
+        el.addEventListener('click', () => {
+          const p = el.dataset['cbcPath'];
+          if (p) navigateTo(p);
+        });
+      });
+
+      // Attach session click handlers
+      cbcContent.querySelectorAll<HTMLElement>('.im-item').forEach((el) => {
+        el.addEventListener('click', async () => {
+          const sid = el.dataset['sid']!;
+          const pd = el.dataset['pd']!;
+          el.style.opacity = '0.5';
+          el.style.pointerEvents = 'none';
+          const result = await importCbcSession(sid, pd);
+          if (result.error) {
+            toast(result.error);
+            el.style.opacity = '1';
+            el.style.pointerEvents = '';
+            return;
+          }
+          importModal.classList.remove('open');
+          await refreshSessions();
+          selectSession(result.id);
+          toast('Session imported');
+        });
+      });
     } catch (e: any) {
-      cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+      if (!append) {
+        cbcContent.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+      }
     }
   }
 
   importCbcBtn.addEventListener('click', async () => {
     importModal.classList.add('open');
-    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
-    cbcSessionCountEl.textContent = '';
-    cbcDriveSelect.innerHTML = '<option value="">Loading...</option>';
-    cbcProjectSelect.innerHTML = '<option value="">-</option>';
-
-    try {
-      allProjects = await fetchCbcProjects();
-      if (allProjects.length === 0) {
-        cbcDriveSelect.innerHTML = '<option value="">No projects</option>';
-        cbcSessionListEl.innerHTML = '<div class="im-loading">No cbc projects found.</div>';
-        return;
-      }
-      buildDriveSelect();
-    } catch (e: any) {
-      cbcDriveSelect.innerHTML = '<option value="">Failed</option>';
-      cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
-    }
+    _cbcBrowsePath = '';
+    _cbcBrowseOffset = 0;
+    cbcSearch.value = '';
+    await loadBrowse();
   });
 
-  cbcDriveSelect.addEventListener('change', () => {
-    const drive = cbcDriveSelect.value;
-    if (!drive) {
-      cbcProjectSelect.innerHTML = '<option value="">Project</option>';
-      cbcSessionListEl.innerHTML = '<div class="im-loading">Select a project.</div>';
-      cbcSessionCountEl.textContent = '';
-      return;
-    }
-    buildProjectSelect(drive);
-    if (currentProjectDir) {
-      loadCbcSessions(currentProjectDir);
-    }
-  });
-
-  cbcProjectSelect.addEventListener('change', () => {
-    currentProjectDir = cbcProjectSelect.value;
-    if (currentProjectDir) {
-      loadCbcSessions(currentProjectDir);
-    }
+  cbcSearch.addEventListener('input', () => {
+    _cbcBrowseOffset = 0;
+    loadBrowse();
   });
 
   closeImportModal.addEventListener('click', () => {
