@@ -103,7 +103,15 @@ let currentHistory: Message[] = [];
 let toolGroupOpen: boolean = false;
 let _currentToolGroupStart: number = -1;
 const _inputDrafts: Map<string, string> = new Map();
-const _unreadKeys: Set<string> = new Set();  // content hashes for unread thinking/tool blocks
+/** Per-session set of unread thinking/tool content hashes */
+const _sessionUnread: Map<string, Set<string>> = new Map();
+
+function _getUnread(): Set<string> {
+  if (!currentSessionId) return new Set();
+  let s = _sessionUnread.get(currentSessionId);
+  if (!s) { s = new Set(); _sessionUnread.set(currentSessionId, s); }
+  return s;
+}
 
 // ── Markdown / LaTeX rendering ──
 if (typeof (window as any).marked !== 'undefined') {
@@ -384,7 +392,6 @@ function selectSession(id: string): void {
   } else if (currentSessionId) {
     _inputDrafts.delete(currentSessionId);
   }
-  _unreadKeys.clear();
   currentSessionId = id;
   const s = modelData.find((x: Session) => x.id === id);
   if (!s) return;
@@ -565,7 +572,7 @@ function _renderMsgEl(role: string, content: string): void {
     div.innerHTML =
       '\uD83D\uDCAD <span class="thinking-toggle">show thinking</span>' +
       ' <span class="toggle-icon">\u25BC</span>' +
-      (_unreadKeys.has(content) ? '<span class="unread-badge"></span>' : '') +
+      (_getUnread().has(content) ? '<span class="unread-badge"></span>' : '') +
       '<div class="thinking-body">' + esc(content) + '</div>';
     div.onclick = function () {
       const body = div.querySelector('.thinking-body') as HTMLElement;
@@ -575,7 +582,7 @@ function _renderMsgEl(role: string, content: string): void {
       body.classList.toggle('open');
       div.classList.toggle('open');
       toggle.textContent = body.classList.contains('open') ? 'hide thinking' : 'show thinking';
-      if (badge) { badge.style.display = 'none'; _unreadKeys.delete(content); }
+      if (badge) { badge.style.display = 'none'; _getUnread().delete(content); }
     };
   } else if (role === 'tool') {
     div.className = 'msg tool';
@@ -603,7 +610,7 @@ function _createToolGroupEl(items: Message[]): HTMLElement {
   const count = items.length;
   let names = items.map(function (t) { return toolName(t.content); }).slice(0, 3).join(', ');
   if (items.length > 3) names += ', \u2026';
-  const hasUnread = items.some(function (t: Message) { return _unreadKeys.has(t.content); });
+  const hasUnread = items.some(function (t: Message) { return _getUnread().has(t.content); });
   wrapper.innerHTML =
     '<div class="tool-group-header">' +
     '\uD83D\uDD27 <strong>' + count + ' tools:</strong> ' +
@@ -621,7 +628,7 @@ function _createToolGroupEl(items: Message[]): HTMLElement {
     if (badge) { badge.style.display = 'none'; }
     try {
       const contents: string[] = JSON.parse(wrapper.getAttribute('data-tool-contents') || '[]');
-      contents.forEach(function (c: string) { _unreadKeys.delete(c); });
+      contents.forEach(function (c: string) { _getUnread().delete(c); });
     } catch (e) { /* ignore */ }
   };
   return wrapper;
@@ -650,7 +657,7 @@ function _lastToolGroupEl(): HTMLElement | null {
 
 function addMessage(role: string, content: string): void {
   currentHistory.push({ role: role, content: content });
-  if (role === 'thinking' || role === 'tool') _unreadKeys.add(content);
+  if (role === 'thinking' || role === 'tool') _getUnread().add(content);
   _renderMsgEl(role, content);
 }
 
@@ -666,12 +673,12 @@ function appendEvent(event: WorkerEvent): void {
         _renderMsgEl('assistant', b.text || '');
       } else if (b.type === 'thinking') {
         currentHistory.push({ role: 'thinking', content: b.thinking || '' });
-        _unreadKeys.add(b.thinking || '');
+        _getUnread().add(b.thinking || '');
         _renderMsgEl('thinking', b.thinking || '');
       } else if (b.type === 'tool_use') {
         const c = (b.name || '') + '(' + JSON.stringify(b.input || {}) + ')';
         currentHistory.push({ role: 'tool', content: c });
-        _unreadKeys.add(c);
+        _getUnread().add(c);
         _appendToolMessage(c);
       }
     });
