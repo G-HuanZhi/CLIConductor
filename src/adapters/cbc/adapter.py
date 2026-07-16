@@ -167,7 +167,7 @@ class CbcAdapter:
             elif b.get("type") == "tool_use":
                 blocks.append({
                     "role": "tool",
-                    "content": f"{b['name']}({json.dumps(b.get('input', {}))})",
+                    "content": f"{b['name']}({json.dumps(b.get('input', {}), separators=(',', ':'))})",
                 })
         return blocks
 
