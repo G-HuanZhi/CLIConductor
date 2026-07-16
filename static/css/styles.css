@@ -489,6 +489,16 @@ body {
   color: #d2a8ff;
 }
 
+.msg.thinking .toggle-icon {
+  display: inline-block;
+  transition: transform .2s;
+  font-size: .7rem;
+  transform: rotate(90deg);
+}
+.msg.thinking.open .toggle-icon {
+  transform: rotate(0deg);
+}
+
 /* ── Tool (orange left border) ── */
 .msg.tool {
   background: #21262d;

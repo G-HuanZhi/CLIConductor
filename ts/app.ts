@@ -103,6 +103,7 @@ let currentHistory: Message[] = [];
 let toolGroupOpen: boolean = false;
 let _currentToolGroupStart: number = -1;
 const _inputDrafts: Map<string, string> = new Map();
+let _inBatchRender: boolean = false;  // true while renderMessages is running → skip unread badge
 
 // ── Markdown / LaTeX rendering ──
 if (typeof (window as any).marked !== 'undefined') {
@@ -468,6 +469,7 @@ function renderMessages(history: Message[]): void {
     toolGroupOpen = false;
     return;
   }
+  _inBatchRender = true;
   const grouped: Array<{ type?: string; items?: Message[] } & Partial<Message>> = [];
   let toolGroup: any = null;
   for (let i = 0; i < currentHistory.length; i++) {
@@ -490,6 +492,7 @@ function renderMessages(history: Message[]): void {
       _renderMsgEl(g.role, g.content);
     }
   });
+  _inBatchRender = false;
   el.scrollTop = el.scrollHeight;
   toolGroupOpen = false;
 }
@@ -564,7 +567,7 @@ function _renderMsgEl(role: string, content: string): void {
     div.innerHTML =
       '\uD83D\uDCAD <span class="thinking-toggle">show thinking</span>' +
       ' <span class="toggle-icon">\u25BC</span>' +
-      '<span class="unread-badge"></span>' +
+      (_inBatchRender ? '' : '<span class="unread-badge"></span>') +
       '<div class="thinking-body">' + esc(content) + '</div>';
     div.onclick = function () {
       const body = div.querySelector('.thinking-body') as HTMLElement;
@@ -572,6 +575,7 @@ function _renderMsgEl(role: string, content: string): void {
       const badge = div.querySelector('.unread-badge') as HTMLElement;
       if (!body || !toggle) return;
       body.classList.toggle('open');
+      div.classList.toggle('open');
       toggle.textContent = body.classList.contains('open') ? 'hide thinking' : 'show thinking';
       if (badge) badge.style.display = 'none';
     };
@@ -606,7 +610,7 @@ function _createToolGroupEl(items: Message[]): HTMLElement {
     '\uD83D\uDD27 <strong>' + count + ' tools:</strong> ' +
     esc(names) +
     ' <span class="toggle-icon">\u25BC</span>' +
-    '<span class="unread-badge"></span>' +
+    (_inBatchRender ? '' : '<span class="unread-badge"></span>') +
     '</div>' +
     '<div class="tool-group-body"></div>';
   const body = wrapper.querySelector('.tool-group-body')!;
