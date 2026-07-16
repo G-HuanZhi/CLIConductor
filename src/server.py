@@ -485,39 +485,39 @@ async def api_branch_session(session_id: str, data: dict):
             cwd=s.workdir or None,
         )
 
-        # Read stdout in a task, capture init event with new session ID
-        new_cbc_id: list[str] = []
-        async def _capture_init():
-            async for line in proc.stdout:
-                decoded = line.decode("utf-8", errors="replace").strip()
-                if not decoded:
-                    continue
-                event = adapter.parse_event(decoded)
-                if event is None:
-                    continue
-                if adapter.is_init_event(event):
-                    cid = adapter.extract_session_id(event)
-                    if cid:
-                        new_cbc_id.append(cid)
-                    return
+        # Close stdin immediately — cbc forks on startup, then waits for stdin
+        if proc.stdin:
+            proc.stdin.close()
 
-        read_task = asyncio.create_task(_capture_init())
-        try:
-            await asyncio.wait_for(read_task, timeout=15)
-        except asyncio.TimeoutError:
-            pass
+        # Read lines with per-line timeout — capture the init event
+        deadline = asyncio.get_event_loop().time() + 15
+        while True:
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                break
+            try:
+                line = await asyncio.wait_for(
+                    proc.stdout.readline(), timeout=min(remaining, 2)
+                )
+            except asyncio.TimeoutError:
+                continue
+            if not line:
+                break  # EOF
+            decoded = line.decode("utf-8", errors="replace").strip()
+            if not decoded:
+                continue
+            event = adapter.parse_event(decoded)
+            if event and adapter.is_init_event(event):
+                cid = adapter.extract_session_id(event)
+                if cid:
+                    new_cbc_id_str = cid
+                    break
 
-        # Kill process immediately — no user message needed
+        # Kill process immediately
         try:
             proc.kill()
-            await proc.wait()
         except Exception:
             pass
-
-        if not new_cbc_id:
-            return {"error": "cbc fork returned no session ID (init event not received)"}
-
-        new_cbc_id_str = new_cbc_id[0]
     except Exception as e:
         return {"error": f"Fork process error: {e}"}
     finally:
