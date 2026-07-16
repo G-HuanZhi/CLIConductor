@@ -1138,7 +1138,8 @@ function toggleSessMenu(e: MouseEvent, id: string): void {
   menu.innerHTML =
     '<div class="sess-menu-item" onclick="closeSessMenu();renameSession(\'' + id + '\')">\u270E Rename</div>' +
     (s.cbcSessionId
-      ? '<div class="sess-menu-item" onclick="closeSessMenu();reimportSession(\'' + id + '\')">\u21BB Reimport</div>'
+      ? '<div class="sess-menu-item" onclick="closeSessMenu();reimportSession(\'' + id + '\')">\u21BB Reimport</div>' +
+        '<div class="sess-menu-item" onclick="closeSessMenu();branchSession(\'' + id + '\')">\u2442 Branch</div>'
       : '') +
     '<div class="sess-menu-item sess-menu-danger" onclick="closeSessMenu();deleteSession(\'' + id + '\')">\u2715 Delete</div>';
 
@@ -1191,6 +1192,24 @@ function reimportSession(id: string): void {
       }
       renderSessionList();
       toast('Session reimported.');
+    });
+}
+
+function branchSession(id: string): void {
+  const s = modelData.find((x: Session) => x.id === id);
+  if (!s || !s.cbcSessionId) return;
+  const defaultName = s.name ? s.name + '-branch' : '';
+  const newName = (prompt('Branch session name:', defaultName) || '').trim();
+  if (!newName) return;
+  fetch('/api/sessions/' + id + '/branch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: newName }),
+  })
+    .then((r: Response) => r.json())
+    .then((d: Session & ApiGenericResponse) => {
+      if (d.error) { toast(d.error); return; }
+      refreshSessions();
     });
 }
 

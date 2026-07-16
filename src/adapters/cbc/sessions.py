@@ -330,6 +330,25 @@ def get_session_title(session_id: str, cwd: str | None = None,
     return title
 
 
+def write_custom_title(session_id: str, title: str, cwd: str | None = None):
+    """Write a custom-title event to a cbc session's JSONL file."""
+    proj_dir = _project_dir(cwd)
+    path = proj_dir / f"{session_id}.jsonl"
+    if not path.exists():
+        return
+    import uuid
+    event = {
+        "id": str(uuid.uuid4()),
+        "timestamp": int(time.time() * 1000),
+        "type": "custom-title",
+        "customTitle": title,
+        "sessionId": session_id,
+        "cwd": cwd or "",
+    }
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
 def _strip_html(text: str) -> str:
     """Remove HTML tags and system-reminder markers from text."""
     text = re.sub(r"<[^>]*>", "", text)
