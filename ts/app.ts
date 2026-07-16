@@ -102,6 +102,7 @@ let bubbleViewEnabled: boolean = true;
 let currentHistory: Message[] = [];
 let toolGroupOpen: boolean = false;
 let _currentToolGroupStart: number = -1;
+const _inputDrafts: Map<string, string> = new Map();
 
 // ── Markdown / LaTeX rendering ──
 if (typeof (window as any).marked !== 'undefined') {
@@ -376,6 +377,13 @@ function totalUsageCredit(s: Session): number | null {
 }
 
 function selectSession(id: string): void {
+  // Save current input draft before switching
+  const input = document.getElementById('chatInput') as HTMLInputElement;
+  if (currentSessionId && input.value.trim()) {
+    _inputDrafts.set(currentSessionId, input.value);
+  } else if (currentSessionId) {
+    _inputDrafts.delete(currentSessionId);
+  }
   currentSessionId = id;
   const s = modelData.find((x: Session) => x.id === id);
   if (!s) return;
@@ -385,6 +393,8 @@ function selectSession(id: string): void {
   renderSessionList();
   updateTopBar();
   renderMessages(s.history || []);
+  // Restore input draft for this session
+  input.value = _inputDrafts.get(id) || '';
   const settingsBtn = document.getElementById('settingsBtn')!;
   settingsBtn.style.display = '';
   // sync panel if it's already open
@@ -943,6 +953,7 @@ function send(): void {
     return;
   }
   input.value = '';
+  _inputDrafts.delete(currentSessionId);
 
   addMessage('user', text);
 
