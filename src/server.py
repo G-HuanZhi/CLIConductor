@@ -475,37 +475,59 @@ async def api_branch_session(session_id: str, data: dict):
     args.extend(adapter.fork_args(s))
 
     proc = None
-    new_cbc_id = None
+    new_cbc_id: list[str] = []  # mutable container for concurrent capture
     try:
         proc = await asyncio.create_subprocess_exec(
             *args,
             stdout=asyncio.subprocess.PIPE,
             stdin=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            cwd=s.workdir or None,
         )
 
-        # Send a minimal prompt to trigger session creation + history write
-        stdin_data = adapter.encode_user_message("summarize the conversation in one sentence")
-        proc.stdin.write(stdin_data + b"\n")
-        await proc.stdin.drain()
-        proc.stdin.close()
-
-        # Read stdout — capture new session ID from init event, discard rest
-        async for line in proc.stdout:
-            decoded = line.decode("utf-8", errors="replace").strip()
-            if not decoded:
-                continue
-            try:
+        async def _read_and_send():
+            """Concurrently: capture init event, then send prompt."""
+            got_init = False
+            async for line in proc.stdout:
+                decoded = line.decode("utf-8", errors="replace").strip()
+                if not decoded:
+                    continue
                 event = adapter.parse_event(decoded)
-            except Exception:
-                continue
-            if adapter.is_init_event(event):
-                new_cbc_id = adapter.extract_session_id(event)
-            # drain remaining lines — need the process to finish for complete JSONL
+                if event is None:
+                    continue
+                if adapter.is_init_event(event):
+                    cid = adapter.extract_session_id(event)
+                    if cid:
+                        new_cbc_id.append(cid)
+                    got_init = True
+                if got_init and adapter.is_result_event(event):
+                    return
 
-        await asyncio.wait_for(proc.wait(), timeout=30)
-    except asyncio.TimeoutError:
-        return {"error": "Branch fork timed out after 30s"}
+        # Start reading stdout immediately (concurrent with stdin write)
+        read_task = asyncio.create_task(_read_and_send())
+
+        # Small delay to let cbc initialize, then send prompt
+        await asyncio.sleep(0.2)
+        if proc.stdin is not None and proc.returncode is None:
+            stdin_data = adapter.encode_user_message("ok")
+            proc.stdin.write(stdin_data + b"\n")
+            await proc.stdin.drain()
+            proc.stdin.close()
+
+        # Wait for init capture + result, then drain any remaining lines
+        try:
+            await asyncio.wait_for(read_task, timeout=30)
+        except asyncio.TimeoutError:
+            pass
+
+        # Drain any remaining stdout
+        try:
+            async for _ in proc.stdout:
+                pass
+        except Exception:
+            pass
+
+        await proc.wait()
     except Exception as e:
         return {"error": f"Fork process error: {e}"}
     finally:
@@ -515,14 +537,16 @@ async def api_branch_session(session_id: str, data: dict):
             except Exception:
                 pass
 
-    if not new_cbc_id:
+    if not new_cbc_id or not new_cbc_id[0]:
         return {"error": "Failed to get new session ID from cbc fork"}
+
+    new_cbc_id_str = new_cbc_id[0]
 
     # Parse the forked session's JSONL
     cwd = s.workdir or ""
     try:
-        history = cbc_sessions.parse_cbc_history(new_cbc_id, cwd)
-        raw_usage_entries = cbc_sessions.get_raw_usage(new_cbc_id, cwd)
+        history = cbc_sessions.parse_cbc_history(new_cbc_id_str, cwd)
+        raw_usage_entries = cbc_sessions.get_raw_usage(new_cbc_id_str, cwd)
     except Exception as e:
         return {"error": f"Failed to parse forked session: {e}"}
 
@@ -532,7 +556,7 @@ async def api_branch_session(session_id: str, data: dict):
     # Create CLIConductor session with user's name and parent's settings
     new_s = sess.create(
         name=name,
-        cbc_session_id=new_cbc_id,
+        cbc_session_id=new_cbc_id_str,
         model=s.model,
         permission_mode=s.permission_mode,
         always_thinking_enabled=s.always_thinking_enabled,
@@ -546,7 +570,7 @@ async def api_branch_session(session_id: str, data: dict):
 
     # Write custom-title to the forked session's JSONL (best-effort)
     try:
-        cbc_sessions.write_custom_title(new_cbc_id, name, cwd)
+        cbc_sessions.write_custom_title(new_cbc_id_str, name, cwd)
     except Exception:
         pass
 
