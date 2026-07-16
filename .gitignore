@@ -41,3 +41,4 @@ scripts/stop_*.bat
 static/js/app.js
 static/js/app.js.map
 docs/
+archive/
