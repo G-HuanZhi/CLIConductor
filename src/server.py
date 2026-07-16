@@ -759,6 +759,15 @@ async def api_cbc_sessions(project_dir: str = "", cwd: str = "", all: int = 0):
     }
 
 
+@app.get("/api/cbc/browse")
+async def api_cbc_browse(path: str = "", limit: int = 30, offset: int = 0, q: str = ""):
+    """Browse cbc sessions as a file-tree (breadcrumb + folders + paginated sessions)."""
+    result = cbc_sessions.browse_cbc_tree(
+        path=path, limit=limit, offset=offset, query=q,
+    )
+    return result
+
+
 @app.post("/api/cbc/sessions/import")
 async def api_cbc_sessions_import(data: dict):
     """Import a cbc session into CLIConductor (Session only, no worker spawned)."""

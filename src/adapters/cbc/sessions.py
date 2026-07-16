@@ -122,6 +122,101 @@ def list_cbc_projects(recent_days: int = 0, min_resume_bytes: int = 0) -> list[d
     return projects
 
 
+def browse_cbc_tree(path: str = "", limit: int = 30, offset: int = 0, query: str = "") -> dict:
+    """Browse cbc sessions in a file-explorer tree fashion.
+
+    path: "" = root (show drives), "D:" = drive, "D:\\PROJECT" = deeper.
+    limit/offset: pagination for sessions at the current level.
+    query: optional title filter.
+
+    Returns {breadcrumbs: [{label, path}], folders: [{name, path, session_count}],
+             sessions: [...], total: N, has_more: bool}
+    """
+    all_projects = list_cbc_projects(recent_days=0, min_resume_bytes=0)
+    if not all_projects:
+        return {"breadcrumbs": [], "folders": [], "sessions": [], "total": 0, "has_more": False}
+
+    # Normalize path and compute segments
+    path = path.strip().rstrip("\\")
+    path_parts = [p.upper() for p in path.split("\\") if p] if path else []
+
+    # Group projects by path prefix and next segment
+    # folder_key -> {name, path, session_count, project_dir (if exact match)}
+    folder_map: dict[str, dict] = {}
+    exact_sessions: list[dict] = []  # sessions from projects at exactly this depth
+
+    for pj in all_projects:
+        fp = (pj["path_hint"] or "").strip().rstrip("\\")
+        if not fp:
+            continue
+
+        fp_upper = fp.upper()
+
+        # Check if this project is under the current path
+        if path:
+            if not fp_upper.startswith(path.upper()):
+                continue
+            remaining = fp[len(path):].lstrip("\\")
+        else:
+            # Root level: group by drive (first segment)
+            remaining = fp
+
+        if not remaining:
+            # Exact path match — load sessions directly
+            session_list = list_cbc_sessions(project_dir=pj["project_dir"])
+            if query:
+                q = query.lower()
+                session_list = [s for s in session_list if q in (s.get("title") or "").lower()]
+            exact_sessions.extend(session_list)
+            continue
+
+        parts = remaining.split("\\")
+        first = parts[0].upper()
+
+        # Build folder key: current_path + first segment
+        folder_key = (path + "\\" + first).upper() if path else first
+        init_kwargs = {"name": parts[0], "path": folder_key, "session_count": 0}
+        folder_map.setdefault(folder_key, init_kwargs)
+
+        count = pj.get("resumable_count") or pj.get("session_count") or 0
+
+        if len(parts) == 1:
+            # Project at exactly this depth — load sessions
+            session_list = list_cbc_sessions(project_dir=pj["project_dir"])
+            # Apply query filter
+            if query:
+                q = query.lower()
+                session_list = [s for s in session_list if q in (s.get("title") or "").lower()]
+            exact_sessions.extend(session_list)
+        else:
+            # Deeper project — just count
+            folder_map[folder_key]["session_count"] += count
+
+    # Note: exact_sessions may contain sessions from different project dirs
+    # Sort by last_timestamp desc
+    exact_sessions.sort(key=lambda s: s.get("last_timestamp", "") or "", reverse=True)
+    total = len(exact_sessions)
+    sessions_page = exact_sessions[offset:offset + limit]
+
+    # Build breadcrumbs
+    breadcrumbs = []
+    cumulative = ""
+    for i, part in enumerate(path_parts):
+        cumulative = (cumulative + "\\" + part) if cumulative else part
+        breadcrumbs.append({"label": part, "path": cumulative})
+
+    # Sort folders by name
+    folders = sorted(folder_map.values(), key=lambda f: f["name"])
+
+    return {
+        "breadcrumbs": breadcrumbs,
+        "folders": folders,
+        "sessions": sessions_page,
+        "total": total,
+        "has_more": (offset + limit) < total,
+    }
+
+
 def _parse_project_label(dir_name: str) -> tuple[str, str]:
     """Extract drive letter and short label from sanitized project name.
 
