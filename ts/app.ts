@@ -302,25 +302,25 @@ interface CbcSessionItem {
   forked_from: string | null;
 }
 
-interface CbcBrowseResult {
-  breadcrumbs: { label: string; path: string }[];
-  folders: { name: string; path: string; session_count: number }[];
-  sessions: CbcSessionItem[];
-  total: number;
-  has_more: boolean;
+interface CbcProject {
+  project_dir: string;
+  session_count: number;
+  resumable_count?: number;
+  path_hint: string;
+  drive: string;
+  short_label: string;
 }
 
-let _cbcBrowsePath: string = '';
-let _cbcBrowseOffset: number = 0;
+async function fetchCbcProjects(): Promise<CbcProject[]> {
+  const resp = await fetch('/api/cbc/projects');
+  const data = await resp.json();
+  return data.projects || [];
+}
 
-async function fetchCbcBrowse(path: string, offset: number, query: string): Promise<CbcBrowseResult> {
-  const params = new URLSearchParams();
-  if (path) params.set('path', path);
-  params.set('offset', String(offset));
-  params.set('limit', '30');
-  if (query) params.set('q', query);
-  const resp = await fetch('/api/cbc/browse?' + params.toString());
-  return await resp.json();
+async function fetchCbcSessions(projectDir: string): Promise<CbcSessionItem[]> {
+  const resp = await fetch(`/api/cbc/sessions?project_dir=${encodeURIComponent(projectDir)}`);
+  const data = await resp.json();
+  return data.sessions || [];
 }
 
 async function importCbcSession(sessionId: string, projectDir: string): Promise<any> {
@@ -1279,46 +1279,51 @@ function init(): void {
   const importCbcBtn = document.getElementById('importCbcBtn') as HTMLButtonElement;
   const importModal = document.getElementById('importModal') as HTMLDivElement;
   const closeImportModal = document.getElementById('closeImportModal') as HTMLButtonElement;
-  const cbcBreadcrumb = document.getElementById('cbcBreadcrumb') as HTMLDivElement;
-  const cbcContent = document.getElementById('cbcContent') as HTMLDivElement;
-  const cbcFooter = document.getElementById('cbcFooter') as HTMLDivElement;
-  const cbcSearch = document.getElementById('cbcSearch') as HTMLInputElement;
+  const cbcDriveSelect = document.getElementById('cbcDriveSelect') as HTMLSelectElement;
+  const cbcProjectSelect = document.getElementById('cbcProjectSelect') as HTMLSelectElement;
+  const cbcSessionListEl = document.getElementById('cbcSessionList') as HTMLDivElement;
+  const cbcSessionCountEl = document.getElementById('cbcSessionCount') as HTMLDivElement;
 
-  function renderBreadcrumb(crumbs: { label: string; path: string }[]): void {
-    if (crumbs.length === 0) {
-      cbcBreadcrumb.innerHTML = '';
-      return;
-    }
-    cbcBreadcrumb.innerHTML = crumbs.map((c, i) => {
-      const label = esc(c.label);
-      if (i === crumbs.length - 1) {
-        return `<span>${label}</span>`;
-      }
-      return `<a href="#" data-cbc-path="${esc(c.path)}">${label}</a> <span>/</span> `;
-    }).join('');
-    cbcBreadcrumb.querySelectorAll('a').forEach((a: HTMLAnchorElement) => {
-      a.addEventListener('click', (e: Event) => {
-        e.preventDefault();
-        const p = a.dataset['cbcPath'];
-        if (p !== undefined) navigateTo(p);
-      });
+  let allProjects: CbcProject[] = [];
+  let currentProjectDir = '';
+
+  function buildDriveSelect(): void {
+    const drives = [...new Set(allProjects.map((p: CbcProject) => p.drive))].sort();
+    cbcDriveSelect.innerHTML = '<option value="">Drive</option>';
+    drives.forEach((d: string) => {
+      const total = allProjects.filter((p: CbcProject) => p.drive === d)
+        .reduce((sum: number, p: CbcProject) => sum + (p.resumable_count || p.session_count), 0);
+      const opt = document.createElement('option');
+      opt.value = d;
+      opt.textContent = `${d} (${total} sessions)`;
+      cbcDriveSelect.appendChild(opt);
     });
+    if (drives.length === 1) {
+      cbcDriveSelect.value = drives[0];
+      cbcDriveSelect.dispatchEvent(new Event('change'));
+    }
   }
 
-  function renderFolders(folders: { name: string; path: string; session_count: number }[]): string {
-    if (folders.length === 0) return '';
-    return '<div class="im-section-label">Folders</div>' + folders.map((f) => {
-      return `<div class="im-folder" data-cbc-path="${esc(f.path)}">
-        <span class="im-folder-icon">\uD83D\uDCC1</span>
-        <span class="im-folder-name">${esc(f.name)}</span>
-        <span class="im-folder-count">${f.session_count} sessions</span>
-      </div>`;
-    }).join('');
+  function buildProjectSelect(drive: string): void {
+    const projects = allProjects.filter((p: CbcProject) => p.drive === drive);
+    projects.sort((a: CbcProject, b: CbcProject) => a.short_label.localeCompare(b.short_label));
+    cbcProjectSelect.innerHTML = '<option value="">Project</option>';
+    projects.forEach((p: CbcProject) => {
+      const rCount = p.resumable_count || p.session_count;
+      const opt = document.createElement('option');
+      opt.value = p.project_dir;
+      opt.textContent = `${p.short_label} (${rCount})`;
+      cbcProjectSelect.appendChild(opt);
+    });
+    if (projects.length > 0) {
+      cbcProjectSelect.value = projects[0].project_dir;
+      currentProjectDir = projects[0].project_dir;
+    }
   }
 
-  function renderSessionItems(sessions: CbcSessionItem[]): string {
-    if (sessions.length === 0) return '';
-    return '<div class="im-section-label">Sessions</div>' + sessions.map((s) => {
+  function renderCbcSessions(sessions: CbcSessionItem[]): void {
+    cbcSessionCountEl.textContent = sessions.length ? `${sessions.length} session(s) found` : '';
+    cbcSessionListEl.innerHTML = sessions.map((s: CbcSessionItem) => {
       const ts = s.last_timestamp ? new Date(s.last_timestamp).toLocaleString() : '';
       const forkBadge = s.forked_from ? ' \uD83D\uDD00' : '';
       return `<div class="im-item" data-sid="${esc(s.session_id)}" data-pd="${esc(s.project_dir)}">
@@ -1326,94 +1331,60 @@ function init(): void {
         <div class="im-meta">${s.message_count} msgs \u00B7 ${esc(s.model || '?')} \u00B7 ${esc(ts)}</div>
       </div>`;
     }).join('');
-  }
-
-  async function navigateTo(path: string): Promise<void> {
-    _cbcBrowsePath = path;
-    _cbcBrowseOffset = 0;
-    cbcSearch.value = '';
-    await loadBrowse();
-  }
-
-  async function loadBrowse(append: boolean = false): Promise<void> {
-    if (!append) {
-      cbcContent.innerHTML = '<div class="im-loading">Loading...</div>';
-      cbcFooter.textContent = '';
-    }
-    try {
-      const data = await fetchCbcBrowse(_cbcBrowsePath, _cbcBrowseOffset, cbcSearch.value.trim());
-      renderBreadcrumb(data.breadcrumbs);
-
-      let html = renderFolders(data.folders);
-      html += renderSessionItems(data.sessions);
-      if (!html && !append) {
-        html = '<div class="im-loading">No sessions found.</div>';
-      }
-      if (append) {
-        cbcContent.insertAdjacentHTML('beforeend', html);
-      } else {
-        cbcContent.innerHTML = html || '<div class="im-loading">No sessions found.</div>';
-      }
-
-      if (data.has_more) {
-        cbcFooter.innerHTML = `<a href="#" id="cbcLoadMore" style="color:#58a6ff;cursor:pointer">Load more (${data.total - _cbcBrowseOffset - 30} remaining)</a>`;
-        document.getElementById('cbcLoadMore')!.addEventListener('click', (e: Event) => {
-          e.preventDefault();
-          _cbcBrowseOffset += 30;
-          loadBrowse(true);
-        });
-      } else if (data.total > 0) {
-        cbcFooter.textContent = `${data.total} session(s)`;
-      } else {
-        cbcFooter.textContent = '';
-      }
-
-      // Attach folder click handlers
-      cbcContent.querySelectorAll<HTMLElement>('.im-folder').forEach((el) => {
-        el.addEventListener('click', () => {
-          const p = el.dataset['cbcPath'];
-          if (p) navigateTo(p);
-        });
+    cbcSessionListEl.querySelectorAll<HTMLElement>('.im-item').forEach((el) => {
+      el.addEventListener('click', async () => {
+        const sid = el.dataset['sid']!;
+        const pd = el.dataset['pd']!;
+        el.style.opacity = '0.5';
+        el.style.pointerEvents = 'none';
+        const result = await importCbcSession(sid, pd);
+        if (result.error) {
+          toast(result.error);
+          el.style.opacity = '1';
+          el.style.pointerEvents = '';
+          return;
+        }
+        importModal.classList.remove('open');
+        await refreshSessions();
+        selectSession(result.id);
+        toast('Session imported');
       });
-
-      // Attach session click handlers
-      cbcContent.querySelectorAll<HTMLElement>('.im-item').forEach((el) => {
-        el.addEventListener('click', async () => {
-          const sid = el.dataset['sid']!;
-          const pd = el.dataset['pd']!;
-          el.style.opacity = '0.5';
-          el.style.pointerEvents = 'none';
-          const result = await importCbcSession(sid, pd);
-          if (result.error) {
-            toast(result.error);
-            el.style.opacity = '1';
-            el.style.pointerEvents = '';
-            return;
-          }
-          importModal.classList.remove('open');
-          await refreshSessions();
-          selectSession(result.id);
-          toast('Session imported');
-        });
-      });
-    } catch (e: any) {
-      if (!append) {
-        cbcContent.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
-      }
-    }
+    });
   }
 
   importCbcBtn.addEventListener('click', async () => {
     importModal.classList.add('open');
-    _cbcBrowsePath = '';
-    _cbcBrowseOffset = 0;
-    cbcSearch.value = '';
-    await loadBrowse();
+    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading...</div>';
+    cbcDriveSelect.innerHTML = '<option value="">Loading...</option>';
+    cbcProjectSelect.innerHTML = '<option value="">-</option>';
+    try {
+      allProjects = await fetchCbcProjects();
+      if (allProjects.length === 0) {
+        cbcSessionListEl.innerHTML = '<div class="im-loading">No cbc projects found.</div>';
+        return;
+      }
+      buildDriveSelect();
+    } catch (e: any) {
+      cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">${esc(e.message)}</div>`;
+    }
   });
 
-  cbcSearch.addEventListener('input', () => {
-    _cbcBrowseOffset = 0;
-    loadBrowse();
+  cbcDriveSelect.addEventListener('change', () => {
+    if (!cbcDriveSelect.value) {
+      cbcProjectSelect.innerHTML = '<option value="">Project</option>';
+      cbcSessionListEl.innerHTML = '<div class="im-loading">Select a project.</div>';
+      return;
+    }
+    buildProjectSelect(cbcDriveSelect.value);
+  });
+
+  cbcProjectSelect.addEventListener('change', () => {
+    currentProjectDir = cbcProjectSelect.value;
+    if (!currentProjectDir) return;
+    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading...</div>';
+    fetchCbcSessions(currentProjectDir)
+      .then((sessions: CbcSessionItem[]) => renderCbcSessions(sessions))
+      .catch((e: Error) => { cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">${esc(e.message)}</div>`; });
   });
 
   closeImportModal.addEventListener('click', () => {
