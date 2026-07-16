@@ -465,14 +465,14 @@ async def api_branch_session(session_id: str, data: dict):
     if not adapter:
         return {"error": f"Unknown adapter: {s.adapter}"}
 
-    # Build fork args: --resume <old_cbc_id> --fork-session
+    # Build fork args: --resume "" --fork-session (matching worker's branch logic)
+    # cbc identifies the source session from the project directory (cwd).
     args = adapter.base_args()
     args.extend(adapter.model_args(s))
     args.extend(adapter.permission_mode_args(s))
     args.extend(adapter.effort_args(s))
     args.extend(adapter.thinking_args(s))
-    args.extend(adapter.resume_args(s))
-    args.extend(adapter.fork_args(s))
+    args.extend(["--resume", "", "--fork-session"])
 
     proc = None
     new_cbc_id_str = None
