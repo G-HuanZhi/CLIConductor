@@ -475,7 +475,7 @@ async def api_branch_session(session_id: str, data: dict):
     args.extend(adapter.fork_args(s))
 
     proc = None
-    new_cbc_id: list[str] = []  # mutable container for concurrent capture
+    new_cbc_id_str = None
     try:
         proc = await asyncio.create_subprocess_exec(
             *args,
@@ -485,9 +485,9 @@ async def api_branch_session(session_id: str, data: dict):
             cwd=s.workdir or None,
         )
 
-        async def _read_and_send():
-            """Concurrently: capture init event, then send prompt."""
-            got_init = False
+        # Read stdout in a task, capture init event with new session ID
+        new_cbc_id: list[str] = []
+        async def _capture_init():
             async for line in proc.stdout:
                 decoded = line.decode("utf-8", errors="replace").strip()
                 if not decoded:
@@ -499,35 +499,25 @@ async def api_branch_session(session_id: str, data: dict):
                     cid = adapter.extract_session_id(event)
                     if cid:
                         new_cbc_id.append(cid)
-                    got_init = True
-                if got_init and adapter.is_result_event(event):
                     return
 
-        # Start reading stdout immediately (concurrent with stdin write)
-        read_task = asyncio.create_task(_read_and_send())
-
-        # Small delay to let cbc initialize, then send prompt
-        await asyncio.sleep(0.2)
-        if proc.stdin is not None and proc.returncode is None:
-            stdin_data = adapter.encode_user_message("ok")
-            proc.stdin.write(stdin_data + b"\n")
-            await proc.stdin.drain()
-            proc.stdin.close()
-
-        # Wait for init capture + result, then drain any remaining lines
+        read_task = asyncio.create_task(_capture_init())
         try:
-            await asyncio.wait_for(read_task, timeout=30)
+            await asyncio.wait_for(read_task, timeout=15)
         except asyncio.TimeoutError:
             pass
 
-        # Drain any remaining stdout
+        # Kill process immediately — no user message needed
         try:
-            async for _ in proc.stdout:
-                pass
+            proc.kill()
+            await proc.wait()
         except Exception:
             pass
 
-        await proc.wait()
+        if not new_cbc_id:
+            return {"error": "cbc fork returned no session ID (init event not received)"}
+
+        new_cbc_id_str = new_cbc_id[0]
     except Exception as e:
         return {"error": f"Fork process error: {e}"}
     finally:
@@ -537,10 +527,8 @@ async def api_branch_session(session_id: str, data: dict):
             except Exception:
                 pass
 
-    if not new_cbc_id or not new_cbc_id[0]:
+    if not new_cbc_id_str:
         return {"error": "Failed to get new session ID from cbc fork"}
-
-    new_cbc_id_str = new_cbc_id[0]
 
     # Parse the forked session's JSONL
     cwd = s.workdir or ""
