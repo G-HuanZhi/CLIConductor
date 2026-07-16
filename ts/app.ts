@@ -251,6 +251,7 @@ let _refreshVersion: number = 0;
 function refreshSessions(): void {
   _refreshVersion++;
   const version = _refreshVersion;
+  document.getElementById('sessionList')!.innerHTML = '<div class="sidebar-loading">Loading...</div>';
   fetch('/api/sessions')
     .then((r: Response) => r.json())
     .then((data: ApiSessionsResponse) => {
