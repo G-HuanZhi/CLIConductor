@@ -349,6 +349,44 @@ def write_custom_title(session_id: str, title: str, cwd: str | None = None):
         f.write(json.dumps(event, ensure_ascii=False) + "\n")
 
 
+def fork_cbc_session(parent_id: str, name: str, cwd: str | None = None) -> str:
+    """Fork a cbc session by copying JSONL + writing meta.json.
+
+    Pure file operations — no cbc process spawned.
+    Returns the new (pre-generated) cbc session ID.
+    """
+    import uuid as _uuid
+    proj_dir = _project_dir(cwd)
+    parent_path = proj_dir / f"{parent_id}.jsonl"
+
+    if not parent_path.exists():
+        raise FileNotFoundError(f"Parent session JSONL not found: {parent_path}")
+
+    # Generate unique session ID
+    new_id = str(_uuid.uuid4())
+    new_path = proj_dir / f"{new_id}.jsonl"
+    while new_path.exists():
+        new_id = str(_uuid.uuid4())
+        new_path = proj_dir / f"{new_id}.jsonl"
+
+    # Copy JSONL
+    import shutil
+    shutil.copy2(parent_path, new_path)
+
+    # Write meta.json
+    meta_path = proj_dir / f"{new_id}.meta.json"
+    meta = {
+        "forkedFrom": parent_id,
+        "forkedAt": int(time.time() * 1000),
+    }
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    # Write custom-title
+    write_custom_title(new_id, name, cwd)
+
+    return new_id
+
+
 def _strip_html(text: str) -> str:
     """Remove HTML tags and system-reminder markers from text."""
     text = re.sub(r"<[^>]*>", "", text)

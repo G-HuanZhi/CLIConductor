@@ -446,7 +446,7 @@ async def api_rename_session(session_id: str, data: dict):
 
 @app.post("/api/sessions/{session_id}/branch")
 async def api_branch_session(session_id: str, data: dict):
-    """Branch from a session — fork cbc, import new session, preserve settings."""
+    """Branch from a session — copy cbc JSONL, import new session, preserve settings."""
     s = sess.get(session_id)
     if not s:
         return {"error": "Session not found"}
@@ -461,77 +461,18 @@ async def api_branch_session(session_id: str, data: dict):
     if err:
         return {"error": err}
 
-    adapter = get_adapter(s.adapter)
-    if not adapter:
-        return {"error": f"Unknown adapter: {s.adapter}"}
-
-    # Build fork args: resume parent session and fork
-    args = adapter.base_args()
-    args.extend(adapter.model_args(s))
-    args.extend(adapter.permission_mode_args(s))
-    args.extend(adapter.effort_args(s))
-    args.extend(adapter.thinking_args(s))
-    args.extend(adapter.resume_args(s))  # --resume <parent_cbc_id>
-    args.extend(adapter.fork_args(s))    # --fork-session
-
-    proc = None
-    new_cbc_id_str = None
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stdin=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            cwd=s.workdir or None,
-        )
-
-        # Close stdin immediately — cbc forks on startup, then waits for stdin
-        if proc.stdin:
-            proc.stdin.close()
-
-        # Read lines with per-line timeout — capture the init event
-        deadline = asyncio.get_event_loop().time() + 15
-        while True:
-            remaining = deadline - asyncio.get_event_loop().time()
-            if remaining <= 0:
-                break
-            try:
-                line = await asyncio.wait_for(
-                    proc.stdout.readline(), timeout=min(remaining, 2)
-                )
-            except asyncio.TimeoutError:
-                continue
-            if not line:
-                break  # EOF
-            decoded = line.decode("utf-8", errors="replace").strip()
-            if not decoded:
-                continue
-            event = adapter.parse_event(decoded)
-            if event and adapter.is_init_event(event):
-                cid = adapter.extract_session_id(event)
-                if cid:
-                    new_cbc_id_str = cid
-                    break
-
-        # Kill process immediately
-        try:
-            proc.kill()
-        except Exception:
-            pass
-    except Exception as e:
-        return {"error": f"Fork process error: {e}"}
-    finally:
-        if proc is not None and proc.returncode is None:
-            try:
-                proc.kill()
-            except Exception:
-                pass
-
-    if not new_cbc_id_str:
-        return {"error": "Failed to get new session ID from cbc fork"}
-
-    # Parse the forked session's JSONL
+    # Fork via pure file operations — no cbc process spawned
     cwd = s.workdir or ""
+    try:
+        new_cbc_id_str = cbc_sessions.fork_cbc_session(
+            s.cbc_session_id, name, cwd or None,
+        )
+    except FileNotFoundError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        return {"error": f"Fork failed: {e}"}
+
+    # Import the forked session's JSONL
     try:
         history = cbc_sessions.parse_cbc_history(new_cbc_id_str, cwd)
         raw_usage_entries = cbc_sessions.get_raw_usage(new_cbc_id_str, cwd)
@@ -555,12 +496,6 @@ async def api_branch_session(session_id: str, data: dict):
         workdir=s.workdir,
         history=history,
     )
-
-    # Write custom-title to the forked session's JSONL (best-effort)
-    try:
-        cbc_sessions.write_custom_title(new_cbc_id_str, name, cwd)
-    except Exception:
-        pass
 
     await broadcast({
         "type": "session.created",
