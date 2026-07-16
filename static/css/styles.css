@@ -567,6 +567,21 @@ body {
   transform: rotate(90deg);
 }
 
+/* ── Unread badge (green bar below toggle-icon, gone after first open) ── */
+.unread-badge {
+  display: inline-block;
+  width: .7rem;
+  height: .35rem;
+  background: #3fb950;
+  border-radius: 2px;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+.tool-group-header .toggle-icon + .unread-badge {
+  position: relative;
+  top: 2px;
+}
+
 .tool-group-body .msg.tool {
   margin: 0;
   border-radius: 0;
