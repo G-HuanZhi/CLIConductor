@@ -103,7 +103,7 @@ let currentHistory: Message[] = [];
 let toolGroupOpen: boolean = false;
 let _currentToolGroupStart: number = -1;
 const _inputDrafts: Map<string, string> = new Map();
-let _inBatchRender: boolean = false;  // true while renderMessages is running → skip unread badge
+const _unreadKeys: Set<string> = new Set();  // content hashes for unread thinking/tool blocks
 
 // ── Markdown / LaTeX rendering ──
 if (typeof (window as any).marked !== 'undefined') {
@@ -384,6 +384,7 @@ function selectSession(id: string): void {
   } else if (currentSessionId) {
     _inputDrafts.delete(currentSessionId);
   }
+  _unreadKeys.clear();
   currentSessionId = id;
   const s = modelData.find((x: Session) => x.id === id);
   if (!s) return;
@@ -468,7 +469,6 @@ function renderMessages(history: Message[]): void {
     toolGroupOpen = false;
     return;
   }
-  _inBatchRender = true;
   const grouped: Array<{ type?: string; items?: Message[] } & Partial<Message>> = [];
   let toolGroup: any = null;
   for (let i = 0; i < currentHistory.length; i++) {
@@ -491,7 +491,6 @@ function renderMessages(history: Message[]): void {
       _renderMsgEl(g.role, g.content);
     }
   });
-  _inBatchRender = false;
   el.scrollTop = el.scrollHeight;
   toolGroupOpen = false;
 }
@@ -566,7 +565,7 @@ function _renderMsgEl(role: string, content: string): void {
     div.innerHTML =
       '\uD83D\uDCAD <span class="thinking-toggle">show thinking</span>' +
       ' <span class="toggle-icon">\u25BC</span>' +
-      (_inBatchRender ? '' : '<span class="unread-badge"></span>') +
+      (_unreadKeys.has(content) ? '<span class="unread-badge"></span>' : '') +
       '<div class="thinking-body">' + esc(content) + '</div>';
     div.onclick = function () {
       const body = div.querySelector('.thinking-body') as HTMLElement;
@@ -576,7 +575,7 @@ function _renderMsgEl(role: string, content: string): void {
       body.classList.toggle('open');
       div.classList.toggle('open');
       toggle.textContent = body.classList.contains('open') ? 'hide thinking' : 'show thinking';
-      if (badge) badge.style.display = 'none';
+      if (badge) { badge.style.display = 'none'; _unreadKeys.delete(content); }
     };
   } else if (role === 'tool') {
     div.className = 'msg tool';
@@ -604,20 +603,26 @@ function _createToolGroupEl(items: Message[]): HTMLElement {
   const count = items.length;
   let names = items.map(function (t) { return toolName(t.content); }).slice(0, 3).join(', ');
   if (items.length > 3) names += ', \u2026';
+  const hasUnread = items.some(function (t: Message) { return _unreadKeys.has(t.content); });
   wrapper.innerHTML =
     '<div class="tool-group-header">' +
     '\uD83D\uDD27 <strong>' + count + ' tools:</strong> ' +
     esc(names) +
     ' <span class="toggle-icon">\u25BC</span>' +
-    (_inBatchRender ? '' : '<span class="unread-badge"></span>') +
+    (hasUnread ? '<span class="unread-badge"></span>' : '') +
     '</div>' +
     '<div class="tool-group-body"></div>';
+  wrapper.setAttribute('data-tool-contents', JSON.stringify(items.map(function (t: Message) { return t.content; })));
   const body = wrapper.querySelector('.tool-group-body')!;
   _fillToolGroupBody(body, items);
   (wrapper.querySelector('.tool-group-header') as HTMLElement).onclick = function () {
     wrapper.classList.toggle('collapsed');
     const badge = wrapper.querySelector('.unread-badge') as HTMLElement;
-    if (badge) badge.style.display = 'none';
+    if (badge) { badge.style.display = 'none'; }
+    try {
+      const contents: string[] = JSON.parse(wrapper.getAttribute('data-tool-contents') || '[]');
+      contents.forEach(function (c: string) { _unreadKeys.delete(c); });
+    } catch (e) { /* ignore */ }
   };
   return wrapper;
 }
@@ -645,6 +650,7 @@ function _lastToolGroupEl(): HTMLElement | null {
 
 function addMessage(role: string, content: string): void {
   currentHistory.push({ role: role, content: content });
+  if (role === 'thinking' || role === 'tool') _unreadKeys.add(content);
   _renderMsgEl(role, content);
 }
 
@@ -660,10 +666,12 @@ function appendEvent(event: WorkerEvent): void {
         _renderMsgEl('assistant', b.text || '');
       } else if (b.type === 'thinking') {
         currentHistory.push({ role: 'thinking', content: b.thinking || '' });
+        _unreadKeys.add(b.thinking || '');
         _renderMsgEl('thinking', b.thinking || '');
       } else if (b.type === 'tool_use') {
         const c = (b.name || '') + '(' + JSON.stringify(b.input || {}) + ')';
         currentHistory.push({ role: 'tool', content: c });
+        _unreadKeys.add(c);
         _appendToolMessage(c);
       }
     });
@@ -682,29 +690,18 @@ function _appendToolMessage(content: string): void {
     const body = lastGroup.querySelector('.tool-group-body')!;
     const count = body.children.length + 1;
     _fillToolGroupBody(body, [{ role: 'tool', content: content }]);
-    // refresh header count + names, preserve unread-badge state
-    const names = currentHistory
+    // refresh header count + names, always show badge for new streaming tool
+    const allTools = currentHistory
       .slice(_currentToolGroupStart)
-      .filter((m: Message) => m.role === 'tool')
-      .map(function (m) { return toolName(m.content); })
-      .slice(0, 3).join(', ');
-    const existingBadge = lastGroup.querySelector('.unread-badge') as HTMLElement;
-    const badgeHidden = existingBadge && existingBadge.style.display === 'none';
+      .filter((m: Message) => m.role === 'tool');
+    const names = allTools.map(function (m) { return toolName(m.content); }).slice(0, 3).join(', ');
     const headerHtml =
       '\uD83D\uDD27 <strong>' + count + ' tools:</strong> ' +
       esc(names) + (count > 3 ? ', \u2026' : '') +
       ' <span class="toggle-icon">\u25BC</span>' +
-      (badgeHidden ? '' : '<span class="unread-badge"></span>');
-    const header = lastGroup.querySelector('.tool-group-header') as HTMLElement;
-    header.innerHTML = headerHtml;
-    if (badgeHidden) {
-      // re-bind click handler since innerHTML replaced it
-      header.onclick = function () {
-        lastGroup.classList.toggle('collapsed');
-        const b = lastGroup.querySelector('.unread-badge') as HTMLElement;
-        if (b) b.style.display = 'none';
-      };
-    }
+      '<span class="unread-badge"></span>';
+    (lastGroup.querySelector('.tool-group-header') as HTMLElement).innerHTML = headerHtml;
+    lastGroup.setAttribute('data-tool-contents', JSON.stringify(allTools.map(function (m: Message) { return m.content; })));
     el.scrollTop = el.scrollHeight;
     return;
   }
