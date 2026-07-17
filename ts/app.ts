@@ -424,6 +424,23 @@ interface CbcProject {
   short_label: string;
 }
 
+interface KimiWorkspace {
+  workspace_id: string;
+  name: string;
+  root: string;
+  session_count: number;
+}
+
+interface KimiSessionItem {
+  session_id: string;
+  workspace_id: string;
+  title: string;
+  workDir: string;
+  message_count: number;
+  model: string;
+  updatedAt: string;
+}
+
 async function fetchCbcProjects(): Promise<CbcProject[]> {
   const resp = await fetch('/api/cbc/projects');
   const data = await resp.json();
@@ -441,6 +458,27 @@ async function importCbcSession(sessionId: string, projectDir: string): Promise<
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ session_id: sessionId, project_dir: projectDir }),
+  });
+  return await resp.json();
+}
+
+async function fetchKimiWorkspaces(): Promise<KimiWorkspace[]> {
+  const resp = await fetch('/api/kimi/workspaces');
+  const data = await resp.json();
+  return data.workspaces || [];
+}
+
+async function fetchKimiSessions(cwd: string): Promise<KimiSessionItem[]> {
+  const resp = await fetch(`/api/kimi/sessions?cwd=${encodeURIComponent(cwd)}`);
+  const data = await resp.json();
+  return data.sessions || [];
+}
+
+async function importKimiSession(sessionId: string, cwd: string): Promise<any> {
+  const resp = await fetch('/api/kimi/sessions/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId, cwd: cwd }),
   });
   return await resp.json();
 }
@@ -1614,8 +1652,68 @@ function init(): void {
     });
   }
 
-  // ── Import Modal ──
-  const importCbcBtn = document.getElementById('importCbcBtn') as HTMLButtonElement;
+  // ── Import Dropdown ──
+  const importBtn = document.getElementById('importBtn') as HTMLButtonElement;
+  const importDropdown = document.getElementById('importDropdown') as HTMLDivElement;
+
+  (window as any).openCbcImport = function (): void {
+    importDropdown.classList.remove('open');
+    importModal.classList.add('open');
+    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
+    cbcSessionCountEl.textContent = '';
+    cbcDriveSelect.innerHTML = '<option value="">Loading...</option>';
+    cbcProjectSelect.innerHTML = '<option value="">-</option>';
+
+    fetchCbcProjects()
+      .then((projects) => {
+        allProjects = projects;
+        if (allProjects.length === 0) {
+          cbcDriveSelect.innerHTML = '<option value="">No projects</option>';
+          cbcSessionListEl.innerHTML = '<div class="im-loading">No cbc projects found.</div>';
+          return;
+        }
+        buildDriveSelect();
+      })
+      .catch((e: any) => {
+        cbcDriveSelect.innerHTML = '<option value="">Failed</option>';
+        cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+      });
+  };
+
+  (window as any).openKimiImport = function (): void {
+    importDropdown.classList.remove('open');
+    kimiImportModal.classList.add('open');
+    kimiSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
+    kimiSessionCountEl.textContent = '';
+    kimiWorkspaceSelect.innerHTML = '<option value="">Loading...</option>';
+
+    fetchKimiWorkspaces()
+      .then((workspaces) => {
+        allKimiWorkspaces = workspaces;
+        if (allKimiWorkspaces.length === 0) {
+          kimiWorkspaceSelect.innerHTML = '<option value="">No workspaces</option>';
+          kimiSessionListEl.innerHTML = '<div class="im-loading">No Kimi workspaces found.</div>';
+          return;
+        }
+        buildKimiWorkspaceSelect();
+      })
+      .catch((e: any) => {
+        kimiWorkspaceSelect.innerHTML = '<option value="">Failed</option>';
+        kimiSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+      });
+  };
+
+  importBtn.addEventListener('click', (e: MouseEvent) => {
+    e.stopPropagation();
+    importDropdown.classList.toggle('open');
+  });
+  document.addEventListener('click', (e: MouseEvent) => {
+    if (!importDropdown.contains(e.target as Node) && e.target !== importBtn) {
+      importDropdown.classList.remove('open');
+    }
+  });
+
+  // ── Import cbc Modal ──
   const importModal = document.getElementById('importModal') as HTMLDivElement;
   const closeImportModal = document.getElementById('closeImportModal') as HTMLButtonElement;
   const cbcDriveSelect = document.getElementById('cbcDriveSelect') as HTMLSelectElement;
@@ -1703,27 +1801,6 @@ function init(): void {
     }
   }
 
-  importCbcBtn.addEventListener('click', async () => {
-    importModal.classList.add('open');
-    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
-    cbcSessionCountEl.textContent = '';
-    cbcDriveSelect.innerHTML = '<option value="">Loading...</option>';
-    cbcProjectSelect.innerHTML = '<option value="">-</option>';
-
-    try {
-      allProjects = await fetchCbcProjects();
-      if (allProjects.length === 0) {
-        cbcDriveSelect.innerHTML = '<option value="">No projects</option>';
-        cbcSessionListEl.innerHTML = '<div class="im-loading">No cbc projects found.</div>';
-        return;
-      }
-      buildDriveSelect();
-    } catch (e: any) {
-      cbcDriveSelect.innerHTML = '<option value="">Failed</option>';
-      cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
-    }
-  });
-
   cbcDriveSelect.addEventListener('change', () => {
     const drive = cbcDriveSelect.value;
     if (!drive) {
@@ -1752,6 +1829,89 @@ function init(): void {
   importModal.addEventListener('click', (e: MouseEvent) => {
     if (e.target === importModal) {
       importModal.classList.remove('open');
+    }
+  });
+
+  // ── Import Kimi Modal ──
+  const kimiImportModal = document.getElementById('kimiImportModal') as HTMLDivElement;
+  const closeKimiImportModal = document.getElementById('closeKimiImportModal') as HTMLButtonElement;
+  const kimiWorkspaceSelect = document.getElementById('kimiWorkspaceSelect') as HTMLSelectElement;
+  const kimiSessionListEl = document.getElementById('kimiSessionList') as HTMLDivElement;
+  const kimiSessionCountEl = document.getElementById('kimiSessionCount') as HTMLDivElement;
+
+  let allKimiWorkspaces: KimiWorkspace[] = [];
+  let currentKimiCwd = '';
+
+  function buildKimiWorkspaceSelect(): void {
+    kimiWorkspaceSelect.innerHTML = '<option value="">Workspace</option>';
+    allKimiWorkspaces.forEach((ws: KimiWorkspace) => {
+      const opt = document.createElement('option');
+      opt.value = ws.root;
+      opt.textContent = `${ws.name || ws.workspace_id} (${ws.session_count})`;
+      kimiWorkspaceSelect.appendChild(opt);
+    });
+    if (allKimiWorkspaces.length > 0) {
+      kimiWorkspaceSelect.value = allKimiWorkspaces[0].root;
+      currentKimiCwd = allKimiWorkspaces[0].root;
+      loadKimiSessions(currentKimiCwd);
+    }
+  }
+
+  function renderKimiSessions(sessions: KimiSessionItem[]): void {
+    kimiSessionCountEl.textContent = sessions.length ? `${sessions.length} session(s) found` : '';
+    kimiSessionListEl.innerHTML = sessions.map((s: KimiSessionItem) => {
+      const ts = s.updatedAt ? new Date(s.updatedAt).toLocaleString() : '';
+      return `<div class="im-item" data-sid="${esc(s.session_id)}" data-cwd="${esc(s.workDir)}">
+        <div class="im-title">${esc(s.title || 'Untitled')}</div>
+        <div class="im-meta">${s.message_count} msgs \u00B7 ${esc(s.model || '?')} \u00B7 ${esc(ts)}</div>
+      </div>`;
+    }).join('');
+    kimiSessionListEl.querySelectorAll<HTMLElement>('.im-item').forEach((el) => {
+      el.addEventListener('click', async () => {
+        const sid = el.dataset['sid']!;
+        const cwd = el.dataset['cwd']!;
+        el.style.opacity = '0.5';
+        el.style.pointerEvents = 'none';
+        const result = await importKimiSession(sid, cwd);
+        if (result.error) {
+          toast(result.error);
+          el.style.opacity = '1';
+          el.style.pointerEvents = '';
+          return;
+        }
+        kimiImportModal.classList.remove('open');
+        await refreshSessions();
+        selectSession(result.id);
+        toast('Kimi session imported');
+      });
+    });
+  }
+
+  async function loadKimiSessions(cwd: string): Promise<void> {
+    kimiSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
+    kimiSessionCountEl.textContent = '';
+    try {
+      const sessions = await fetchKimiSessions(cwd);
+      renderKimiSessions(sessions);
+    } catch (e: any) {
+      kimiSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+    }
+  }
+
+  kimiWorkspaceSelect.addEventListener('change', () => {
+    currentKimiCwd = kimiWorkspaceSelect.value;
+    if (currentKimiCwd) {
+      loadKimiSessions(currentKimiCwd);
+    }
+  });
+
+  closeKimiImportModal.addEventListener('click', () => {
+    kimiImportModal.classList.remove('open');
+  });
+
+  kimiImportModal.addEventListener('click', (e: MouseEvent) => {
+    if (e.target === kimiImportModal) {
+      kimiImportModal.classList.remove('open');
     }
   });
 
