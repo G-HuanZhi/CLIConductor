@@ -18,6 +18,8 @@ interface Session {
   workerStatus?: string | null;
   workerId?: string | null;
   history: Message[];
+  historyTruncated?: boolean;
+  historyTotal?: number;
   lastResult?: Record<string, unknown> | null;
   totalUsage?: Record<string, number> | null;
 }
@@ -102,6 +104,12 @@ let bubbleViewEnabled: boolean = true;
 let currentHistory: Message[] = [];
 let toolGroupOpen: boolean = false;
 let _currentToolGroupStart: number = -1;
+let _historyLoading: boolean = false;
+let _historyLoadEnd: number = 0;   // index of oldest loaded message in session history
+let _rendering: boolean = false;   // true while renderMessages is actively chunking
+const MAX_MESSAGE_NODES = 2000;    // trim older history when exceeded
+const SCROLL_BOTTOM_THRESHOLD = 120; // px; auto-scroll only when within this distance
+
 const _inputDrafts: Map<string, string> = new Map();
 /** Per-session set of unread thinking/tool content hashes */
 const _sessionUnread: Map<string, Set<string>> = new Map();
@@ -113,13 +121,72 @@ function _getUnread(): Set<string> {
   return s;
 }
 
+// ── Render guards ──
+// Tracks the last history tail we rendered for the current session, so WS-driven
+// refreshSessions() can skip full re-renders when nothing has changed.
+let _renderedFor: { sessionId: string | null; tailRole: string; tailContent: string } = {
+  sessionId: null,
+  tailRole: '',
+  tailContent: '',
+};
+
+/** Tail used for the render guard: last non-system message.
+ *  Local-only system messages (e.g. "[DONE] Task completed") never appear in
+ *  the server-side history, so comparing them would defeat the guard and
+ *  trigger a full rebuild after every task. */
+function _tailOf(history: Message[]): { role: string; content: string } {
+  const h = history || [];
+  for (let i = h.length - 1; i >= 0; i--) {
+    if (h[i].role !== 'system') {
+      return { role: h[i].role, content: h[i].content || '' };
+    }
+  }
+  return { role: '', content: '' };
+}
+
+function _recordRenderedFor(sessionId: string | null, history: Message[]): void {
+  const tail = _tailOf(history);
+  _renderedFor = {
+    sessionId,
+    tailRole: tail.role,
+    tailContent: tail.content,
+  };
+}
+
+function _shouldRenderMessages(sessionId: string | null, history: Message[]): boolean {
+  const tail = _tailOf(history);
+  return !(
+    _renderedFor.sessionId === sessionId &&
+    _renderedFor.tailRole === tail.role &&
+    _renderedFor.tailContent === tail.content
+  );
+}
+
+// Debounce refreshSessions so a burst of worker events produces a single fetch.
+let _refreshTimer: number | null = null;
+function scheduleRefreshSessions(): void {
+  if (_refreshTimer !== null) {
+    clearTimeout(_refreshTimer);
+  }
+  _refreshTimer = window.setTimeout(() => {
+    _refreshTimer = null;
+    refreshSessions();
+  }, 300);
+}
+
 // ── Markdown / LaTeX rendering ──
 if (typeof (window as any).marked !== 'undefined') {
   (window as any).marked.setOptions({ breaks: true, gfm: true });
 }
 
+// Markdown cache — avoids re-parsing the same content on session switches
+const _mdCache: Map<string, string> = new Map();
+const _MD_CACHE_MAX = 2000;
+
 function renderMarkdown(text: string): string {
   if (!text) return '';
+  const cached = _mdCache.get(text);
+  if (cached !== undefined) return cached;
 
   const mathStore: Array<{ key: string; latex: string; display: boolean }> = [];
   let mathIndex = 0;
@@ -161,7 +228,14 @@ function renderMarkdown(text: string): string {
       (window as any).hljs.highlightElement(block);
     });
   }
-  return tmp.innerHTML;
+  const result = tmp.innerHTML;
+  _mdCache.set(text, result);
+  if (_mdCache.size > _MD_CACHE_MAX) {
+    // delete oldest entry (Map is insertion-ordered)
+    const first = _mdCache.keys().next().value as string;
+    _mdCache.delete(first);
+  }
+  return result;
 }
 
 // ── View toggle ──
@@ -233,13 +307,15 @@ function onWsMessage(e: MessageEvent): void {
 }
 
 /** Apply a worker update from a WebSocket event.
- *  Side effects: syncs currentWorkerId, updateTopBar (incl. mobile dot),
- *  renderSessionList, and triggers a debounced refreshSessions fetch. */
+ *  Side effects: syncs modelData, currentWorkerId, updateTopBar, updates the
+ *  affected sidebar item in-place, and schedules a debounced refreshSessions
+ *  fetch. This avoids rebuilding the whole message tree on every status event. */
 function _applyWorkerUpdate(
   sessionId: string | undefined,
   workerId: string | undefined | null,
   status: string | null
 ): void {
+  if (!sessionId) return;
   for (let i = 0; i < modelData.length; i++) {
     if (modelData[i].id === sessionId) {
       modelData[i].workerId = workerId ?? undefined;
@@ -251,8 +327,21 @@ function _applyWorkerUpdate(
     currentWorkerId = workerId ?? null;
     updateTopBar();
   }
-  renderSessionList();
-  refreshSessions();
+  // Update the affected sidebar item without rebuilding the whole list.
+  const listEl = document.getElementById('sessionList')!;
+  const items = listEl.querySelectorAll('.sess-item');
+  let found = false;
+  items.forEach((item) => {
+    if ((item as HTMLElement).dataset.sessionId === sessionId) {
+      const dot = item.querySelector('.s-dot');
+      if (dot) dot.className = 's-dot ' + (status || 'offline');
+      found = true;
+    }
+  });
+  if (!found) {
+    renderSessionList();
+  }
+  scheduleRefreshSessions();
 }
 
 // ── Session list ──
@@ -261,7 +350,12 @@ let _refreshVersion: number = 0;
 function refreshSessions(): void {
   _refreshVersion++;
   const version = _refreshVersion;
-  document.getElementById('sessionList')!.innerHTML = '<div class="sidebar-loading">Loading...</div>';
+  const listEl = document.getElementById('sessionList')!;
+  // Only show the spinner on the very first load. Once we have a list,
+  // keep it visible to avoid flicker while we refresh in the background.
+  if (listEl.children.length === 0) {
+    listEl.innerHTML = '<div class="sidebar-loading">Loading...</div>';
+  }
   fetch('/api/sessions')
     .then((r: Response) => r.json())
     .then((data: ApiSessionsResponse) => {
@@ -277,7 +371,12 @@ function refreshSessions(): void {
         currentWorkerId = matched.workerId ?? null;
         const chatNameEl = document.getElementById('chatName')!;
         if (chatNameEl.style.display !== 'none') {
-          renderMessages(matched.history || []);
+          // Skip full rebuild if the tail of the server's history is already
+          // rendered. Local DOM may contain more older messages; rebuilding
+          // would throw them away.
+          if (_shouldRenderMessages(currentSessionId, matched.history || [])) {
+            renderMessages(matched.history || []);
+          }
         }
       }
       if (currentSessionId) updateTopBar();
@@ -338,6 +437,7 @@ function renderSessionList(): void {
   modelData.forEach((s: Session) => {
     const div = document.createElement('div');
     div.className = 'sess-item' + (s.id === currentSessionId ? ' active' : '');
+    div.dataset.sessionId = s.id;
     div.onclick = function (e: MouseEvent) {
       const target = e.target as HTMLElement;
       if (target.closest('.sess-del')) return;
@@ -371,7 +471,7 @@ function renderSessionList(): void {
       esc(s.model || defaultModel) +
       '</span>' +
       '<span>' +
-      (s.history || []).length +
+      (s.historyTotal ?? (s.history || []).length) +
       ' msgs</span>' +
       (totalCredit != null ? '<span class="sess-credit">' + totalCredit.toFixed(2) + ' credits</span>' : '') +
       '</div>';
@@ -398,6 +498,12 @@ function selectSession(id: string): void {
   if (!s) return;
 
   currentWorkerId = s.workerId ?? null;
+  _historyLoading = false;
+  // Index of the oldest loaded message within the FULL session history.
+  // The server only sends the last N (truncated) messages, so the oldest
+  // loaded message sits at historyTotal - loaded, NOT at loaded.
+  const loaded = (s.history || []).length;
+  _historyLoadEnd = Math.max(0, (s.historyTotal ?? loaded) - loaded);
 
   renderSessionList();
   updateTopBar();
@@ -410,6 +516,85 @@ function selectSession(id: string): void {
   if (document.getElementById('settingsPanel')!.classList.contains('open')) {
     syncPanelFromServer();
   }
+  // Load additional history if truncated
+  if (s.historyTruncated) {
+    loadOlderMessages();
+  }
+}
+
+/** Fetch and prepend older messages for the current session. */
+function loadOlderMessages(): void {
+  if (_historyLoading || _historyLoadEnd <= 0 || !currentSessionId) return;
+  _historyLoading = true;
+  const sid = currentSessionId;
+  const limit = 50;
+  fetch('/api/sessions/' + sid + '/history?before=' + _historyLoadEnd + '&limit=' + limit)
+    .then((r: Response) => r.json())
+    .then((d: any) => {
+      _historyLoading = false;
+      if (currentSessionId !== sid) return;
+      if (d.error) return;
+      const msgs: Message[] = d.messages || [];
+      if (msgs.length === 0) return;
+      _historyLoadEnd = d.start;      // Build fragment for older messages
+      const frag = document.createDocumentFragment();
+      const grouped: Array<{ type?: string; items?: Message[] } & Partial<Message>> = [];
+      let toolGroup: any = null;
+      for (let i = 0; i < msgs.length; i++) {
+        const h = msgs[i];
+        if (h.role === 'tool') {
+          if (!toolGroup) {
+            toolGroup = { type: 'tool_group', items: [] };
+            grouped.push(toolGroup);
+          }
+          toolGroup.items!.push(h);
+        } else {
+          toolGroup = null;
+          grouped.push(h);
+        }
+      }
+      for (let i = 0; i < grouped.length; i++) {
+        const g = grouped[i];
+        if (g.type === 'tool_group') {
+          _renderToolGroup(g.items!, frag);
+        } else {
+          _renderMsgEl(g.role || '', g.content || '', frag);
+        }
+      }
+      const el = document.getElementById('messages')!;
+      // Preserve scroll: anchor to first visible element
+      const ref = el.firstElementChild;
+      const scrollRefTop = ref ? ref.getBoundingClientRect().top : 0;
+      if (el.firstChild) {
+        el.insertBefore(frag, el.firstChild);
+      } else {
+        el.appendChild(frag);
+      }
+      // Restore scroll position so visible content stays put
+      if (ref) {
+        el.scrollTop += ref.getBoundingClientRect().top - scrollRefTop;
+      }
+      // Update modelData
+      const s = modelData.find((x: Session) => x.id === sid);
+      if (s) {
+        s.history = msgs.concat(s.history);
+        if (d.start <= 0) s.historyTruncated = false;
+      }
+      // Trim from bottom if DOM nodes exceed limit (user is near top anyway)
+      let nodeCount = el.children.length;
+      if (nodeCount > MAX_MESSAGE_NODES) {
+        const trimCount = nodeCount - MAX_MESSAGE_NODES;
+        for (let i = 0; i < trimCount; i++) {
+          const last = el.lastElementChild;
+          if (last) el.removeChild(last);
+        }
+      }
+    })
+    .catch(function () {
+      // Network failure: reset the loading flag so future scrolls can retry,
+      // otherwise lazy-loading would be stuck forever.
+      _historyLoading = false;
+    });
 }
 
 // ── Top bar ──
@@ -461,19 +646,26 @@ function showEmpty(): void {
   (document.getElementById('messages')!).innerHTML =
     '<div class="empty-chat">Select a session to start</div>';
   currentHistory = [];
+  _recordRenderedFor(currentSessionId, currentHistory);
   toolGroupOpen = false;
 }
 
 // ── Messages ──
 
+let _renderVersion: number = 0;
+const RENDER_CHUNK = 30;
+
 function renderMessages(history: Message[]): void {
   currentHistory = history || [];
+  _recordRenderedFor(currentSessionId, currentHistory);
   _currentToolGroupStart = -1;
+  _rendering = true;
   const el = document.getElementById('messages')!;
   el.innerHTML = '';
   if (!currentHistory || currentHistory.length === 0) {
     el.innerHTML =
       '<div class="empty-chat">No messages yet. Start a conversation.</div>';
+    _rendering = false;
     toolGroupOpen = false;
     return;
   }
@@ -492,15 +684,106 @@ function renderMessages(history: Message[]): void {
       grouped.push(h);
     }
   }
-  grouped.forEach(function (g: any) {
-    if (g.type === 'tool_group') {
-      _renderToolGroup(g.items!);
-    } else {
-      _renderMsgEl(g.role, g.content);
+
+  function finishRender(): void {
+    _rendering = false;
+    scrollToBottom();
+    toolGroupOpen = false;
+  }
+
+  // Fast path: small sessions render synchronously
+  if (grouped.length <= RENDER_CHUNK) {
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < grouped.length; i++) {
+      const g = grouped[i];
+      if (g.type === 'tool_group') {
+        _renderToolGroup(g.items!, frag);
+      } else {
+        _renderMsgEl(g.role || '', g.content || '', frag);
+      }
     }
-  });
+    el.appendChild(frag);
+    finishRender();
+    return;
+  }
+  // Chunked path: first chunk sync, rest via timeout. Only scroll once at the
+  // end to avoid per-chunk reflows and visual jumping.
+  _renderVersion++;
+  const version = _renderVersion;
+  let index = 0;
+
+  function renderNextChunk(): void {
+    if (version !== _renderVersion) return;
+    const end = Math.min(index + RENDER_CHUNK, grouped.length);
+    const frag = document.createDocumentFragment();
+    for (let i = index; i < end; i++) {
+      const g = grouped[i];
+      if (g.type === 'tool_group') {
+        _renderToolGroup(g.items!, frag);
+      } else {
+        _renderMsgEl(g.role || '', g.content || '', frag);
+      }
+    }
+    el.appendChild(frag);
+    index = end;
+    if (index < grouped.length) {
+      setTimeout(renderNextChunk, 0);
+    } else {
+      finishRender();
+    }
+  }
+
+  // First chunk renders synchronously for immediate visibility
+  {
+    const end = Math.min(RENDER_CHUNK, grouped.length);
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < end; i++) {
+      const g = grouped[i];
+      if (g.type === 'tool_group') {
+        _renderToolGroup(g.items!, frag);
+      } else {
+        _renderMsgEl(g.role || '', g.content || '', frag);
+      }
+    }
+    el.appendChild(frag);
+    index = end;
+  }
+
+  if (index < grouped.length) {
+    setTimeout(renderNextChunk, 0);
+  } else {
+    finishRender();
+  }
+}
+
+function isNearBottom(): boolean {
+  const el = document.getElementById('messages')!;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD;
+}
+
+function updateScrollToBottomBtn(): void {
+  const btn = document.getElementById('scrollToBottom');
+  if (!btn) return;
+  if (isNearBottom()) {
+    btn.classList.remove('show');
+  } else {
+    btn.classList.add('show');
+  }
+}
+
+function scrollToBottom(): void {
+  const el = document.getElementById('messages')!;
   el.scrollTop = el.scrollHeight;
-  toolGroupOpen = false;
+  updateScrollToBottomBtn();
+}
+
+/** Auto-scroll during streaming: only follow if the user is already near bottom. */
+function scrollMessages(): void {
+  if (isNearBottom()) {
+    scrollToBottom();
+  } else {
+    updateScrollToBottomBtn();
+  }
 }
 
 function formatToolContent(content: string): string {
@@ -557,10 +840,10 @@ function toolName(content: string): string {
   return content.split('\n')[0].trim().slice(0, 30);
 }
 
-function _renderMsgEl(role: string, content: string): void {
+function _renderMsgEl(role: string, content: string, parent?: Node): void {
   // a non-tool message closes any open streaming tool-group
   if (role !== 'tool') _currentToolGroupStart = -1;
-  const el = document.getElementById('messages')!;
+  const el = parent || document.getElementById('messages')!;
   const div = document.createElement('div');
   if (role === 'user') {
     div.className = 'msg user';
@@ -593,14 +876,12 @@ function _renderMsgEl(role: string, content: string): void {
     div.textContent = content || '';
   }
   el.appendChild(div);
-  el.scrollTop = el.scrollHeight;
 }
 
-function _renderToolGroup(items: Message[]): void {
+function _renderToolGroup(items: Message[], parent?: Node): void {
   const wrapper = _createToolGroupEl(items);
-  const el = document.getElementById('messages')!;
+  const el = parent || document.getElementById('messages')!;
   el.appendChild(wrapper);
-  el.scrollTop = el.scrollHeight;
 }
 
 /** Build a tool-group element (header + body) for the given items.
@@ -658,8 +939,10 @@ function _lastToolGroupEl(): HTMLElement | null {
 
 function addMessage(role: string, content: string): void {
   currentHistory.push({ role: role, content: content });
+  _recordRenderedFor(currentSessionId, currentHistory);
   if (role === 'thinking' || role === 'tool') _getUnread().add(content);
   _renderMsgEl(role, content);
+  scrollMessages();
 }
 
 function appendEvent(event: WorkerEvent): void {
@@ -683,6 +966,8 @@ function appendEvent(event: WorkerEvent): void {
         _appendToolMessage(c);
       }
     });
+    _recordRenderedFor(currentSessionId, currentHistory);
+    scrollMessages();
   }
 }
 
@@ -710,14 +995,14 @@ function _appendToolMessage(content: string): void {
       '<span class="unread-badge"></span>';
     (lastGroup.querySelector('.tool-group-header') as HTMLElement).innerHTML = headerHtml;
     lastGroup.setAttribute('data-tool-contents', JSON.stringify(allTools.map(function (m: Message) { return m.content; })));
-    el.scrollTop = el.scrollHeight;
+    scrollMessages();
     return;
   }
   // start a new tool-group
   _currentToolGroupStart = currentHistory.length - 1;
   const wrapper = _createToolGroupEl([{ role: 'tool', content: content }]);
   el.appendChild(wrapper);
-  el.scrollTop = el.scrollHeight;
+  scrollMessages();
 }
 
 function appendResult(d: StreamEvent): void {
@@ -1275,7 +1560,30 @@ function init(): void {
     });
   refreshSessions();
 
-  // ── Import Modal (file-explorer style) ──
+  // Lazy-load older messages on scroll (throttled; skip during render/load).
+  let _scrollTimer: number | null = null;
+  document.getElementById('messages')!.addEventListener('scroll', function () {
+    updateScrollToBottomBtn();
+    if (_rendering || _historyLoading) return;
+    if (_scrollTimer !== null) return;
+    _scrollTimer = window.setTimeout(() => {
+      _scrollTimer = null;
+      const el = document.getElementById('messages') as HTMLElement;
+      if (el.scrollTop <= 200) {
+        loadOlderMessages();
+      }
+    }, 150);
+  });
+
+  // Scroll-to-bottom button
+  const scrollToBottomBtn = document.getElementById('scrollToBottom');
+  if (scrollToBottomBtn) {
+    scrollToBottomBtn.addEventListener('click', () => {
+      scrollToBottom();
+    });
+  }
+
+  // ── Import Modal ──
   const importCbcBtn = document.getElementById('importCbcBtn') as HTMLButtonElement;
   const importModal = document.getElementById('importModal') as HTMLDivElement;
   const closeImportModal = document.getElementById('closeImportModal') as HTMLButtonElement;
@@ -1287,6 +1595,7 @@ function init(): void {
   let allProjects: CbcProject[] = [];
   let currentProjectDir = '';
 
+  // Group projects by drive letter
   function buildDriveSelect(): void {
     const drives = [...new Set(allProjects.map((p: CbcProject) => p.drive))].sort();
     cbcDriveSelect.innerHTML = '<option value="">Drive</option>';
@@ -1352,39 +1661,57 @@ function init(): void {
     });
   }
 
+  async function loadCbcSessions(projectDir: string): Promise<void> {
+    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
+    cbcSessionCountEl.textContent = '';
+    try {
+      const sessions = await fetchCbcSessions(projectDir);
+      renderCbcSessions(sessions);
+    } catch (e: any) {
+      cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
+    }
+  }
+
   importCbcBtn.addEventListener('click', async () => {
     importModal.classList.add('open');
-    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading...</div>';
+    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading\u2026</div>';
+    cbcSessionCountEl.textContent = '';
     cbcDriveSelect.innerHTML = '<option value="">Loading...</option>';
     cbcProjectSelect.innerHTML = '<option value="">-</option>';
+
     try {
       allProjects = await fetchCbcProjects();
       if (allProjects.length === 0) {
+        cbcDriveSelect.innerHTML = '<option value="">No projects</option>';
         cbcSessionListEl.innerHTML = '<div class="im-loading">No cbc projects found.</div>';
         return;
       }
       buildDriveSelect();
     } catch (e: any) {
-      cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">${esc(e.message)}</div>`;
+      cbcDriveSelect.innerHTML = '<option value="">Failed</option>';
+      cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">Error: ${esc(e.message)}</div>`;
     }
   });
 
   cbcDriveSelect.addEventListener('change', () => {
-    if (!cbcDriveSelect.value) {
+    const drive = cbcDriveSelect.value;
+    if (!drive) {
       cbcProjectSelect.innerHTML = '<option value="">Project</option>';
       cbcSessionListEl.innerHTML = '<div class="im-loading">Select a project.</div>';
+      cbcSessionCountEl.textContent = '';
       return;
     }
-    buildProjectSelect(cbcDriveSelect.value);
+    buildProjectSelect(drive);
+    if (currentProjectDir) {
+      loadCbcSessions(currentProjectDir);
+    }
   });
 
   cbcProjectSelect.addEventListener('change', () => {
     currentProjectDir = cbcProjectSelect.value;
-    if (!currentProjectDir) return;
-    cbcSessionListEl.innerHTML = '<div class="im-loading">Loading...</div>';
-    fetchCbcSessions(currentProjectDir)
-      .then((sessions: CbcSessionItem[]) => renderCbcSessions(sessions))
-      .catch((e: Error) => { cbcSessionListEl.innerHTML = `<div class="im-loading" style="color:#f85149">${esc(e.message)}</div>`; });
+    if (currentProjectDir) {
+      loadCbcSessions(currentProjectDir);
+    }
   });
 
   closeImportModal.addEventListener('click', () => {
