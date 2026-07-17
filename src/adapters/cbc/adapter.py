@@ -65,6 +65,8 @@ class CbcAdapter:
 
     default_permission_mode = "bypassPermissions"
 
+    supported_settings = ["model", "permissionMode", "thinking", "effort"]
+
     _CBC_PATH = os.environ.get(
         "CLICONDUCTOR_CBC_PATH",
         r"D:\node_npm\node_global\cbc.cmd",

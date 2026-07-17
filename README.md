@@ -155,16 +155,33 @@ CLIConductor/
 - **Worker** — 运行时 cbc 进程，持有 session_id 引用。kill 后 Worker 消失。
 - **Session** — 持久化数据（UUID `ses_<16hex>`），含 history、model、cbc_session_id。独立于 Worker 生命周期。
 
-### cbc 集成模式（长驻进程）
+### 多 Adapter 架构
+
+CLIConductor 通过 `CliAdapter` 协议支持多种 CLI 工具。当前内置：
+
+| Adapter | CLI 工具 | 进程模式 | 支持 resume | 支持 fork |
+|---------|----------|----------|:-----------:|:---------:|
+| `cbc` | CodeBuddy CLI | 长驻 stdin stream-json | ✅ | ✅ |
+| `kimi` | Kimi Code CLI | wrapper 包装 `-p` 单轮调用 | ✅ | ✅（文件复制实现） |
+
+cbc 集成模式：
 
 ```bash
 cbc -p --output-format stream-json --input-format stream-json -y
 ```
 
+Kimi 集成模式：
+
+```bash
+kimi -p <prompt> --output-format stream-json -S <session_id> -m <model>
+```
+
+Kimi 的 `-p` 模式是一次性进程，因此由 `src/adapters/kimi/wrapper.py` 作为长驻子进程，内部循环调用 Kimi 并转发 stream-json 事件。
+
 ### 消息队列（stdin 互斥）
 
 ```
-Agent 任务 ──→ asyncio.Queue (FIFO) ──→ consumer ──→ cbc.stdin.write()
+Agent 任务 ──→ asyncio.Queue (FIFO) ──→ consumer ──→ adapter.stdin.write()
 用户注入 ──→                                         result → 取下一条
 ```
 
@@ -182,11 +199,24 @@ cbc 的 /model、/branch 等无法通过 stdin stream-json 发送。方案：kil
 
 以上配置变更统一通过 `/settings` 接口下发，后端写 Session + kill/restart Worker。
 
+### Kimi 会话导入
+
+Kimi 会话存储在 `~/.kimi-code/sessions/<workspace>/<session>/`。CLIConductor 提供：
+
+- `GET /api/kimi/workspaces` — 列出有会话的 workspace
+- `GET /api/kimi/sessions?cwd=...` — 列出指定工作目录下的 Kimi 会话
+- `POST /api/kimi/sessions/import` — 将 Kimi 会话导入为 CLIConductor Session（含 history 与 usage）
+
+### Kimi 适配器说明
+
+- **权限模式**：Kimi 的 `-p/--prompt` 模式不能和 `-y/--auto/--plan` 同时使用；实测 `-p` 模式下工具调用会被自动批准（包括 `rm` 等操作）。因此 CLIConductor 对 Kimi Worker 不额外传递权限参数。
+- **fork**：Kimi CLI 目前没有稳定的 `--fork` 参数，因此通过复制会话目录 + 注册新 `session_id` 实现 fork。该实现依赖 Kimi 内部文件格式，属于最佳努力（best-effort）。
+
 ### 命名约定
 
 | 术语 | 定义 |
 |------|------|
 | **Meta-Agent** | 具有与 Worker 交互权限和能力的上层 AI Agent（如 CodeBuddy Code）。通过 `/ws/agent` 通道操作。 |
-| **Worker** | 一个运行中的 cbc 子进程。进程终止后不删除 Session。 |
-| **Session** | 持久化会话。UUID 管理，含 cbc_session_id、history、last_result 等。 |
+| **Worker** | 一个运行中的 CLI 子进程（cbc / Kimi 等）。进程终止后不删除 Session。 |
+| **Session** | 持久化会话。UUID 管理，含 cbc_session_id（对 Kimi 则存储 Kimi session id）、history、last_result 等。 |
 | **Human** | 人类用户。通过 Dashboard 观察/注入/接管。来源标记为 `"user"`。 |

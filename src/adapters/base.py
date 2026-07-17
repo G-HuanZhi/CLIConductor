@@ -44,6 +44,15 @@ class CliAdapter(Protocol):
         ...
 
     @property
+    def supported_settings(self) -> list[str]:
+        """该 adapter 支持的设置项标识列表。
+
+        前端根据此列表决定显示哪些设置项。常见值：
+        "model", "permissionMode", "thinking", "effort"。
+        """
+        ...
+
+    @property
     def supports_resume(self) -> bool: ...
 
     @property

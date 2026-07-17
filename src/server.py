@@ -18,6 +18,7 @@ from . import worker
 from . import session as sess
 from .adapters import get_adapter
 from .adapters.cbc import sessions as cbc_sessions
+from .adapters.kimi import sessions as kimi_sessions
 from .config import load_config
 
 # ── logging ──
@@ -124,7 +125,8 @@ def _session_to_api(s: sess.Session, truncate_history: bool = False):
     When truncate_history=True (list endpoint), only include last N messages
     and set historyTruncated flag."""
     w = worker.find_worker_by_session(s.id)
-    config = load_config().get("cbc", {})
+    adapter = _safe_adapter(s.adapter or "cbc")
+    config = _adapter_config(s.adapter or "cbc")
     history = s.history
     history_truncated = False
     if truncate_history and len(history) > HISTORY_TRUNCATE:
@@ -133,8 +135,9 @@ def _session_to_api(s: sess.Session, truncate_history: bool = False):
     result = {
         "id": s.id,
         "name": s.name,
+        "adapter": s.adapter or "cbc",
         "cbcSessionId": s.cbc_session_id,
-        "model": s.model or config.get("model") or worker.DEFAULT_MODEL,
+        "model": s.model or config.get("model") or adapter.default_model,
         "permissionMode": s.permission_mode or config.get("permission_mode") or None,
         "alwaysThinkingEnabled": s.always_thinking_enabled,
         "effort": s.effort or config.get("effort", ""),
@@ -216,14 +219,33 @@ def _resolve_workdir(workdir_name: str) -> Path:
     return workdir
 
 
+def _adapter_config(adapter_name: str) -> dict:
+    """Return config section for the given adapter, falling back to cbc for compatibility."""
+    config = load_config()
+    if adapter_name == "kimi":
+        return config.get("kimi", {})
+    return config.get("cbc", {})
+
+
+def _safe_adapter(adapter_name: str):
+    """Return adapter by name, falling back to cbc on unknown names."""
+    try:
+        return get_adapter(adapter_name)
+    except KeyError:
+        return get_adapter("cbc")
+
+
 def _build_session_params(data: dict) -> dict:
     """Extract session creation parameters from request data, with defaults."""
-    config = load_config().get("cbc", {})
+    adapter_name = data.get("adapter") or "cbc"
+    config = _adapter_config(adapter_name)
     name = data.get("name", "default")
     workdir_name = data.get("workdir") or name
+    adapter = _safe_adapter(adapter_name)
     return {
         "name": name,
-        "model": data.get("model") or config.get("model") or worker.DEFAULT_MODEL,
+        "adapter": adapter_name if adapter_name in ("cbc", "kimi") else "cbc",
+        "model": data.get("model") or config.get("model") or adapter.default_model,
         "permission_mode": data.get("permissionMode") or config.get("permission_mode") or None,
         "always_thinking_enabled": data.get("alwaysThinkingEnabled", config.get("always_thinking_enabled", False)),
         "effort": data.get("effort") or config.get("effort", ""),
@@ -557,22 +579,39 @@ async def api_delete_session(session_id: str):
 
 
 @app.get("/api/models")
-async def api_models():
-    return {"models": worker.SUPPORTED_MODELS, "default": worker.DEFAULT_MODEL}
+async def api_models(adapter: str = "cbc"):
+    """Return supported models for the requested adapter."""
+    try:
+        a = get_adapter(adapter)
+    except KeyError as e:
+        return {"error": str(e)}
+    return {"models": a.supported_models, "default": a.default_model}
+
+
+@app.get("/api/adapters")
+async def api_adapters():
+    """Return all registered adapter names."""
+    from .adapters import list_adapters
+    return {"adapters": list_adapters()}
 
 
 @app.get("/api/adapter/config")
-async def api_adapter_config():
-    """Return default adapter configuration (models, effort values, permission modes).
+async def api_adapter_config(adapter: str = "cbc"):
+    """Return adapter configuration (models, effort values, permission modes).
     Frontend uses this to dynamically render selects.
     """
-    a = get_adapter("cbc")
+    try:
+        a = get_adapter(adapter)
+    except KeyError as e:
+        return {"error": str(e)}
     return {
+        "adapter": adapter,
         "models": a.supported_models,
         "defaultModel": a.default_model,
         "effortValues": list(a.effort_values),
         "permissionModes": a.permission_modes,
         "defaultPermissionMode": a.default_permission_mode,
+        "supportedSettings": list(a.supported_settings),
     }
 
 
@@ -863,6 +902,89 @@ async def api_cbc_sessions_import(data: dict):
 
     s = sess.create(
         name=name,
+        cbc_session_id=session_id,
+        history=history,
+        raw_usage=raw_usage,
+        total_usage=total_usage,
+        workdir=cwd,
+    )
+
+    await broadcast({
+        "type": "session.created",
+        "sessionId": s.id,
+        "name": s.name,
+    })
+
+    return _session_to_api(s)
+
+
+# ── Kimi Session Import ──
+
+@app.get("/api/kimi/workspaces")
+async def api_kimi_workspaces():
+    """List Kimi workspaces that have sessions."""
+    return {"workspaces": kimi_sessions.list_kimi_workspaces()}
+
+
+@app.get("/api/kimi/sessions")
+async def api_kimi_sessions(cwd: str = ""):
+    """List external Kimi sessions available for import.
+
+    cwd: filter sessions by Kimi workDir (defaults to current directory).
+    """
+    cwd = cwd or str(Path.cwd())
+    return {"sessions": kimi_sessions.list_kimi_sessions_for_cwd(cwd)}
+
+
+@app.post("/api/kimi/sessions/import")
+async def api_kimi_sessions_import(data: dict):
+    """Import a Kimi session into CLIConductor (Session only, no worker spawned)."""
+    session_id = data.get("session_id")
+    if not session_id:
+        return {"error": "session_id is required"}
+
+    cwd = data.get("cwd") or str(Path.cwd())
+
+    try:
+        history = kimi_sessions.parse_kimi_history(session_id, workdir=cwd)
+        raw_usage_entries = kimi_sessions.get_raw_usage(session_id, workdir=cwd)
+    except Exception as e:
+        return {"error": f"Failed to parse session history: {e}"}
+
+    raw_usage = sess.accumulate_raw_usage(None, raw_usage_entries)
+    total_usage = sess.compute_total_usage(raw_usage)
+
+    # If already imported — update in-place (preserve name, model, settings)
+    existing = None
+    for s in sess.list_all():
+        if s.cbc_session_id == session_id and s.adapter == "kimi":
+            existing = s
+            break
+
+    if existing:
+        w = worker.find_worker_by_session(existing.id)
+        if w:
+            await worker.kill_worker(w.worker_id)
+        existing.history = history
+        existing.raw_usage = raw_usage
+        existing.total_usage = total_usage
+        existing.last_result = None
+        sess.save(existing)
+        await broadcast({
+            "type": "session.updated",
+            "sessionId": existing.id,
+        })
+        return _session_to_api(existing)
+
+    name = (
+        data.get("name", "")
+        or kimi_sessions.get_session_title(session_id, workdir=cwd)
+        or f"kimi-{session_id.split('_')[-1][:8]}"
+    )
+
+    s = sess.create(
+        name=name,
+        adapter="kimi",
         cbc_session_id=session_id,
         history=history,
         raw_usage=raw_usage,

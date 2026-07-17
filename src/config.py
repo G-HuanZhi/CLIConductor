@@ -24,6 +24,14 @@ DEFAULT_CONFIG: dict = {
         # 默认 effort 级别："" | "none" | "off" | "auto" | "low" | "medium" | "high" | "xhigh" | "max" | "ultracode"
         "effort": "",
     },
+    "kimi": {
+        # 默认模型。可选值参见 KimiAdapter.supported_models
+        "model": "kimi-code/kimi-for-coding",
+        # Kimi prompt 模式暂不支持 permission_mode / effort / thinking 命令行参数
+        "permission_mode": "",
+        "always_thinking_enabled": False,
+        "effort": "",
+    },
     # 服务端口（环境变量 CLICONDUCTOR_PORT 可覆盖）
     "port": 8767,
 }

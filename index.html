@@ -33,19 +33,30 @@
   </div>
 
   <div id="settingsPanel">
-    <label>Model</label>
-    <select id="settingModel" onchange="updateSetButtonVisibility()"></select>
-    <input id="settingModelCustom" class="model-custom" placeholder="custom">
+    <div class="setting-row" data-setting="adapter">
+      <label>Agent CLI</label>
+      <select id="settingAdapter" disabled onchange="onAdapterChange()"></select>
+    </div>
     <div class="sep"></div>
-    <label>Mode</label>
-    <select id="settingMode" onchange="updateSetButtonVisibility()"></select>
+    <div class="setting-row" data-setting="model">
+      <label>Model</label>
+      <select id="settingModel" onchange="updateSetButtonVisibility()"></select>
+      <input id="settingModelCustom" class="model-custom" placeholder="custom">
+    </div>
     <div class="sep"></div>
-    <label for="settingThinking">Think</label>
-    <input type="checkbox" id="settingThinking" onchange="onThinkingToggle()">
-    <span id="effortGroup" style="display:none">
-      <label for="settingEffort">Effort</label>
-      <select id="settingEffort" onchange="updateSetButtonVisibility()"></select>
-    </span>
+    <div class="setting-row" data-setting="permissionMode">
+      <label>Mode</label>
+      <select id="settingMode" onchange="updateSetButtonVisibility()"></select>
+    </div>
+    <div class="sep"></div>
+    <div class="setting-row" data-setting="thinking">
+      <label for="settingThinking">Think</label>
+      <input type="checkbox" id="settingThinking" onchange="onThinkingToggle()">
+      <span id="effortGroup" style="display:none">
+        <label for="settingEffort">Effort</label>
+        <select id="settingEffort" onchange="updateSetButtonVisibility()"></select>
+      </span>
+    </div>
     <div class="sep"></div>
     <button id="applySettingsBtn" class="btn btn-p" style="display:none" onclick="applySettings()">Apply Settings</button>
     <div class="sep"></div>
@@ -75,6 +86,8 @@
     <div class="ns-body">
       <label class="ns-label" for="nsNameInput">Session Name</label>
       <input id="nsNameInput" class="ns-input" type="text" placeholder="auto-generate if empty" maxlength="64">
+      <label class="ns-label" for="nsAdapter">Agent CLI</label>
+      <select id="nsAdapter" class="ns-input"></select>
       <label class="ns-label" for="nsWorkdirInput">Working Directory</label>
       <input id="nsWorkdirInput" class="ns-input" type="text" placeholder="D:\project\my-app (leave empty for default)">
       <button id="nsCreateBtn" class="ns-create">Create</button>

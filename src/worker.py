@@ -551,9 +551,15 @@ async def branch_worker(worker_id: str, new_session_id: str) -> Worker | str:
         if not s.max_thinking_tokens:
             s.max_thinking_tokens = orig.max_thinking_tokens
 
-    # branch needs --fork-session from adapter
+    # For adapters that fork via file copy (kimi), pass the parent's
+    # cbc_session_id so fork_args can create the branched session.
+    if orig and orig.cbc_session_id and not s.cbc_session_id:
+        s.cbc_session_id = orig.cbc_session_id
+
+    # Some adapters (kimi) create the forked session internally in fork_args
+    # and update s.cbc_session_id to the new id; the actual CLI args may be empty.
     extra_args = w.adapter.fork_args(s)
-    if not w.adapter.supports_fork or not extra_args:
+    if not w.adapter.supports_fork:
         return f"Adapter '{w.adapter.name}' does not support fork"
 
     new_id = await _next_worker_id()

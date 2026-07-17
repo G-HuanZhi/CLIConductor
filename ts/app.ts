@@ -8,6 +8,7 @@ interface Message {
 interface Session {
   id: string;
   name: string;
+  adapter?: string;
   cbcSessionId?: string | null;
   model?: string | null;
   permissionMode?: string | null;
@@ -74,11 +75,17 @@ interface ApiGenericResponse {
   cbcSessionId?: string;
 }
 
-interface ApiConfigResponse {
+interface AdapterConfig {
   models: string[];
   defaultModel: string;
   effortValues: string[];
   permissionModes: {value: string; label: string}[];
+  defaultPermissionMode: string;
+  supportedSettings: string[];
+}
+
+interface ApiConfigResponse extends AdapterConfig {
+  adapter: string;
 }
 
 interface SyncedSettings {
@@ -90,16 +97,23 @@ interface SyncedSettings {
 
 // ── State ──
 
-let allModels: string[] = [];
-let defaultModel: string = 'deepseek-v4-flash';
-let effortValues: string[] = [];
-let permissionModes: {value: string; label: string}[] = [];
+let availableAdapters: string[] = [];
+const adapterConfigs: Map<string, AdapterConfig> = new Map();
+let currentAdapter: string = 'cbc';
 let _adapterConfigReady: boolean = false;
+
+// Cached config getters for the currently selected adapter
+function allModels(): string[] { return adapterConfigs.get(currentAdapter)?.models || []; }
+function defaultModel(): string { return adapterConfigs.get(currentAdapter)?.defaultModel || 'deepseek-v4-flash'; }
+function effortValues(): string[] { return adapterConfigs.get(currentAdapter)?.effortValues || []; }
+function permissionModes(): {value: string; label: string}[] { return adapterConfigs.get(currentAdapter)?.permissionModes || []; }
+function defaultPermissionMode(): string { return adapterConfigs.get(currentAdapter)?.defaultPermissionMode || ''; }
+function supportedSettings(): string[] { return adapterConfigs.get(currentAdapter)?.supportedSettings || ['model', 'permissionMode', 'thinking', 'effort']; }
+function supportsSetting(name: string): boolean { return supportedSettings().indexOf(name) >= 0; }
 let currentSessionId: string | null = null;
 let currentWorkerId: string | null = null;
 let modelData: Session[] = [];
 let lastSyncedSettings: SyncedSettings | null = null;
-let defaultPermissionMode: string = '';
 let bubbleViewEnabled: boolean = true;
 let currentHistory: Message[] = [];
 let toolGroupOpen: boolean = false;
@@ -468,7 +482,7 @@ function renderSessionList(): void {
       '</div>' +
       (lastMsg ? '<div class="sess-preview">' + esc(lastMsg) + '</div>' : '') +
       '<div class="sess-meta"><span class="sess-model">' +
-      esc(s.model || defaultModel) +
+      esc(s.model || defaultModel()) +
       '</span>' +
       '<span>' +
       (s.historyTotal ?? (s.history || []).length) +
@@ -512,9 +526,9 @@ function selectSession(id: string): void {
   input.value = _inputDrafts.get(id) || '';
   const settingsBtn = document.getElementById('settingsBtn')!;
   settingsBtn.style.display = '';
-  // sync panel if it's already open
+  // sync panel if it's already open (may need to switch adapter config first)
   if (document.getElementById('settingsPanel')!.classList.contains('open')) {
-    syncPanelFromServer();
+    _syncAdapterForSession(s, () => syncPanelFromServer());
   }
   // Load additional history if truncated
   if (s.historyTruncated) {
@@ -610,7 +624,7 @@ function updateTopBar(): void {
   (document.getElementById('chatModel')!).style.display = '';
   (document.getElementById('chatName')!).textContent =
     s.name || (currentSessionId ?? '').slice(0, 12);
-  (document.getElementById('chatModel')!).textContent = s.model || defaultModel;
+  (document.getElementById('chatModel')!).textContent = s.model || defaultModel();
   const sidsEl = document.getElementById('chatSessionIds')!;
   sidsEl.style.display = 'flex';
   var sesId = s.id || '';
@@ -1020,7 +1034,12 @@ function toggleSettings(): void {
   if (isOpen) {
     if (!_adapterConfigReady)
       toast('Loading settings…');
-    syncPanelFromServer();
+    const s = modelData.find((x: Session) => x.id === currentSessionId);
+    if (s) {
+      _syncAdapterForSession(s, () => syncPanelFromServer());
+    } else {
+      syncPanelFromServer();
+    }
   }
 }
 
@@ -1034,43 +1053,58 @@ function syncPanelFromServer(): void {
   if ((document.getElementById('settingModel') as HTMLSelectElement).getAttribute('data-loaded') !== '1') return;
   if (!_adapterConfigReady) return;
 
-  const sel = document.getElementById('settingModel') as HTMLSelectElement;
-  const model = s.model || defaultModel;
-  sel.value = allModels.indexOf(model) >= 0 ? model : '';
+  buildAdapterSelect();
+  _updateSettingsVisibility();
 
-  (document.getElementById('settingMode') as HTMLSelectElement).value =
-    s.permissionMode || defaultPermissionMode;
-  (document.getElementById('settingThinking') as HTMLInputElement).checked =
-    s.alwaysThinkingEnabled || false;
-  (document.getElementById('settingEffort') as HTMLSelectElement).value =
-    effortValues.indexOf(s.effort) >= 0 ? s.effort : (effortValues[1] || effortValues[0] || '');
+  const sel = document.getElementById('settingModel') as HTMLSelectElement;
+  const model = s.model || defaultModel();
+  sel.value = allModels().indexOf(model) >= 0 ? model : '';
+
+  if (supportsSetting('permissionMode')) {
+    (document.getElementById('settingMode') as HTMLSelectElement).value =
+      s.permissionMode || defaultPermissionMode();
+  }
+  if (supportsSetting('thinking')) {
+    (document.getElementById('settingThinking') as HTMLInputElement).checked =
+      s.alwaysThinkingEnabled || false;
+  }
+  if (supportsSetting('effort')) {
+    (document.getElementById('settingEffort') as HTMLSelectElement).value =
+      effortValues().indexOf(s.effort) >= 0 ? s.effort : (effortValues()[1] || effortValues()[0] || '');
+  }
   (document.getElementById('effortGroup')!).style.display =
-    (s.alwaysThinkingEnabled && effortValues.length > 0) ? '' : 'none';
+    (supportsSetting('thinking') && supportsSetting('effort') && s.alwaysThinkingEnabled && effortValues().length > 0) ? '' : 'none';
 
   // record the baseline so we can detect pending changes
   lastSyncedSettings = {
     model: getSettingModel(),
-    permissionMode: (document.getElementById('settingMode') as HTMLSelectElement).value,
-    alwaysThinkingEnabled: (
-      document.getElementById('settingThinking') as HTMLInputElement
-    ).checked,
-    effort: (document.getElementById('settingEffort') as HTMLSelectElement).value,
+    permissionMode: supportsSetting('permissionMode')
+      ? (document.getElementById('settingMode') as HTMLSelectElement).value
+      : '',
+    alwaysThinkingEnabled: supportsSetting('thinking')
+      ? (document.getElementById('settingThinking') as HTMLInputElement).checked
+      : false,
+    effort: supportsSetting('effort')
+      ? (document.getElementById('settingEffort') as HTMLSelectElement).value
+      : '',
   };
   updateSetButtonVisibility();
 }
 
-/** Returns true when any panel field differs from lastSyncedSettings. */
+/** Returns true when any visible panel field differs from lastSyncedSettings. */
 function hasPendingChanges(): boolean {
   if (!lastSyncedSettings) return false;
-  return (
-    getSettingModel() !== lastSyncedSettings.model ||
-    (document.getElementById('settingMode') as HTMLSelectElement).value !==
-      lastSyncedSettings.permissionMode ||
-    (document.getElementById('settingThinking') as HTMLInputElement).checked !==
-      lastSyncedSettings.alwaysThinkingEnabled ||
-    (document.getElementById('settingEffort') as HTMLSelectElement).value !==
-      lastSyncedSettings.effort
-  );
+  if (supportsSetting('model') && getSettingModel() !== lastSyncedSettings.model) return true;
+  if (supportsSetting('permissionMode') &&
+      (document.getElementById('settingMode') as HTMLSelectElement).value !==
+        lastSyncedSettings.permissionMode) return true;
+  if (supportsSetting('thinking') &&
+      (document.getElementById('settingThinking') as HTMLInputElement).checked !==
+        lastSyncedSettings.alwaysThinkingEnabled) return true;
+  if (supportsSetting('effort') &&
+      (document.getElementById('settingEffort') as HTMLSelectElement).value !==
+        lastSyncedSettings.effort) return true;
+  return false;
 }
 
 function getSettingModel(): string {
@@ -1079,9 +1113,9 @@ function getSettingModel(): string {
     const inp = document.getElementById(
       'settingModelCustom'
     ) as HTMLInputElement;
-    return inp.value.trim() || defaultModel;
+    return inp.value.trim() || defaultModel();
   }
-  return sel.value || defaultModel;
+  return sel.value || defaultModel();
 }
 
 /** Show/hide the Apply Settings button based on whether settings differ from
@@ -1094,13 +1128,14 @@ function updateSetButtonVisibility(): void {
 /** Called when the Think checkbox is toggled: show/hide Effort + auto-select
  *  medium, then update the Set button.  No API call is made. */
 function onThinkingToggle(): void {
+  if (!supportsSetting('thinking')) return;
   const thinking = (document.getElementById('settingThinking') as HTMLInputElement).checked;
   (document.getElementById('effortGroup')!).style.display =
-    (thinking && effortValues.length > 0) ? '' : 'none';
-  if (thinking && effortValues.length > 0) {
+    (supportsSetting('effort') && thinking && effortValues().length > 0) ? '' : 'none';
+  if (supportsSetting('effort') && thinking && effortValues().length > 0) {
     const eff = document.getElementById('settingEffort') as HTMLSelectElement;
-    if (!eff.value || eff.value === effortValues[0])
-      eff.value = effortValues[1] || effortValues[0];
+    if (!eff.value || eff.value === effortValues()[0])
+      eff.value = effortValues()[1] || effortValues()[0];
   }
   updateSetButtonVisibility();
 }
@@ -1136,15 +1171,20 @@ function applySettings(): void {
   _postWorkerSettings();
 }
 
-/** Build the settings payload object from panel values. */
+/** Build the settings payload object from panel values.
+ *  Only includes settings supported by the current adapter. */
 function _buildSettingsBody(): Record<string, unknown> {
-  const mode = (document.getElementById('settingMode') as HTMLSelectElement).value;
-  return {
-    model: getSettingModel(),
-    permissionMode: mode || undefined,
-    alwaysThinkingEnabled: (document.getElementById('settingThinking') as HTMLInputElement).checked,
-    effort: (document.getElementById('settingEffort') as HTMLSelectElement).value,
-  };
+  const body: Record<string, unknown> = {};
+  if (supportsSetting('model')) body.model = getSettingModel();
+  if (supportsSetting('permissionMode')) {
+    const mode = (document.getElementById('settingMode') as HTMLSelectElement).value;
+    if (mode) body.permissionMode = mode;
+  }
+  if (supportsSetting('thinking'))
+    body.alwaysThinkingEnabled = (document.getElementById('settingThinking') as HTMLInputElement).checked;
+  if (supportsSetting('effort'))
+    body.effort = (document.getElementById('settingEffort') as HTMLSelectElement).value;
+  return body;
 }
 
 /** POST current panel settings to the worker (always allowed, triggers respawn). */
@@ -1165,9 +1205,15 @@ function _postWorkerSettings(): void {
 function markSettingsApplied(): void {
   lastSyncedSettings = {
     model: getSettingModel(),
-    permissionMode: (document.getElementById('settingMode') as HTMLSelectElement).value,
-    alwaysThinkingEnabled: (document.getElementById('settingThinking') as HTMLInputElement).checked,
-    effort: (document.getElementById('settingEffort') as HTMLSelectElement).value,
+    permissionMode: supportsSetting('permissionMode')
+      ? (document.getElementById('settingMode') as HTMLSelectElement).value
+      : '',
+    alwaysThinkingEnabled: supportsSetting('thinking')
+      ? (document.getElementById('settingThinking') as HTMLInputElement).checked
+      : false,
+    effort: supportsSetting('effort')
+      ? (document.getElementById('settingEffort') as HTMLSelectElement).value
+      : '',
   };
   updateSetButtonVisibility();
 }
@@ -1296,13 +1342,7 @@ function send(): void {
       sessionId: currentSessionId,
     };
     if (hasPendingChanges()) {
-      body.model = getSettingModel();
-      const mode = (document.getElementById('settingMode') as HTMLSelectElement).value;
-      if (mode) body.permissionMode = mode;
-      body.alwaysThinkingEnabled = (
-        document.getElementById('settingThinking') as HTMLInputElement
-      ).checked;
-      body.effort = (document.getElementById('settingEffort') as HTMLSelectElement).value;
+      Object.assign(body, _buildSettingsBody());
     }
     fetch('/api/spawn', {
       method: 'POST',
@@ -1323,17 +1363,10 @@ function send(): void {
 
   // worker exists: if panel has unapplied changes, apply them first, then send
   if (hasPendingChanges()) {
-    const thinking = (document.getElementById('settingThinking') as HTMLInputElement).checked;
-    const effort = (document.getElementById('settingEffort') as HTMLSelectElement).value;
     fetch('/api/worker/' + currentWorkerId + '/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: getSettingModel(),
-        permissionMode: (document.getElementById('settingMode') as HTMLSelectElement).value || undefined,
-        alwaysThinkingEnabled: thinking,
-        effort: effort,
-      }),
+      body: JSON.stringify(_buildSettingsBody()),
     })
       .then((r: Response) => r.json())
       .then((d: ApiGenericResponse) => {
@@ -1349,19 +1382,21 @@ function send(): void {
 
 // ── New Session (modal) ──
 
-function _doCreateSession(name: string, workdir: string | null): void {
+function _doCreateSession(name: string, workdir: string | null, adapter?: string): void {
+  const adp = adapter || currentAdapter || 'cbc';
   // Optimistic UI: placeholder immediately
   const placeholder: Session = {
     id: '__pending_' + name,
     name: '...',
-    model: defaultModel,
+    adapter: adp,
+    model: defaultModel(),
     history: [],
     alwaysThinkingEnabled: false,
     effort: '',
   };
   modelData.push(placeholder);
   selectSession(placeholder.id);
-  const body: Record<string, string> = { name: name };
+  const body: Record<string, string> = { name: name, adapter: adp };
   if (workdir) body.workdir = workdir;
   fetch('/api/sessions', {
     method: 'POST',
@@ -1406,6 +1441,7 @@ function newSession(): void {
   const workdirInput = document.getElementById('nsWorkdirInput') as HTMLInputElement;
   nameInput.value = '';
   workdirInput.value = '';
+  _populateNewSessionAdapterSelect();
   modal.classList.add('open');
   nameInput.focus();
 }
@@ -1540,18 +1576,13 @@ function branchSession(id: string): void {
 // ── Init ──
 
 function init(): void {
-  fetch('/api/adapter/config')
-    .then((r: Response) => r.json())
-    .then((data: ApiConfigResponse) => {
-      allModels = data.models || [];
-      defaultModel = data.defaultModel || 'deepseek-v4-flash';
-      effortValues = data.effortValues || [];
-      permissionModes = data.permissionModes || [];
-      defaultPermissionMode = (data as any).defaultPermissionMode || 'default';
+  _loadAdapterListAndConfig('cbc')
+    .then(() => {
+      _adapterConfigReady = true;
       buildModelSelect();
       buildModeSelect();
       buildEffortSelect();
-      _adapterConfigReady = true;
+      _populateNewSessionAdapterSelect();
       if (document.getElementById('settingsPanel')!.classList.contains('open'))
         syncPanelFromServer();
     })
@@ -1749,8 +1780,9 @@ function init(): void {
       } while (modelData.find((s: Session) => s.name === name || s.id === '__pending_' + name));
     }
     const workdir = nsWorkdirInput.value.trim() || null;
+    const adapter = (document.getElementById('nsAdapter') as HTMLSelectElement).value || currentAdapter || 'cbc';
     newSessionModal.classList.remove('open');
-    _doCreateSession(name, workdir);
+    _doCreateSession(name, workdir, adapter);
   });
   nsNameInput.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -1771,7 +1803,7 @@ function buildModelSelect(): void {
   blank.value = '';
   blank.textContent = '\u2014 model \u2014';
   sel.appendChild(blank);
-  allModels.forEach((m: string) => {
+  allModels().forEach((m: string) => {
     const opt = document.createElement('option');
     opt.value = m;
     opt.textContent = m;
@@ -1792,7 +1824,7 @@ function buildModelSelect(): void {
 function buildModeSelect(): void {
   const sel = document.getElementById('settingMode') as HTMLSelectElement;
   sel.innerHTML = '';
-  permissionModes.forEach((p: {value: string; label: string}) => {
+  permissionModes().forEach((p: {value: string; label: string}) => {
     const opt = document.createElement('option');
     opt.value = p.value;
     opt.textContent = p.label;
@@ -1803,12 +1835,112 @@ function buildModeSelect(): void {
 function buildEffortSelect(): void {
   const sel = document.getElementById('settingEffort') as HTMLSelectElement;
   sel.innerHTML = '';
-  effortValues.forEach((v: string) => {
+  effortValues().forEach((v: string) => {
     const opt = document.createElement('option');
     opt.value = v;
     opt.textContent = v;
     sel.appendChild(opt);
   });
+}
+
+/** Adapter change handler for the settings panel.
+ *  The panel selector is currently read-only for active sessions. */
+function onAdapterChange(): void {
+  // no-op: switching CLI tools for an existing session is not supported yet
+}
+
+/** Show/hide settings panel rows based on the current adapter's supportedSettings. */
+function _updateSettingsVisibility(): void {
+  const panel = document.getElementById('settingsPanel')!;
+  panel.querySelectorAll<HTMLElement>('.setting-row').forEach((row) => {
+    const key = row.dataset['setting'];
+    if (!key) return;
+    const visible = key === 'adapter' || supportsSetting(key);
+    row.style.display = visible ? '' : 'none';
+  });
+  // effort only appears when both thinking and effort are supported
+  (document.getElementById('effortGroup')!).style.display =
+    (supportsSetting('thinking') && supportsSetting('effort')) ? '' : 'none';
+}
+
+/** Populate the Agent CLI selector in the new-session modal. */
+function _populateNewSessionAdapterSelect(): void {
+  const sel = document.getElementById('nsAdapter') as HTMLSelectElement;
+  if (!sel) return;
+  sel.innerHTML = '';
+  availableAdapters.forEach((a: string) => {
+    const opt = document.createElement('option');
+    opt.value = a;
+    opt.textContent = a;
+    sel.appendChild(opt);
+  });
+  sel.value = currentAdapter || 'cbc';
+}
+
+/** Switch adapter config to match the selected session, then call cb.
+ *  Rebuilds the panel selects when the adapter changes. */
+function _syncAdapterForSession(s: Session, cb?: () => void): void {
+  const adp = s.adapter || 'cbc';
+  if (adp === currentAdapter && _adapterConfigReady) {
+    buildAdapterSelect();
+    if (cb) cb();
+    return;
+  }
+  _adapterConfigReady = false;
+  _loadAdapterListAndConfig(adp)
+    .then(() => {
+      _adapterConfigReady = true;
+      buildAdapterSelect();
+      buildModelSelect();
+      buildModeSelect();
+      buildEffortSelect();
+      if (cb) cb();
+    })
+    .catch(() => {
+      _adapterConfigReady = false;
+    });
+}
+
+/** Load the list of adapters, then fetch config for the chosen adapter.
+ *  If the adapter is already cached, resolve immediately. */
+async function _loadAdapterListAndConfig(adapter: string): Promise<void> {
+  if (availableAdapters.length === 0) {
+    try {
+      const r = await fetch('/api/adapters');
+      const d = await r.json();
+      availableAdapters = d.adapters || ['cbc'];
+    } catch (e) {
+      availableAdapters = ['cbc'];
+    }
+  }
+  if (!adapterConfigs.has(adapter)) {
+    const r = await fetch('/api/adapter/config?adapter=' + encodeURIComponent(adapter));
+    const d: ApiConfigResponse = await r.json();
+    adapterConfigs.set(adapter, {
+      models: d.models || [],
+      defaultModel: d.defaultModel || '',
+      effortValues: d.effortValues || [],
+      permissionModes: d.permissionModes || [],
+      defaultPermissionMode: d.defaultPermissionMode || '',
+      supportedSettings: d.supportedSettings || ['model', 'permissionMode', 'thinking', 'effort'],
+    });
+  }
+  currentAdapter = adapter;
+}
+
+/** Build the Agent CLI (adapter) selector in the settings panel.
+ *  For any active session (including placeholders) the selector is read-only. */
+function buildAdapterSelect(): void {
+  const sel = document.getElementById('settingAdapter') as HTMLSelectElement;
+  sel.innerHTML = '';
+  availableAdapters.forEach((a: string) => {
+    const opt = document.createElement('option');
+    opt.value = a;
+    opt.textContent = a;
+    sel.appendChild(opt);
+  });
+  sel.value = currentAdapter;
+  sel.disabled = !!currentSessionId;
 }
 
 function esc<T extends HTMLElement | string>(s: T): string {
