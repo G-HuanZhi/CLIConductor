@@ -142,6 +142,7 @@ def _session_to_api(s: sess.Session, truncate_history: bool = False):
         "workdir": s.workdir,
         "history": history,
         "historyTruncated": history_truncated,
+        "historyTotal": len(s.history),
         "lastResult": s.last_result,
         "rawUsage": s.raw_usage,
         "totalUsage": s.total_usage,

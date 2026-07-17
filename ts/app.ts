@@ -19,6 +19,7 @@ interface Session {
   workerId?: string | null;
   history: Message[];
   historyTruncated?: boolean;
+  historyTotal?: number;
   lastResult?: Record<string, unknown> | null;
   totalUsage?: Record<string, number> | null;
 }
@@ -105,7 +106,62 @@ let toolGroupOpen: boolean = false;
 let _currentToolGroupStart: number = -1;
 let _historyLoading: boolean = false;
 let _historyLoadEnd: number = 0;   // index of oldest loaded message in session history
+let _rendering: boolean = false;   // true while renderMessages is actively chunking
 const MAX_MESSAGE_NODES = 2000;    // trim older history when exceeded
+const SCROLL_BOTTOM_THRESHOLD = 120; // px; auto-scroll only when within this distance
+
+// ── Render guards ──
+// Tracks the last history tail we rendered for the current session, so WS-driven
+// refreshSessions() can skip full re-renders when nothing has changed.
+let _renderedFor: { sessionId: string | null; tailRole: string; tailContent: string } = {
+  sessionId: null,
+  tailRole: '',
+  tailContent: '',
+};
+
+/** Tail used for the render guard: last non-system message.
+ *  Local-only system messages (e.g. "[DONE] Task completed") never appear in
+ *  the server-side history, so comparing them would defeat the guard and
+ *  trigger a full rebuild after every task. */
+function _tailOf(history: Message[]): { role: string; content: string } {
+  const h = history || [];
+  for (let i = h.length - 1; i >= 0; i--) {
+    if (h[i].role !== 'system') {
+      return { role: h[i].role, content: h[i].content || '' };
+    }
+  }
+  return { role: '', content: '' };
+}
+
+function _recordRenderedFor(sessionId: string | null, history: Message[]): void {
+  const tail = _tailOf(history);
+  _renderedFor = {
+    sessionId,
+    tailRole: tail.role,
+    tailContent: tail.content,
+  };
+}
+
+function _shouldRenderMessages(sessionId: string | null, history: Message[]): boolean {
+  const tail = _tailOf(history);
+  return !(
+    _renderedFor.sessionId === sessionId &&
+    _renderedFor.tailRole === tail.role &&
+    _renderedFor.tailContent === tail.content
+  );
+}
+
+// Debounce refreshSessions so a burst of worker events produces a single fetch.
+let _refreshTimer: number | null = null;
+function scheduleRefreshSessions(): void {
+  if (_refreshTimer !== null) {
+    clearTimeout(_refreshTimer);
+  }
+  _refreshTimer = window.setTimeout(() => {
+    _refreshTimer = null;
+    refreshSessions();
+  }, 300);
+}
 
 // ── Markdown / LaTeX rendering ──
 if (typeof (window as any).marked !== 'undefined') {
@@ -240,13 +296,15 @@ function onWsMessage(e: MessageEvent): void {
 }
 
 /** Apply a worker update from a WebSocket event.
- *  Side effects: syncs currentWorkerId, updateTopBar (incl. mobile dot),
- *  renderSessionList, and triggers a debounced refreshSessions fetch. */
+ *  Side effects: syncs modelData, currentWorkerId, updateTopBar, updates the
+ *  affected sidebar item in-place, and schedules a debounced refreshSessions
+ *  fetch. This avoids rebuilding the whole message tree on every status event. */
 function _applyWorkerUpdate(
   sessionId: string | undefined,
   workerId: string | undefined | null,
   status: string | null
 ): void {
+  if (!sessionId) return;
   for (let i = 0; i < modelData.length; i++) {
     if (modelData[i].id === sessionId) {
       modelData[i].workerId = workerId ?? undefined;
@@ -258,8 +316,21 @@ function _applyWorkerUpdate(
     currentWorkerId = workerId ?? null;
     updateTopBar();
   }
-  renderSessionList();
-  refreshSessions();
+  // Update the affected sidebar item without rebuilding the whole list.
+  const listEl = document.getElementById('sessionList')!;
+  const items = listEl.querySelectorAll('.sess-item');
+  let found = false;
+  items.forEach((item) => {
+    if ((item as HTMLElement).dataset.sessionId === sessionId) {
+      const dot = item.querySelector('.s-dot');
+      if (dot) dot.className = 's-dot ' + (status || 'offline');
+      found = true;
+    }
+  });
+  if (!found) {
+    renderSessionList();
+  }
+  scheduleRefreshSessions();
 }
 
 // ── Session list ──
@@ -268,7 +339,12 @@ let _refreshVersion: number = 0;
 function refreshSessions(): void {
   _refreshVersion++;
   const version = _refreshVersion;
-  document.getElementById('sessionList')!.innerHTML = '<div class="sidebar-loading">Loading...</div>';
+  const listEl = document.getElementById('sessionList')!;
+  // Only show the spinner on the very first load. Once we have a list,
+  // keep it visible to avoid flicker while we refresh in the background.
+  if (listEl.children.length === 0) {
+    listEl.innerHTML = '<div class="sidebar-loading">Loading...</div>';
+  }
   fetch('/api/sessions')
     .then((r: Response) => r.json())
     .then((data: ApiSessionsResponse) => {
@@ -284,7 +360,12 @@ function refreshSessions(): void {
         currentWorkerId = matched.workerId ?? null;
         const chatNameEl = document.getElementById('chatName')!;
         if (chatNameEl.style.display !== 'none') {
-          renderMessages(matched.history || []);
+          // Skip full rebuild if the tail of the server's history is already
+          // rendered. Local DOM may contain more older messages; rebuilding
+          // would throw them away.
+          if (_shouldRenderMessages(currentSessionId, matched.history || [])) {
+            renderMessages(matched.history || []);
+          }
         }
       }
       if (currentSessionId) updateTopBar();
@@ -345,6 +426,7 @@ function renderSessionList(): void {
   modelData.forEach((s: Session) => {
     const div = document.createElement('div');
     div.className = 'sess-item' + (s.id === currentSessionId ? ' active' : '');
+    div.dataset.sessionId = s.id;
     div.onclick = function (e: MouseEvent) {
       const target = e.target as HTMLElement;
       if (target.closest('.sess-del')) return;
@@ -378,7 +460,7 @@ function renderSessionList(): void {
       esc(s.model || defaultModel) +
       '</span>' +
       '<span>' +
-      (s.history || []).length +
+      (s.historyTotal ?? (s.history || []).length) +
       ' msgs</span>' +
       (totalCredit != null ? '<span class="sess-credit">' + totalCredit.toFixed(2) + ' credits</span>' : '') +
       '</div>';
@@ -399,7 +481,11 @@ function selectSession(id: string): void {
 
   currentWorkerId = s.workerId ?? null;
   _historyLoading = false;
-  _historyLoadEnd = (s.history || []).length;
+  // Index of the oldest loaded message within the FULL session history.
+  // The server only sends the last N (truncated) messages, so the oldest
+  // loaded message sits at historyTotal - loaded, NOT at loaded.
+  const loaded = (s.history || []).length;
+  _historyLoadEnd = Math.max(0, (s.historyTotal ?? loaded) - loaded);
 
   renderSessionList();
   updateTopBar();
@@ -430,8 +516,7 @@ function loadOlderMessages(): void {
       if (d.error) return;
       const msgs: Message[] = d.messages || [];
       if (msgs.length === 0) return;
-      _historyLoadEnd = d.start;
-      // Build fragment for older messages
+      _historyLoadEnd = d.start;      // Build fragment for older messages
       const frag = document.createDocumentFragment();
       const grouped: Array<{ type?: string; items?: Message[] } & Partial<Message>> = [];
       let toolGroup: any = null;
@@ -484,6 +569,11 @@ function loadOlderMessages(): void {
           if (last) el.removeChild(last);
         }
       }
+    })
+    .catch(function () {
+      // Network failure: reset the loading flag so future scrolls can retry,
+      // otherwise lazy-loading would be stuck forever.
+      _historyLoading = false;
     });
 }
 
@@ -536,6 +626,7 @@ function showEmpty(): void {
   (document.getElementById('messages')!).innerHTML =
     '<div class="empty-chat">Select a session to start</div>';
   currentHistory = [];
+  _recordRenderedFor(currentSessionId, currentHistory);
   toolGroupOpen = false;
 }
 
@@ -546,12 +637,15 @@ const RENDER_CHUNK = 30;
 
 function renderMessages(history: Message[]): void {
   currentHistory = history || [];
+  _recordRenderedFor(currentSessionId, currentHistory);
   _currentToolGroupStart = -1;
+  _rendering = true;
   const el = document.getElementById('messages')!;
   el.innerHTML = '';
   if (!currentHistory || currentHistory.length === 0) {
     el.innerHTML =
       '<div class="empty-chat">No messages yet. Start a conversation.</div>';
+    _rendering = false;
     toolGroupOpen = false;
     return;
   }
@@ -570,6 +664,13 @@ function renderMessages(history: Message[]): void {
       grouped.push(h);
     }
   }
+
+  function finishRender(): void {
+    _rendering = false;
+    scrollToBottom();
+    toolGroupOpen = false;
+  }
+
   // Fast path: small sessions render synchronously
   if (grouped.length <= RENDER_CHUNK) {
     const frag = document.createDocumentFragment();
@@ -582,11 +683,11 @@ function renderMessages(history: Message[]): void {
       }
     }
     el.appendChild(frag);
-    el.scrollTop = el.scrollHeight;
-    toolGroupOpen = false;
+    finishRender();
     return;
   }
-  // Chunked path: first chunk sync, rest via timeout
+  // Chunked path: first chunk sync, rest via timeout. Only scroll once at the
+  // end to avoid per-chunk reflows and visual jumping.
   _renderVersion++;
   const version = _renderVersion;
   let index = 0;
@@ -604,12 +705,11 @@ function renderMessages(history: Message[]): void {
       }
     }
     el.appendChild(frag);
-    el.scrollTop = el.scrollHeight;
     index = end;
     if (index < grouped.length) {
       setTimeout(renderNextChunk, 0);
     } else {
-      toolGroupOpen = false;
+      finishRender();
     }
   }
 
@@ -626,20 +726,44 @@ function renderMessages(history: Message[]): void {
       }
     }
     el.appendChild(frag);
-    el.scrollTop = el.scrollHeight;
     index = end;
   }
 
   if (index < grouped.length) {
     setTimeout(renderNextChunk, 0);
   } else {
-    toolGroupOpen = false;
+    finishRender();
   }
 }
 
-function scrollMessages(): void {
+function isNearBottom(): boolean {
+  const el = document.getElementById('messages')!;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD;
+}
+
+function updateScrollToBottomBtn(): void {
+  const btn = document.getElementById('scrollToBottom');
+  if (!btn) return;
+  if (isNearBottom()) {
+    btn.classList.remove('show');
+  } else {
+    btn.classList.add('show');
+  }
+}
+
+function scrollToBottom(): void {
   const el = document.getElementById('messages')!;
   el.scrollTop = el.scrollHeight;
+  updateScrollToBottomBtn();
+}
+
+/** Auto-scroll during streaming: only follow if the user is already near bottom. */
+function scrollMessages(): void {
+  if (isNearBottom()) {
+    scrollToBottom();
+  } else {
+    updateScrollToBottomBtn();
+  }
 }
 
 function formatToolContent(content: string): string {
@@ -781,6 +905,7 @@ function _lastToolGroupEl(): HTMLElement | null {
 
 function addMessage(role: string, content: string): void {
   currentHistory.push({ role: role, content: content });
+  _recordRenderedFor(currentSessionId, currentHistory);
   _renderMsgEl(role, content);
   scrollMessages();
 }
@@ -804,6 +929,7 @@ function appendEvent(event: WorkerEvent): void {
         _appendToolMessage(c);
       }
     });
+    _recordRenderedFor(currentSessionId, currentHistory);
     scrollMessages();
   }
 }
@@ -831,14 +957,14 @@ function _appendToolMessage(content: string): void {
       esc(names) + (count > 3 ? ', \u2026' : '') +
       ' <span class="toggle-icon">\u25BC</span>';
     (lastGroup.querySelector('.tool-group-header') as HTMLElement).innerHTML = headerHtml;
-    el.scrollTop = el.scrollHeight;
+    scrollMessages();
     return;
   }
   // start a new tool-group
   _currentToolGroupStart = currentHistory.length - 1;
   const wrapper = _createToolGroupEl([{ role: 'tool', content: content }]);
   el.appendChild(wrapper);
-  el.scrollTop = el.scrollHeight;
+  scrollMessages();
 }
 
 function appendResult(d: StreamEvent): void {
@@ -1376,13 +1502,28 @@ function init(): void {
     });
   refreshSessions();
 
-  // Lazy-load older messages on scroll
+  // Lazy-load older messages on scroll (throttled; skip during render/load).
+  let _scrollTimer: number | null = null;
   document.getElementById('messages')!.addEventListener('scroll', function () {
-    const el = this as HTMLElement;
-    if (el.scrollTop <= 200) {
-      loadOlderMessages();
-    }
+    updateScrollToBottomBtn();
+    if (_rendering || _historyLoading) return;
+    if (_scrollTimer !== null) return;
+    _scrollTimer = window.setTimeout(() => {
+      _scrollTimer = null;
+      const el = document.getElementById('messages') as HTMLElement;
+      if (el.scrollTop <= 200) {
+        loadOlderMessages();
+      }
+    }, 150);
   });
+
+  // Scroll-to-bottom button
+  const scrollToBottomBtn = document.getElementById('scrollToBottom');
+  if (scrollToBottomBtn) {
+    scrollToBottomBtn.addEventListener('click', () => {
+      scrollToBottom();
+    });
+  }
 
   // ── Import Modal ──
   const importCbcBtn = document.getElementById('importCbcBtn') as HTMLButtonElement;
