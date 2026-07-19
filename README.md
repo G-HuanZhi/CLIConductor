@@ -83,20 +83,167 @@
 
 ---
 
-## 快速开始
+## 立即开始使用
+
+### 1. 环境准备
 
 ```bash
-# 1. 虚拟环境
+# 创建虚拟环境
 python -m venv .venv
+
+# 激活（Windows）
 .venv\Scripts\activate
+# 激活（macOS / Linux）
+source .venv/bin/activate
 
-# 2. 安装依赖
+# 安装依赖
 pip install -r requirements.txt
-
-# 3. 启动
-python main.py
-# → http://localhost:8767
 ```
+
+### 2. 配置文件
+
+```bash
+# 复制示例配置（config.json 已在 .gitignore 中）
+cp config.example.json config.json
+```
+
+`config.json` 中可修改的字段一览：
+
+| 字段 | 默认值 | 说明 |
+|------|--------|------|
+| `port` | `8767` | 服务端口 |
+| `cbc.model` | `deepseek-v4-flash` | 默认模型（支持 deepseek / glm / minimax / kimi / hy3） |
+| `cbc.permission_mode` | `bypassPermissions` | 权限模式（`default` / `acceptEdits` / `plan` / `dontAsk` 等） |
+| `cbc.always_thinking_enabled` | `false` | 是否启用深度思考 |
+| `cbc.effort` | `""` | 思考强度（`low` / `medium` / `high` / `max` 等） |
+| `kimi.model` | `kimi-code/kimi-for-coding` | Kimi 默认模型 |
+
+> 更多配置项说明见 `config.example.json` 中的中文注释。
+
+### 3. 启动服务
+
+**方式一：直接运行**
+
+```bash
+python main.py
+# 浏览器打开 → http://localhost:8767
+```
+
+**方式二：使用启动脚本（含 Cloudflare Tunnel）**
+
+```bat
+# 一键启动服务 + 内网穿透（Tunnel 部署需要先配置，见下方 Tunnel 章节）
+scripts\start_cliconductor.bat
+```
+
+停止服务：
+
+```bat
+scripts\stop_cliconductor.bat
+```
+
+启动后在浏览器打开 `http://localhost:8767`，即可看到 Dashboard。左边是 Session 列表，右边是聊天区，创建 Session → 点击 Spawn → 输入任务即可开始使用。
+
+---
+
+## Cloudflare Tunnel 公网部署
+
+通过 Cloudflare Tunnel 将 CLIConductor 暴露到公网，无需公网 IP、无需配置路由器端口转发。适合与朋友分享、移动端访问、远程查看 worker 进度等场景。
+
+### 前置条件
+
+1. 拥有一个托管在 Cloudflare 的域名（免费方案即可）
+2. 安装 `cloudflared`：
+
+```powershell
+# Windows（用 winget）
+winget install Cloudflare.cloudflared
+
+# macOS
+brew install cloudflare/cloudflare/cloudflared
+
+# Linux
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+chmod +x /usr/local/bin/cloudflared
+```
+
+### 一次性配置（仅需一次）
+
+**Step 1：登录 Cloudflare**
+
+```bash
+cloudflared tunnel login
+```
+浏览器会自动打开 Cloudflare 授权页面，选择域名完成授权。
+
+**Step 2：创建隧道**
+
+```bash
+cloudflared tunnel create cliconductor
+```
+创建成功后会输出隧道 ID（如 `fa87468c-4d93-4042-85fd-6182d2a22b65`），并生成凭证文件 `~/.cloudflared/<ID>.json`。
+
+**Step 3：配置 DNS 路由**
+
+```powershell
+# 将你的子域名指向本地端口（替换为你的实际域名和隧道 ID）
+cloudflared tunnel route dns <隧道ID> cliconductor.yourdomain.com
+```
+
+**Step 4：编辑 cloudflared 配置文件**
+
+编辑 `~/.cloudflared/config.yml`：
+
+```yaml
+tunnel: <你的隧道ID>
+credentials-file: C:\Users\<你的用户名>\.cloudflared\<隧道ID>.json
+
+ingress:
+  - hostname: cliconductor.yourdomain.com
+    service: http://localhost:8767
+  - service: http_status:404
+```
+
+### 启动 Tunnel
+
+**方式一：使用项目脚本（推荐）**
+
+```bat
+scripts\start_cliconductor.bat
+```
+该脚本会依次启动 FastAPI 服务和 cloudflared tunnel，PID 记录在 `data/process.pid` 中。
+
+关闭服务：
+
+```bat
+scripts\stop_cliconductor.bat
+```
+
+**方式二：手动分别启动**
+
+```bash
+# 终端 1：启动 CLIConductor
+python main.py
+
+# 终端 2：启动 Tunnel
+cloudflared tunnel run cliconductor
+```
+
+### 分享访问
+
+启动后，任何人都可以通过以下地址访问你的 Dashboard：
+
+```
+https://cliconductor.yourdomain.com
+```
+
+打开页面即可创建 Session、启动 Worker、与他人共享同一个工作台。
+
+> **安全提示**：Tunnel 会将本地服务完全暴露到公网。建议：
+> - 仅在受信任的网络环境中长期运行
+> - 可在 Cloudflare Zero Trust → Access 中配置访问策略（OTP 验证码、邮箱限制等）来保护 Dashboard
+
+---
 
 ## 架构
 
